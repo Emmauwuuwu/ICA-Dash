@@ -874,6 +874,9 @@ const GD = 2 * 60 * 0.9; // GD units per frame -> our units per second
 const CUBE_G = 0.958199 * GD * 60 * 0.9, GD_STEP_LOSS = CUBE_G / 240 / 2;
 // Mini jumps at 0.8x speed (same gravity and fall cap): 1.358 blocks high, matching a recorded GD mini path.
 const CUBE_JUMP = 11.180032 * GD - GD_STEP_LOSS, CUBE_JUMP_MINI = 11.180032 * 0.8 * GD - GD_STEP_LOSS, CUBE_TERM = 15 * GD;
+// GD jumps a little faster at higher game speeds (gravity stays the same). Fitted from recorded GD paths: 2x is x1.025
+// (mini, 1.42 vs 1.36 blocks high). shortcut: 0.5x, 3x and 4x aren't measured yet, so they use 1x; add them from recordings.
+const JUMP_AT_SPEED = [1, 1, 1.025, 1, 1];
 const CUBE_H = B / 2, CUBE_MINI = 0.6, CUBE_INNER = 0.3; // main hitbox 1 x 1 block (mini 0.6); the inner box that dies to solids is 0.3 of it
 const cubeHalf = s => s.mini ? CUBE_H * CUBE_MINI : CUBE_H;
 // Highest surface the cube's footprint [x - h, x + h] can stand on near its foot (gravity sign gs: 1 down, -1 up). Accepts
@@ -956,7 +959,7 @@ function tick1(wd, s, hold, dt, fx) {
     const gs = s.flip ? -1 : 1, h = cubeHalf(s);
     if (hold && !s.spent) { const oi = orbAt(wd, s, h); if (oi >= 0) { dashStart(wd, s, oi); s.gnd = s.gnd2 = false; fx?.orb(); } } // an orb takes the press before a jump
     if (hold && s.dash == null) { // holding on the ground jumps (a jump uses up the press, so it won't also take an orb)
-      const jv = s.mini ? CUBE_JUMP_MINI : CUBE_JUMP;
+      const jv = (s.mini ? CUBE_JUMP_MINI : CUBE_JUMP) * JUMP_AT_SPEED[s.speedI];
       if (s.gnd) { s.vy = -gs * jv; s.gnd = false; s.spent = true; }
       if (s.dual && s.gnd2) { s.vy2 = gs * jv; s.gnd2 = false; s.spent = true; }
     }
