@@ -969,11 +969,16 @@ function cubeBody(wd, s, k, gs, h, dt, v) {
   if (s.dash != null) { ny = y + (k === 1 ? -1 : 1) * s.dash * v * dt; vy = 0; }
   else { const v0 = vy; vy += gs * CUBE_G * dt; if (vy * gs > CUBE_TERM) vy = gs * CUBE_TERM; ny = y + (v0 + vy) / 2 * dt; } // averaged: the arc is exact at any step size
   let gnd = false;
-  // Land on whatever its feet reached, even while rising (a slope rising faster than the cube catches it), and keep riding
-  // flat ground and downhill slopes it was on. Uphill it isn't held down, so at the top it flies off.
+  // Moving with gravity (or riding): land on what its feet reached and keep riding flat ground, downhill slopes and the slope
+  // it's being carried up. Moving against gravity: a slope can only push it up so it doesn't sink in; it keeps its own speed
+  // (a cube that jumped off a slope keeps its clean arc, as recorded in GD) and lands once it comes down onto the surface.
+  const withG = (ny - y) * gs >= 0 || rise > 0;
   const sy = surfaceNear(wd, s.x, ny + gs * h, h, gs, Math.abs(ny - y) + 2.5 * v * dt + 1, was && rise <= 0 ? 2.5 * v * dt + 1 : 0);
-  if (sy !== null) { ny = sy - gs * h; if (s.dash == null) vy = SURF_K * v; s[SV] = SURF_K * v; gnd = true; }
-  else { s[SV] = 0; if (rise > 0 && s.dash == null) vy = -gs * (0.9 * rise - GD_STEP_LOSS); } // slope launch
+  if (sy !== null && withG) { ny = sy - gs * h; if (s.dash == null) vy = SURF_K * v; s[SV] = SURF_K * v; gnd = true; }
+  else {
+    if (sy !== null) ny = sy - gs * h; // pushed up by a slope while rising
+    s[SV] = 0; if (rise > 0 && s.dash == null) vy = -gs * (0.9 * rise - GD_STEP_LOSS); // ran off the top of a rising slope: launch
+  }
   const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges: floor with gravity, a ceiling against it
   if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null) vy = 0; s[SV] = 0; gnd = true; }
   if ((ny - ceil) * gs < 0) { ny = ceil; if (vy * gs < 0) vy = 0; }
@@ -1026,9 +1031,12 @@ function tick1(wd, s, hold, dt, fx, fresh) {
       if (oi >= 0) { if (wd.orbs[oi].t === 'd') { dashStart(wd, s, oi); s.gnd = s.gnd2 = false; } else ringUse(wd, s, oi); fx?.orb(); }
     }
     if (hold && s.dash == null) { // holding on the ground jumps (a jump uses up the press, so it won't also take an orb)
-      const jv = (s.mini ? CUBE_JUMP_MINI : CUBE_JUMP) * JUMP_AT_SPEED[s.speedI];
-      if (s.gnd) { s.vy = -gs * jv; s.gnd = false; s.spent = true; }
-      if (s.dual && s.gnd2) { s.vy2 = gs * jv; s.gnd2 = false; s.spent = true; }
+      // Jumping while riding up a slope launches at 1.2x the slope's rising speed when that beats a normal jump: fitted from
+      // recorded GD slope jumps (2:1 slope at 1x: 24.73 blocks/s, three recordings within 0.3%).
+      // shortcut: only measured on 2:1 slopes at 1x; "jump + 0.23x slope speed" fits those too; a 1:1 slope jump would decide.
+      const jv = (s.mini ? CUBE_JUMP_MINI : CUBE_JUMP) * JUMP_AT_SPEED[s.speedI], jumpOff = rise => Math.max(jv, 1.2 * rise - GD_STEP_LOSS);
+      if (s.gnd) { s.vy = -gs * jumpOff(-gs * (s.sv || 0)); s.gnd = false; s.spent = true; }
+      if (s.dual && s.gnd2) { s.vy2 = gs * jumpOff(gs * (s.sv2 || 0)); s.gnd2 = false; s.spent = true; }
     }
     s.x += v * dt;
     if (s.x >= wd.end) return 'win';
