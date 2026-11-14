@@ -562,14 +562,17 @@ function offscreen(k) {
   const i = k.pts.findIndex((p, j) => p.c - p.g / 2 < 0 || p.c + p.g / 2 > VH || ((p.w || k.pts[j - 1]?.w) && p.c + p.g / 2 > VH / 2));
   return i < 0 ? -1 : Math.round(k.pts[i].x / B);
 }
-const PORTALS = { m: ['#ff6bd6', 'MINI', 'BIG'], v: ['#4dff9a', 'FLIP', 'UPRIGHT'], w: ['#ff9f43', 'DUAL', 'SINGLE'] }; // colour, on label, off label
+const PORTALS = { m: ['#ff6bd6', 'MINI', 'BIG'], v: ['#4dff9a', 'FLIP', 'UPRIGHT'], w: ['#ff9f43', 'DUAL', 'SINGLE'], g: ['#8dff3a', 'CUBE', 'WAVE'] }; // colour, on label, off label
 
 // ---------- object levels ----------
 // A level is a list of objects in block units (x to the right, y down, the screen spans y 0 to 10):
 //   r  solid rectangle {x, y, w, h}
 //   t  solid right triangle {x, y, w, h, o}; o is the right-angle corner: 0 bottom-left, 1 bottom-right, 2 top-right, 3 top-left
 //   s  saw {x, y} (centre; radius SAW_R)
-//   p  portal {x, y, h, k, v}: a gate at x from y to y + h; k 'S' speed (v 0-4), 'm' mini, 'v' upside down, 'w' dual (v 1 on, 0 off)
+//   p  portal {x, y, h, k, v}: a gate at x from y to y + h; k 'S' speed (v 0-4), 'm' mini, 'v' upside down, 'w' dual (v 1 on, 0 off),
+//      'g' gamemode (v 1 cube, 0 wave)
+//   k  spike {x, y, o}: fills the block cell at (x, y), pointing o: 0 up, 1 right, 2 down, 3 left
+//      (its hitbox is a 0.2 x 0.4 block box in the middle, turned with it)
 //   d  dash orb {x, y, a, f} (centre): holding while touching it dashes straight at angle a (degrees, up is positive, -75 to 75)
 //      until you let go; f 1 is the pink orb, which also flips gravity
 // Solids (r, t) with d: 1 are D blocks: the wave slides along them instead of crashing (their sides still kill).
@@ -580,7 +583,7 @@ function encodeLevel(objs) {
   const n = v => +v.toFixed(3), D = o => o.d ? ',1' : '';
   return 'ICA2;' + objs.map(o => o.t === 'r' ? `r,${n(o.x)},${n(o.y)},${n(o.w)},${n(o.h)}${D(o)}`
     : o.t === 't' ? `t,${n(o.x)},${n(o.y)},${n(o.w)},${n(o.h)},${o.o}${D(o)}`
-    : o.t === 's' ? `s,${n(o.x)},${n(o.y)}` : o.t === 'd' ? `d,${n(o.x)},${n(o.y)},${o.a},${o.f}`
+    : o.t === 's' ? `s,${n(o.x)},${n(o.y)}` : o.t === 'd' ? `d,${n(o.x)},${n(o.y)},${o.a},${o.f}` : o.t === 'k' ? `k,${n(o.x)},${n(o.y)},${o.o}`
     : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`).join(';');
 }
 // Pasted codes are untrusted: every field is checked, sizes are capped, and anything malformed is skipped.
@@ -597,7 +600,8 @@ function decodeLevel(code) {
       objs.push(o);
     } else if (t === 's' && okPos(a, b)) objs.push({ t, x: a, y: b });
     else if (t === 'd' && okPos(a, b)) objs.push({ t, x: a, y: b, a: Math.max(-ORB_MAX, Math.min(ORB_MAX, Math.round(c) || 0)), f: d ? 1 : 0 });
-    else if (t === 'p' && okPos(a, b) && c > 0 && c <= 40 && ['S', 'm', 'v', 'w'].includes(f[4])) {
+    else if (t === 'k' && okPos(a, b)) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4 });
+    else if (t === 'p' && okPos(a, b) && c > 0 && c <= 40 && ['S', 'm', 'v', 'w', 'g'].includes(f[4])) {
       const v = Math.round(num(f[5])) || 0;
       objs.push({ t, x: a, y: b, h: c, k: f[4], v: f[4] === 'S' ? Math.min(4, Math.max(0, v)) : v ? 1 : 0 });
     }
@@ -651,7 +655,7 @@ function buildWorld(objs) {
   for (const o of objs) {
     if (o.t === 'p') continue;
     if (o.t === 'd') { right = Math.max(right, o.x + ORB_R); continue; }
-    const l = o.t === 's' ? o.x - SAW_R : o.x, r = o.t === 's' ? o.x + SAW_R : o.x + o.w;
+    const l = o.t === 's' ? o.x - SAW_R : o.x, r = o.t === 's' ? o.x + SAW_R : o.t === 'k' ? o.x + 1 : o.x + o.w;
     for (let c = Math.floor(l); c <= Math.floor(r); c++) { let a = cols.get(c); if (!a) cols.set(c, a = []); a.push(o); }
     right = Math.max(right, r);
   }
@@ -668,13 +672,20 @@ function inside(o, px, py) {
 // Wave hitbox: the top, middle and bottom of a small vertical line at the icon (x, y, r in game units), plus saw circles.
 // The wave's hitbox is a square of half-size r around the icon (x, y, r in game units). Solids are tested at its corners,
 // edge midpoints and centre; saws by the distance from the saw's centre to the nearest point of the square.
-// hitKind: 0 clear, 1 deadly (a saw or a plain solid), 2 touching only D blocks.
+// Spike hitbox in blocks: [left, top, right, bottom], a 0.2 x 0.4 box centred in its cell, long side along the point.
+const spikeBox = o => o.o % 2 ? [o.x + 0.3, o.y + 0.4, o.x + 0.7, o.y + 0.6] : [o.x + 0.4, o.y + 0.3, o.x + 0.6, o.y + 0.7];
+// Hazards (saws, spikes) against a square of half-size br blocks at (bx, by): GD tests these with the player's main hitbox.
+function hazardHit(o, bx, by, br) {
+  if (o.t === 's') return Math.hypot(Math.max(0, Math.abs(o.x - bx) - br), Math.max(0, Math.abs(o.y - by) - br)) < SAW_HIT - 2 / B;
+  const [l, t, r, b] = spikeBox(o); return bx + br > l && bx - br < r && by + br > t && by - br < b;
+}
+// hitKind: 0 clear, 1 deadly (a saw, a spike or a plain solid), 2 touching only D blocks.
 function hitKind(wd, x, y, r) {
   const bx = x / B, by = y / B, br = r / B, pts = [];
   let k = 0;
   for (const dx of [-br, 0, br]) for (const dy of [-br, 0, br]) pts.push([bx + dx, by + dy]);
   for (let c = Math.floor(bx - br); c <= Math.floor(bx + br); c++) for (const o of wd.cols.get(c) || []) {
-    if (o.t === 's') { if (Math.hypot(Math.max(0, Math.abs(o.x - bx) - br), Math.max(0, Math.abs(o.y - by) - br)) < SAW_HIT - 2 / B) return 1; }
+    if (o.t === 's' || o.t === 'k') { if (hazardHit(o, bx, by, br)) return 1; }
     else for (const [px, py] of pts) if (inside(o, px, py)) { if (!o.d) return 1; k = 2; break; }
   }
   return k;
@@ -838,30 +849,134 @@ const inputs = []; // [timestamp, held] queued so each press lands on the exact 
 // simulate() runs the exact same physics as step() on a copy of the wave's state, without touching the real game.
 const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
 let checkpoints = [], spawnCache = null, plan = [];
-const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent, lastOrb: q.lastOrb });
+const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
+  lastOrb: q.lastOrb, cube: q.cube, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2 });
+// ---------- cube ----------
+// Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), so x 2 x 60 here.
+// That makes a jump 2.17 blocks high and 0.39 s long (about 4 blocks at 1x); holding on the ground jumps again at once.
+const GD = 2 * 60; // GD units per frame -> our units per second
+const CUBE_G = 0.958199 * GD * 60, CUBE_JUMP = 11.180032 * GD, CUBE_JUMP_MINI = 9.400010 * GD, CUBE_TERM = 15 * GD;
+const CUBE_H = B / 2, CUBE_MINI = 0.6, CUBE_INNER = 0.3; // main hitbox 1 x 1 block (mini 0.6); the inner box that dies to solids is 0.3 of it
+const cubeHalf = s => s.mini ? CUBE_H * CUBE_MINI : CUBE_H;
+// Highest surface the cube's footprint [x - h, x + h] can stand on near its foot (gravity sign gs: 1 down, -1 up). Accepts
+// surfaces it has sunk into by at most `into`, or (when it was already standing) ones up to `below` under its foot.
+// Returns the surface's y, or null.
+function surfaceNear(wd, x, foot, h, gs, into, below) {
+  const xl = x - h, xr = x + h, H = y => -gs * y, Hf = H(foot);
+  let best = null;
+  const take = sy => { const hs = H(sy); if (hs <= Hf + into && hs >= Hf - below && (best === null || hs > H(best))) best = sy; };
+  for (let c = Math.floor(xl / B); c <= Math.floor(xr / B); c++) for (const o of wd.cols.get(c) || []) {
+    if (o.t !== 'r' && o.t !== 't') continue;
+    const x0 = o.x * B, x1 = (o.x + o.w) * B, y0 = o.y * B, y1 = (o.y + o.h) * B;
+    if (xr <= x0 || xl >= x1) continue;
+    if (o.t === 'r') { take(gs > 0 ? y0 : y1); continue; }
+    const along = px => (Math.min(x1, Math.max(x0, px)) - x0) / (x1 - x0); // 0..1 across the triangle
+    if (gs > 0) { // standing on top: slopes 0 (falling to the right) and 1 (rising), flat tops of 2 and 3
+      take(o.o === 0 ? y0 + along(xl) * (y1 - y0) : o.o === 1 ? y1 - along(xr) * (y1 - y0) : y0);
+    } else { // upside down, standing under: slopes 2 and 3 from below, flat undersides of 0 and 1
+      take(o.o === 2 ? y0 + along(xr) * (y1 - y0) : o.o === 3 ? y1 - along(xl) * (y1 - y0) : y1);
+    }
+  }
+  return best;
+}
+// One cube body (the dual twin has the opposite gravity). Returns false if it dies.
+function cubeBody(wd, s, k, gs, h, dt, v) {
+  const Y = k === 1 ? 'y' : 'y2', VY = k === 1 ? 'vy' : 'vy2', G = k === 1 ? 'gnd' : 'gnd2', was = s[G], y = s[Y];
+  let ny, vy = s[VY] || 0;
+  if (s.dash != null) { ny = y + (k === 1 ? -1 : 1) * s.dash * v * dt; vy = 0; }
+  else { const v0 = vy; vy += gs * CUBE_G * dt; if (vy * gs > CUBE_TERM) vy = gs * CUBE_TERM; ny = y + (v0 + vy) / 2 * dt; } // averaged: the arc is exact at any step size
+  let gnd = false;
+  if ((ny - y) * gs >= 0) { // moving with gravity (or level): land on what it reached, and stay on slopes it was riding
+    const sy = surfaceNear(wd, s.x, ny + gs * h, h, gs, Math.abs(ny - y) + 2.5 * v * dt + 1, was ? 2.5 * v * dt + 1 : 0);
+    if (sy !== null) { ny = sy - gs * h; if (s.dash == null) vy = 0; gnd = true; }
+  }
+  const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges: floor with gravity, a ceiling against it
+  if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null) vy = 0; gnd = true; }
+  if ((ny - ceil) * gs < 0) { ny = ceil; if (vy * gs < 0) vy = 0; }
+  s[Y] = ny; s[VY] = vy; s[G] = gnd;
+  // Death: the small inner box touching any solid (side or ceiling hits), or the main box touching a saw or spike.
+  const bx = s.x / B, by = ny / B, bi = h * CUBE_INNER / B, bm = h / B;
+  for (let c = Math.floor(bx - bm); c <= Math.floor(bx + bm); c++) for (const o of wd.cols.get(c) || []) {
+    if (o.t === 's' || o.t === 'k') { if (hazardHit(o, bx, by, bm)) return false; }
+    else for (const dx of [-bi, 0, bi]) for (const dy of [-bi, 0, bi]) if (inside(o, bx + dx, by + dy)) return false;
+  }
+  return true;
+}
+// Portals change the state; fx (the real game only) adds the effects first.
 function portalState(s, o) {
-  if (o.k === 'S') s.speedI = o.v; else if (o.k === 'm') s.mini = !!o.v; else if (o.k === 'v') s.flip = !!o.v;
-  else { if (o.v && !s.dual) s.y2 = VH - s.y; s.dual = !!o.v; }
+  if (o.k === 'S') s.speedI = o.v;
+  else if (o.k === 'm') { // a cube keeps its feet where they were
+    const h0 = cubeHalf(s); s.mini = !!o.v;
+    if (s.cube) { const d = (h0 - cubeHalf(s)) * (s.flip ? -1 : 1); s.y += d; s.y2 -= d; }
+  }
+  else if (o.k === 'v') s.flip = !!o.v;
+  else if (o.k === 'w') { if (o.v && !s.dual) { s.y2 = VH - s.y; s.vy2 = -(s.vy || 0); s.gnd2 = false; } s.dual = !!o.v; }
+  else if (o.k === 'g') {
+    const c = !!o.v;
+    if (c && !s.cube) { // wave -> cube: keeps half of the wave's vertical speed
+      const v = SPEEDS[s.speedI] * B, dy = s.dash != null ? -s.dash * v : s.dir * v * (s.mini ? 2 : 1);
+      s.vy = dy / 2; s.vy2 = -dy / 2; s.gnd = s.gnd2 = false;
+    }
+    s.cube = c;
+  }
+}
+// One physics tick of length dt for state s (changed in place): 'win', 'dead' or undefined. step() and simulate() both use it,
+// so show path, autoplay and safe spawns always match real play. fx (the real game only) draws the trail and effects.
+function tick1(wd, s, hold, dt, fx) {
+  const v = SPEEDS[s.speedI] * B;
+  if (!hold) { // letting go ends a dash (a cube keeps the dash's speed) and frees the next press for an orb
+    if (s.dash != null) { if (s.cube) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner(); }
+    s.spent = false;
+  }
+  const portals = () => {
+    while (s.pi < wd.portals.length && wd.portals[s.pi].x * B <= s.x) {
+      const o = wd.portals[s.pi++], by = s.y / B;
+      if (by >= o.y - 0.5 && by <= o.y + o.h + 0.5) { fx?.portal(o); portalState(s, o); }
+    }
+  };
+  if (s.cube) {
+    const gs = s.flip ? -1 : 1, h = cubeHalf(s);
+    if (hold && !s.spent) { const oi = orbAt(wd, s, h); if (oi >= 0) { dashStart(wd, s, oi); s.gnd = s.gnd2 = false; fx?.orb(); } } // an orb takes the press before a jump
+    if (hold && s.dash == null) { // holding on the ground jumps (a jump uses up the press, so it won't also take an orb)
+      const jv = s.mini ? CUBE_JUMP_MINI : CUBE_JUMP;
+      if (s.gnd) { s.vy = -gs * jv; s.gnd = false; s.spent = true; }
+      if (s.dual && s.gnd2) { s.vy2 = gs * jv; s.gnd2 = false; s.spent = true; }
+    }
+    s.x += v * dt;
+    if (s.x >= wd.end) return 'win';
+    portals();
+    if (!s.cube) return; // switched to wave: it takes over next tick
+    const h2 = cubeHalf(s), g2 = s.flip ? -1 : 1;
+    const ok = cubeBody(wd, s, 1, g2, h2, dt, v) && (!s.dual || cubeBody(wd, s, 2, -g2, h2, dt, v));
+    return ok ? undefined : 'dead';
+  }
+  const dir = (hold ? -1 : 1) * (s.flip ? -1 : 1); // upside down: holding dives instead of climbs
+  if (dir !== s.dir) { if (s.dash == null) fx?.corner(); s.dir = dir; } // trail keeps only the corners
+  const vy = v * (s.mini ? 2 : 1), r = s.mini ? RM : R; // mini: twice as steep, smaller hitbox
+  const dy = s.dash != null ? -s.dash * v : s.dir * vy; // a dash goes straight at its orb's angle
+  s.x += v * dt; s.y += dy * dt; s.y2 -= dy * dt;
+  if (s.x >= wd.end) return 'win';
+  // Portals apply after the move and before collisions, so a wave never spends a step in a corridor that just closed.
+  portals();
+  if (s.cube) return; // switched to cube: it takes over next tick
+  // The top and bottom of the screen act as ceiling and floor: the wave slides along them, and along D blocks.
+  const cy = Math.min(VH - r, Math.max(r, s.y)), cy2 = Math.min(VH - r, Math.max(r, s.y2));
+  if (hold && !s.spent) { const oi = orbAt(wd, { ...s, y: cy, y2: cy2 }, r); if (oi >= 0) { dashStart(wd, s, oi); fx?.corner(); fx?.orb(); } }
+  const up = dy > 0 || (dy === 0 && !s.flip), push = (Math.abs(dy) + 2 * v) * dt + 1;
+  const sy = settle(wd, s.x, cy, r, up, push), sy2 = s.dual ? settle(wd, s.x, cy2, r, !up, push) : cy2;
+  if (sy === null || sy2 === null) { s.y = cy; s.y2 = cy2; return 'dead'; }
+  const slid = sy !== s.y, onD = sy !== cy && ++s.tk % 6 === 0; // along a D block the trail follows its shape
+  if (slid && (!s.slid || onD)) fx?.trail(1, s.x, sy);
+  s.y = sy; s.slid = slid;
+  if (s.dual) { const s2 = sy2 !== s.y2; if (s2 && (!s.slid2 || onD)) fx?.trail(2, s.x, sy2); s.y2 = sy2; s.slid2 = s2; }
 }
 function simulate(wd, s, hold, n, pts) { // returns the new state, null if it crashes (pts collects the route for drawing)
   s = { ...s };
-  if (!hold) { s.dash = null; s.spent = false; } // letting go ends a dash and frees the next press for an orb
   for (let i = 0; i < n; i++) {
-    const v = SPEEDS[s.speedI] * B, dir = (hold ? -1 : 1) * (s.flip ? -1 : 1), vy = v * (s.mini ? 2 : 1), r = s.mini ? RM : R;
-    const dy = s.dash != null ? -s.dash * v : dir * vy;
-    s.dir = dir; s.x += v * STEP; s.y += dy * STEP; s.y2 -= dy * STEP;
-    if (s.x >= wd.end) { s.won = true; return s; }
-    while (s.pi < wd.portals.length && wd.portals[s.pi].x * B <= s.x) {
-      const o = wd.portals[s.pi++], by = s.y / B;
-      if (by >= o.y - 0.5 && by <= o.y + o.h + 0.5) portalState(s, o);
-    }
-    s.y = Math.min(VH - r, Math.max(r, s.y)); s.y2 = Math.min(VH - r, Math.max(r, s.y2));
-    if (hold && !s.spent) { const oi = orbAt(wd, s, r); if (oi >= 0) dashStart(wd, s, oi); }
-    if (pts && i % 4 === 0) pts.push([s.x, s.y]);
-    const up = dy > 0 || (dy === 0 && !s.flip), push = (Math.abs(dy) + 2 * v) * STEP + 1;
-    const y1 = settle(wd, s.x, s.y, r, up, push), y2 = s.dual ? settle(wd, s.x, s.y2, r, !up, push) : s.y2;
-    if (y1 === null || y2 === null) { if (pts) pts.push([s.x, s.y]); return null; }
-    s.y = y1; s.y2 = y2;
+    const res = tick1(wd, s, hold, STEP);
+    if (res === 'win') { s.won = true; return s; }
+    if (pts && (i % 4 === 0 || res === 'dead')) pts.push([s.x, s.y]);
+    if (res === 'dead') return null;
   }
   return s;
 }
@@ -875,7 +990,8 @@ function findPath(wd, s0, decisions, budget, firstHold = held, untilX = Infinity
       const t = simulate(wd, node.s, hold, K_DEC); if (!t) continue;
       const nn = { s: t, hold, depth: node.depth + 1, up: node };
       if (t.won || nn.depth >= decisions || t.x >= untilX) { const out = []; for (let q = nn; q.up; q = q.up) out.push(q.hold); return out.reverse(); }
-      const key = (t.x / 3 | 0) + ',' + Math.round(t.y / 3) + ',' + (t.mini ? 1 : 0) + (t.flip ? 1 : 0) + (t.dash != null ? 1 : 0);
+      const key = (t.x / 3 | 0) + ',' + Math.round(t.y / 3) + ',' + (t.mini ? 1 : 0) + (t.flip ? 1 : 0) + (t.dash != null ? 1 : 0)
+        + (t.cube ? ',' + Math.round(t.vy / 150) + (t.gnd ? 'g' : '') : '');
       if (seen.has(key)) continue; seen.add(key); stack.push(nn);
     }
   }
@@ -890,6 +1006,7 @@ function survival(s, hold, cap = 192) {
 function gapMiddles(x) {
   const base = { x, y: VH / 2, y2: VH / 2, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0 };
   while (base.pi < world.portals.length && world.portals[base.pi].x * B <= x) portalState(base, world.portals[base.pi++]);
+  if (base.cube) return []; // a cube spawn comes from the real route instead (a cube in mid-gap would just fall)
   const r = base.mini ? RM : R, out = [];
   let start = null;
   for (let y = r + 1; y <= VH - r - 1 + 3; y += 3) {
@@ -919,15 +1036,26 @@ function spawnState(x) {
   const pick = best || cands[0] || start;
   return stateOf(pick);
 }
-function applyPortal(o, quiet) {
-  if (o.k === 'S') { if (p.speedI !== o.v && !quiet && !calm) flash = 0.45; p.speedI = o.v; }
-  else if (o.k === 'm') { const on = !!o.v; if (on !== p.mini && !quiet) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } p.mini = on; }
-  else if (o.k === 'v') p.flip = !!o.v;
-  else { const on = !!o.v; if (on && !p.dual) { p.y2 = VH - p.y; trail2 = [[p.x, p.y2]]; } p.dual = on; } // second wave appears mirrored
-}
+// Effects for the real game: tick1 calls these on p (portal ones before the state changes). The wave draws a trail of its
+// corners; a cube draws none, so the trail breaks (null) while it's a cube.
+const FX = {
+  corner() { if (p.cube) return; trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang; p.turnT = 0; },
+  trail(k, x, y) { (k === 1 ? trail : trail2).push([x, y]); },
+  orb() { if (!calm) flash = 0.2; },
+  portal(o) {
+    if (o.k === 'S') { if (p.speedI !== o.v && !calm) flash = 0.45; }
+    else if (o.k === 'm') { if (!!o.v !== p.mini && !p.cube) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } }
+    else if (o.k === 'w') { if (o.v && !p.dual) trail2 = p.cube ? [] : [[p.x, VH - p.y]]; } // second icon appears mirrored
+    else if (o.k === 'g' && !!o.v !== p.cube) {
+      if (o.v) { trail.push([p.x, p.y], null); if (p.dual) trail2.push([p.x, p.y2], null); p.rot = 0; } // into cube: the trail stops here
+      else { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang = 0; p.turnT = 0; } // back to wave: a new trail starts
+      if (!calm) flash = 0.3;
+    }
+  },
+};
 function reset() {
   p = { x: 0, y: VH / 2, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
-    dash: null, spent: false, lastOrb: -1, tk: 0 };
+    dash: null, spent: false, lastOrb: -1, tk: 0, cube: false, vy: 0, vy2: 0, gnd: false, gnd2: false, rot: 0 };
   trail = []; trail2 = []; parts = [];
   const cp = hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
@@ -938,7 +1066,7 @@ function reset() {
   p.wait = !hacks.auto && (!!cp || sx > 0);
   if (p.wait) p.dir = p.flip ? 1 : -1; // facing the way a press will send it
   p.ang = p.from = p.dir * (p.mini ? Math.atan(2) : Math.PI / 4); p.cpT = 0; p.sub = 0; speedI = p.speedI;
-  trail = [[p.x, p.y]]; trail2 = p.dual ? [[p.x, p.y2]] : [];
+  trail = p.cube ? [] : [[p.x, p.y]]; trail2 = p.dual && !p.cube ? [[p.x, p.y2]] : [];
   plan = hacks.auto ? findPath(world, stateOf(p), Infinity, 300000, false) || [] : []; // autoplay: route to the end, worked out now
 }
 function show(id) { document.querySelectorAll('.screen').forEach(s => s.hidden = s.id !== id); }
@@ -1012,32 +1140,11 @@ function step(dt) {
       held = plan[idx] ?? false;
     }
     p.sub += dt / STEP;
-    const v = SPEEDS[p.speedI] * B, corner = () => { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang; p.turnT = 0; };
-    if (!held) { if (p.dash != null) { p.dash = null; corner(); } p.spent = false; } // letting go ends a dash and frees the next press for an orb
-    const dir = (held ? -1 : 1) * (p.flip ? -1 : 1); // upside down: holding dives instead of climbs
-    if (dir !== p.dir) { if (p.dash == null) corner(); p.dir = dir; } // trail keeps only the corners
-    while (trail.length > 1 && trail[1][0] < p.x - 2500) trail.shift();
-    while (trail2.length > 1 && trail2[1][0] < p.x - 2500) trail2.shift();
-    const vy = v * (p.mini ? 2 : 1), r = p.mini ? RM : R; // mini: twice as steep, smaller hitbox
-    const dy = p.dash != null ? -p.dash * v : p.dir * vy; // a dash goes straight at its orb's angle
-    p.x += v * dt; p.y += dy * dt; p.y2 -= dy * dt;
-    if (p.x >= world.end) return win();
-    // Portals apply after the move and before collisions, so a wave never spends a step in a corridor that just closed.
-    while (p.pi < world.portals.length && world.portals[p.pi].x * B <= p.x) {
-      const o = world.portals[p.pi++], by = p.y / B;
-      if (by >= o.y - 0.5 && by <= o.y + o.h + 0.5) applyPortal(o);
-    }
+    for (const t of [trail, trail2]) while (t.length > 1 && (!t[1] || t[1][0] < p.x - 2500)) t.shift(); // drop trail far behind
+    const res = tick1(world, p, held, dt, FX);
     speedI = p.speedI;
-    // The top and bottom of the screen act as ceiling and floor: the wave slides along them, and along D blocks.
-    const cy = Math.min(VH - r, Math.max(r, p.y)), cy2 = Math.min(VH - r, Math.max(r, p.y2));
-    if (held && !p.spent) { const oi = orbAt(world, { ...p, y: cy, y2: cy2 }, r); if (oi >= 0) { dashStart(world, p, oi); corner(); if (!calm) flash = 0.2; } }
-    const up = dy > 0 || (dy === 0 && !p.flip), push = (Math.abs(dy) + 2 * v) * dt + 1;
-    const sy = settle(world, p.x, cy, r, up, push), sy2 = p.dual ? settle(world, p.x, cy2, r, !up, push) : cy2;
-    if (sy === null || sy2 === null) { if (hacks.noclip) hitFlash = 0.3; else { p.y = cy; p.y2 = cy2; return die(); } }
-    const ny = sy ?? cy, slid = ny !== p.y, onD = sy !== null && sy !== cy && ++p.tk % 6 === 0; // along a D block the trail follows its shape
-    if (slid && (!p.slid || onD)) trail.push([p.x, ny]);
-    p.y = ny; p.slid = slid;
-    if (p.dual) { const ny2 = sy2 ?? cy2, s2 = ny2 !== p.y2; if (s2 && (!p.slid2 || onD)) trail2.push([p.x, ny2]); p.y2 = ny2; p.slid2 = s2; }
+    if (res === 'win') return win();
+    if (res === 'dead') { if (hacks.noclip) hitFlash = 0.3; else return die(); }
     // practice: drop a checkpoint every 1.5 s, but only where there's a way to keep going for at least half a second
     // (respawning there starts with a press, so holding has to last at least 0.2 s from that spot)
     if (hacks.practice && (p.cpT += dt) >= 1.5) { p.cpT = 0; const st = stateOf(p); if (survival(st, true) >= 96 && findPath(world, st, 30, 3000, true)) checkpoints.push(st); }
@@ -1062,9 +1169,26 @@ function triPath(g, o, u) { // the box corner opposite the right angle is left o
   g.closePath();
 }
 function addSolid(g, o, u) { if (o.t === 'r') g.rect(o.x * u, o.y * u, o.w * u, o.h * u); else triPath(g, o, u); }
+function spikePath(g, o, u) { // a spike filling its cell, base on the side opposite its point
+  const x = o.x * u, y = o.y * u, P = [[[x, y + u], [x + u / 2, y], [x + u, y + u]], [[x, y], [x + u, y + u / 2], [x, y + u]],
+    [[x, y], [x + u / 2, y + u], [x + u, y]], [[x + u, y], [x, y + u / 2], [x + u, y + u]]][o.o];
+  g.moveTo(...P[0]); g.lineTo(...P[1]); g.lineTo(...P[2]); g.closePath();
+}
+// Cube icon (original design): your colours, a square with an inset square and a core.
+function drawCube(g, x, y, a, s, ic) {
+  const h = CUBE_H * s;
+  g.save(); g.translate(x, y); g.rotate(a);
+  if (ic.useCustom && customImg.naturalWidth) { g.drawImage(customImg, -h, -h, h * 2, h * 2); g.restore(); return; }
+  g.fillStyle = '#0c0e1c'; g.fillRect(-h, -h, h * 2, h * 2);
+  g.fillStyle = COLORS[ic.c1]; g.fillRect(-h + 3 * s, -h + 3 * s, h * 2 - 6 * s, h * 2 - 6 * s);
+  g.fillStyle = '#0c0e1c'; g.fillRect(-h * 0.55, -h * 0.55, h * 1.1, h * 1.1);
+  g.fillStyle = COLORS[ic.c2]; g.fillRect(-h * 0.55 + 3 * s, -h * 0.55 + 3 * s, h * 1.1 - 6 * s, h * 1.1 - 6 * s);
+  g.fillStyle = COLORS[ic.c1]; g.fillRect(-h * 0.18, -h * 0.18, h * 0.36, h * 0.36);
+  g.restore();
+}
 function drawPortal(g, o, u, label = true) {
-  const x = o.x * u, y = o.y * u, h = o.h * u, on = o.k === 'S' || !!o.v;
-  const col = o.k === 'S' ? `hsl(${50 + o.v * 70},100%,65%)` : PORTALS[o.k][0];
+  const x = o.x * u, y = o.y * u, h = o.h * u, on = o.k === 'S' || o.k === 'g' || !!o.v;
+  const col = o.k === 'S' ? `hsl(${50 + o.v * 70},100%,65%)` : o.k === 'g' ? (o.v ? '#8dff3a' : '#3fb6ff') : PORTALS[o.k][0];
   const text = o.k === 'S' ? SPD_LABELS[o.v] : PORTALS[o.k][o.v ? 1 : 2], bw = u / 5;
   g.globalAlpha = on ? 0.35 : 0.12; g.fillStyle = col; g.fillRect(x - bw / 2, y, bw, h); g.globalAlpha = 1;
   g.strokeStyle = col; g.lineWidth = u / 20; g.setLineDash(on ? [] : [u / 10, u / 10]); g.strokeRect(x - bw / 2, y, bw, h); g.setLineDash([]);
@@ -1088,6 +1212,7 @@ function renderObj(g, o, u, t) { // one object in its editor colours (palette ic
   if (o.t === 'r' || o.t === 't') { g.beginPath(); addSolid(g, o, u); g.fillStyle = o.d ? '#0f6b55' : '#2340ff'; g.fill(); g.strokeStyle = o.d ? D_COL : '#fff'; g.lineWidth = Math.max(1.5, u / 20); g.stroke(); }
   else if (o.t === 's') { sawPath(g, o.x * u, o.y * u, SAW_R * u, t); g.fillStyle = '#ffd23f'; g.fill(); g.strokeStyle = '#ff9f43'; g.lineWidth = Math.max(1, u / 20); g.stroke(); }
   else if (o.t === 'd') drawOrb(g, o, u, t);
+  else if (o.t === 'k') { g.beginPath(); spikePath(g, o, u); g.fillStyle = '#1a1d33'; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = Math.max(1.5, u / 20); g.lineJoin = 'round'; g.stroke(); }
   else drawPortal(g, o, u, u >= 30);
 }
 // Cheap glow: a wide faint stroke under a thin bright one (shadowBlur costs frames, and dropped frames feel like input lag).
@@ -1137,8 +1262,8 @@ function draw(t, dt) {
 
   // solids: bright outline drawn first, then the fill covers its inner half and every seam between neighbouring pieces,
   // so only the outside edge of each wall shows; then the block grid is clipped inside the walls
-  const vis = visibleObjs(world, camX / B, (camX + viewW) / B), solids = [], saws = [];
-  for (const o of vis) (o.t === 's' ? saws : solids).push(o);
+  const vis = visibleObjs(world, camX / B, (camX + viewW) / B), solids = [], saws = [], spikes = [];
+  for (const o of vis) (o.t === 's' ? saws : o.t === 'k' ? spikes : solids).push(o);
   const wallCol = layout ? '#3a4066' : `hsl(${hue},60%,8%)`;
   ctx.beginPath(); for (const o of solids) addSolid(ctx, o, B);
   ctx.lineJoin = 'round';
@@ -1161,6 +1286,11 @@ function draw(t, dt) {
   // finish gate
   if (world.end > camX - 40 && world.end < camX + viewW + 40) {
     for (let y = 0; y < VH; y += 30) { ctx.fillStyle = (y / 30) % 2 ? '#fff' : `hsl(${hue},80%,20%)`; ctx.fillRect(world.end - 8, y, 16, 30); }
+  }
+  if (spikes.length) { // spikes: wall-coloured with the same bright edge as the walls
+    ctx.beginPath(); for (const k of spikes) spikePath(ctx, k, B);
+    if (layout) { ctx.fillStyle = wallCol; ctx.fill(); ctx.strokeStyle = '#c9cfe8'; ctx.lineWidth = 3; ctx.stroke(); }
+    else { glowStroke(ctx, '#fff', `hsl(${hue},100%,65%)`, 4); ctx.fillStyle = wallCol; ctx.fill(); }
   }
   for (const s of saws) {
     sawPath(ctx, s.x * B, s.y * B, SAW_R * B, t); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = 3; ctx.stroke();
@@ -1188,7 +1318,7 @@ function draw(t, dt) {
     ctx.strokeStyle = '#ffcc1a'; ctx.lineWidth = 3 / z;
     for (const o of sel) {
       ctx.beginPath();
-      if (o.t === 's' || o.t === 'd') ctx.arc(o.x * B, o.y * B, (o.t === 's' ? SAW_R : ORB_R * 1.35) * B + 4, 0, 7); else if (o.t === 'p') ctx.rect(o.x * B - 10, o.y * B, 20, o.h * B); else addSolid(ctx, o, B);
+      if (o.t === 's' || o.t === 'd') ctx.arc(o.x * B, o.y * B, (o.t === 's' ? SAW_R : ORB_R * 1.35) * B + 4, 0, 7); else if (o.t === 'k') ctx.rect(o.x * B, o.y * B, B, B); else if (o.t === 'p') ctx.rect(o.x * B - 10, o.y * B, 20, o.h * B); else addSolid(ctx, o, B);
       ctx.stroke();
     }
     if (hoverCell && edTool === 'build' && !pdrag) {
@@ -1198,20 +1328,28 @@ function draw(t, dt) {
   }
   // trail + player
   if (inGame) {
-    if (trail.length) {
-      ctx.beginPath(); for (const [x, y] of trail) ctx.lineTo(x, y); if (alive) ctx.lineTo(p.x, p.y);
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7; ctx.stroke(); // solid trail, no glow band
-    }
-    if (trail2.length) {
-      ctx.beginPath(); for (const [x, y] of trail2) ctx.lineTo(x, y); if (alive && p.dual) ctx.lineTo(p.x, p.y2);
+    for (const [tr, py, on] of [[trail, p.y, true], [trail2, p.y2, p.dual]]) { // solid trail, no glow band; null breaks it (cube stretches)
+      if (!tr.length) continue;
+      ctx.beginPath(); let gap = true;
+      for (const q of tr) { if (!q) { gap = true; continue; } if (gap) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); gap = false; }
+      if (alive && on && !p.cube && !gap) ctx.lineTo(p.x, py);
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7; ctx.stroke();
     }
-    if (alive) { // two-step turn: 70% of the way on the first frame, the rest ~20 ms later
+    if (alive && p.cube) { // GD's cube: turns 180° per full jump in the air (backwards upside down), squares up on the ground
+      const air = 2 * (p.mini ? CUBE_JUMP_MINI : CUBE_JUMP) / CUBE_G;
+      if (!p.gnd || p.dash != null) p.rot += (p.flip ? -1 : 1) * Math.PI / air * dt;
+      else { const q = Math.round(p.rot / (Math.PI / 2)) * (Math.PI / 2); p.rot += (q - p.rot) * Math.min(1, dt * 30); }
+      const s = p.mini ? CUBE_MINI : 1;
+      drawCube(ctx, p.x, p.y, p.rot, s, icon);
+      if (p.dual) drawCube(ctx, p.x, p.y2, -p.rot, s, icon);
+    } else if (alive) { // two-step turn: 70% of the way on the first frame, the rest ~20 ms later
       const full = p.mini ? Math.atan(2) : Math.PI / 4, tgt = p.slid ? 0 : p.dash != null ? -Math.atan(p.dash) : p.dir * full; p.turnT += dt;
       p.ang = p.turnT < 0.02 ? p.from + (tgt - p.from) * 0.7 : tgt;
       const s = p.mini ? 0.7 : 1.1;
       drawIcon(ctx, p.x, p.y, p.ang, s, icon);
       if (p.dual) drawIcon(ctx, p.x, p.y2, -p.ang, s, icon);
+    }
+    if (alive) {
       if (p.wait) { // waiting spawn: pulsing ring and a prompt
         ctx.strokeStyle = '#ffcc1a'; ctx.lineWidth = 3; ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 6);
         ctx.beginPath(); ctx.arc(p.x, p.y, 26, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
@@ -1228,9 +1366,13 @@ function draw(t, dt) {
     ctx.beginPath(); for (const o of solids) addSolid(ctx, o, B); ctx.stroke();
     for (const s of saws) { ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_HIT * B - 2, 0, 7); ctx.stroke(); }
     ctx.strokeStyle = '#3fd8ff'; for (const o of world.orbs) { ctx.beginPath(); ctx.arc(o.x * B, o.y * B, ORB_HIT * B, 0, 7); ctx.stroke(); }
+    ctx.strokeStyle = '#ff3355'; for (const k of spikes) { const [l, tp, r, b] = spikeBox(k); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
     if (inGame && mode !== 'dead') {
-      const r = p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
-      for (const y of p.dual ? [p.y, p.y2] : [p.y]) ctx.strokeRect(p.x - r, y - r, r * 2, r * 2);
+      const r = p.cube ? cubeHalf(p) : p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
+      for (const y of p.dual ? [p.y, p.y2] : [p.y]) {
+        ctx.strokeRect(p.x - r, y - r, r * 2, r * 2);
+        if (p.cube) { const ri = r * CUBE_INNER; ctx.strokeStyle = '#3f8cff'; ctx.strokeRect(p.x - ri, y - ri, ri * 2, ri * 2); ctx.strokeStyle = '#33ff88'; } // inner box (solids)
+      }
     }
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1392,6 +1534,9 @@ const PALETTE = [
   { id: 'slope', label: 'Slope', make: (x, y) => ({ t: 't', x, y, w: 1, h: 1, o: edRot }) },
   { id: 'steep', label: 'Steep', make: (x, y) => ({ t: 't', x, y, w: 1, h: 2, o: edRot }) }, // 2 up per 1 forward, the mini angle
   { id: 'saw', label: 'Saw', make: (x, y) => ({ t: 's', x: x + 0.5, y: y + 0.5 }) },
+  { id: 'spike', label: 'Spike', make: (x, y) => ({ t: 'k', x, y, o: edRot }) },
+  { id: 'g1', label: 'Cube', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 1 }) },
+  { id: 'g0', label: 'Wave', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 0 }) },
   { id: 'dblock', label: 'D block', make: (x, y) => ({ t: 'r', x, y, w: 1, h: 1, d: 1 }) },
   { id: 'dslope', label: 'D slope', make: (x, y) => ({ t: 't', x, y, w: 1, h: 1, o: edRot, d: 1 }) },
   { id: 'dash0', label: 'Dash orb', make: (x, y) => ({ t: 'd', x: x + 0.5, y: y + 0.5, a: 0, f: 0 }) },
@@ -1438,6 +1583,7 @@ function objectAt(bx, by) { // portals over saws over solids; within a kind, the
   for (const o of world.orbs) if (Math.hypot(o.x - bx, o.y - by) < ORB_R * 1.35) consider(o, 3);
   for (const o of world.cols.get(Math.floor(bx)) || []) {
     if (o.t === 's') { if (Math.hypot(o.x - bx, o.y - by) < SAW_R) consider(o, 2); }
+    else if (o.t === 'k') { if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 2); }
     else if (bx >= o.x && bx <= o.x + o.w && by >= o.y && by <= o.y + o.h) consider(o, 1);
   }
   return best;
@@ -1456,8 +1602,8 @@ function edAction(a, fine) {
   const mv = { left: [-g, 0], right: [g, 0], up: [0, -g], down: [0, g] }[a];
   if (mv) for (const o of objs) { o.x = tidy(o.x + mv[0]); o.y = tidy(o.y + mv[1]); }
   else if (a === 'rot') { // slopes turn a quarter; dash orbs tilt 15° up, wrapping round from the steepest up to the steepest down
-    if (!objs.some(o => o.t === 't' || o.t === 'd')) return;
-    for (const o of objs) if (o.t === 't') o.o = (o.o + 1) % 4; else if (o.t === 'd') o.a = o.a >= ORB_MAX ? -ORB_MAX : o.a + 15;
+    if (!objs.some(o => o.t === 't' || o.t === 'd' || o.t === 'k')) return;
+    for (const o of objs) if (o.t === 't' || o.t === 'k') o.o = (o.o + 1) % 4; else if (o.t === 'd') o.a = o.a >= ORB_MAX ? -ORB_MAX : o.a + 15;
   }
   else if (a === 'dtog') { if (!objs.some(solid)) return; const on = !objs.filter(solid).every(o => o.d); for (const o of objs) if (solid(o)) { if (on) o.d = 1; else delete o.d; } }
   else if (a === 'w-' || a === 'w+') { for (const o of objs) if (solid(o)) o.w = tidy(Math.max(g, o.w + (a === 'w+' ? g : -g))); }
@@ -1470,7 +1616,7 @@ function edAction(a, fine) {
 function drawPaletteIcon(c, item) {
   const g = c.getContext('2d'), o = item.make(0, 0);
   g.clearRect(0, 0, c.width, c.height); g.save();
-  const box = o.t === 's' || o.t === 'd' ? [o.x, o.y, 1.2, 1.2] : o.t === 'p' ? [o.x, o.y + o.h / 2, 0.6, o.h] : [o.x + o.w / 2, o.y + o.h / 2, o.w, o.h];
+  const box = o.t === 's' || o.t === 'd' ? [o.x, o.y, 1.2, 1.2] : o.t === 'k' ? [o.x + 0.5, o.y + 0.5, 1, 1] : o.t === 'p' ? [o.x, o.y + o.h / 2, 0.6, o.h] : [o.x + o.w / 2, o.y + o.h / 2, o.w, o.h];
   const u = Math.min(c.width / (box[2] + 0.6), c.height / (box[3] + 0.6));
   g.translate(c.width / 2 - box[0] * u, c.height / 2 - box[1] * u);
   renderObj(g, o, u, 0); g.restore();
