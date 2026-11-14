@@ -852,10 +852,11 @@ let checkpoints = [], spawnCache = null, plan = [];
 const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
   lastOrb: q.lastOrb, cube: q.cube, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2 });
 // ---------- cube ----------
-// Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), so x 2 x 60 here.
-// That makes a jump 2.17 blocks high and 0.39 s long (about 4 blocks at 1x); holding on the ground jumps again at once.
-const GD = 2 * 60; // GD units per frame -> our units per second
-const CUBE_G = 0.958199 * GD * 60, CUBE_JUMP = 11.180032 * GD, CUBE_JUMP_MINI = 9.400010 * GD, CUBE_TERM = 15 * GD;
+// Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), with GD's player step
+// scaled by 0.9 (so 54 "frames" per second). That makes a jump 2.17 blocks high and 0.432 s long, peaking 2.24 blocks
+// ahead at 1x (4.49 blocks to land on flat ground), which matches a recorded GD path. Holding on the ground jumps again.
+const GD = 2 * 60 * 0.9; // GD units per frame -> our units per second
+const CUBE_G = 0.958199 * GD * 60 * 0.9, CUBE_JUMP = 11.180032 * GD, CUBE_JUMP_MINI = 9.400010 * GD, CUBE_TERM = 15 * GD;
 const CUBE_H = B / 2, CUBE_MINI = 0.6, CUBE_INNER = 0.3; // main hitbox 1 x 1 block (mini 0.6); the inner box that dies to solids is 0.3 of it
 const cubeHalf = s => s.mini ? CUBE_H * CUBE_MINI : CUBE_H;
 // Highest surface the cube's footprint [x - h, x + h] can stand on near its foot (gravity sign gs: 1 down, -1 up). Accepts
