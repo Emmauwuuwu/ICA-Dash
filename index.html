@@ -872,7 +872,8 @@ const GD = 2 * 60 * 0.9; // GD units per frame -> our units per second
 // GD steps physics 240 times a second, velocity before position, which takes g x step / 2 off every jump's speed (the
 // arc is otherwise the same). Our steps follow the exact curve, so the jump starts that much slower: 2.13 blocks high.
 const CUBE_G = 0.958199 * GD * 60 * 0.9, GD_STEP_LOSS = CUBE_G / 240 / 2;
-const CUBE_JUMP = 11.180032 * GD - GD_STEP_LOSS, CUBE_JUMP_MINI = 9.400010 * GD - GD_STEP_LOSS, CUBE_TERM = 15 * GD;
+// Mini jumps at 0.8x speed (same gravity and fall cap): 1.358 blocks high, matching a recorded GD mini path.
+const CUBE_JUMP = 11.180032 * GD - GD_STEP_LOSS, CUBE_JUMP_MINI = 11.180032 * 0.8 * GD - GD_STEP_LOSS, CUBE_TERM = 15 * GD;
 const CUBE_H = B / 2, CUBE_MINI = 0.6, CUBE_INNER = 0.3; // main hitbox 1 x 1 block (mini 0.6); the inner box that dies to solids is 0.3 of it
 const cubeHalf = s => s.mini ? CUBE_H * CUBE_MINI : CUBE_H;
 // Highest surface the cube's footprint [x - h, x + h] can stand on near its foot (gravity sign gs: 1 down, -1 up). Accepts
