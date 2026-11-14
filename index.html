@@ -874,10 +874,10 @@ const GD = 2 * 60 * 0.9; // GD units per frame -> our units per second
 const CUBE_G = 0.958199 * GD * 60 * 0.9, GD_STEP_LOSS = CUBE_G / 240 / 2;
 // Mini jumps at 0.8x speed (same gravity and fall cap): 1.358 blocks high, matching a recorded GD mini path.
 const CUBE_JUMP = 11.180032 * GD - GD_STEP_LOSS, CUBE_JUMP_MINI = 11.180032 * 0.8 * GD - GD_STEP_LOSS, CUBE_TERM = 15 * GD;
-// GD's jump speed changes a little with game speed (gravity doesn't): fitted from recorded GD mini jumps at each speed,
-// heights 1.240 / 1.354 / 1.421 / 1.360 / 1.367 blocks for 0.5x / 1x / 2x / 3x / 4x. Normal size uses the same factors
-// (shortcut: only measured at 1x for normal size; re-fit if a normal-size recording disagrees).
-const JUMP_AT_SPEED = [0.957, 1, 1.024, 1.002, 1.005];
+// GD's jump speed changes a little with game speed (gravity doesn't). Fitted from recorded GD jumps at every speed, for both
+// sizes, which agree to 0.2%: normal 1.955 / 2.131 / 2.227 / 2.143 / 2.153 blocks high, mini 1.240 / 1.354 / 1.421 / 1.360 /
+// 1.367, for 0.5x / 1x / 2x / 3x / 4x. Each factor is the average of the two sizes.
+const JUMP_AT_SPEED = [0.9574, 1, 1.0232, 1.0025, 1.005];
 const CUBE_H = B / 2, CUBE_MINI = 0.6, CUBE_INNER = 0.3; // main hitbox 1 x 1 block (mini 0.6); the inner box that dies to solids is 0.3 of it
 const cubeHalf = s => s.mini ? CUBE_H * CUBE_MINI : CUBE_H;
 // Highest surface the cube's footprint [x - h, x + h] can stand on near its foot (gravity sign gs: 1 down, -1 up). Accepts
