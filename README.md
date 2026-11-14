@@ -27,10 +27,12 @@ Progress, icons and your levels are saved in your browser.
 
 ## Online levels and accounts
 
-The online level browser, accounts and encrypted cloud save use the storage of the claude.ai version of the game, so they only work when it's opened there. This GitHub Pages copy plays fully offline and says so in those screens.
+Anyone can browse and play online levels, no account needed. Make an account (username + password, under Settings → Account) to upload and like levels and to keep your progress in a cloud save, which you can also encrypt with a passphrase.
+
+The online part runs on [Supabase](https://supabase.com). `supabase/schema.sql` creates the tables, and Row Level Security there decides who may change what, so the public key in `index.html` can't be used to edit other players' data.
 
 ## Files
 
-Everything is in `index.html`: no build step and no dependencies apart from Google Fonts.
+Everything is in `index.html`: no build step. It loads Google Fonts and, for the online part, `supabase-js` (pinned, with an integrity hash).
 
 Made with [Claude Code](https://claude.com/claude-code).

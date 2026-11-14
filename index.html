@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="description" content="ICA Dash: a one-button wave game with fifteen levels, a level editor, icons and achievements.">
 <style>:root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.min.js" integrity="sha384-EyR2P0dlmjnEGcm9xcjdAn0VedZpRHEwDLP9oSS6wYMvzHBHkUrvgonveazJ/sSx" crossorigin="anonymous"></script>
 </head>
 <body>
 <title>ICA Dash</title>
@@ -423,13 +424,18 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
       <p class="note" id="hackNote" hidden>Hack menu unlocked · press Tab anywhere to open or close it.</p>
       <h3>Account</h3>
       <p class="note" id="acctStatus">Checking your sign-in…</p>
+      <div id="acctAuth" hidden>
+        <label class="setrow"><span><b>Username</b><small>3–20 letters, numbers or _</small></span><input type="text" class="field" id="authUser" maxlength="20" autocomplete="username" spellcheck="false"></label>
+        <label class="setrow"><span><b>Password</b><small>At least 8 characters</small></span><input type="password" class="field" id="authPass" autocomplete="current-password"></label>
+        <div class="btnrow"><button class="primary" id="authIn">Sign in</button><button id="authUp">Create account</button></div>
+      </div>
       <div id="acctBody" hidden>
         <label class="setrow"><span><b>Player name</b><small>Shown next to levels you upload</small></span><input type="text" class="field" id="acctName" maxlength="20" autocomplete="nickname"></label>
         <label class="setrow"><span><b>Cloud save</b><small>Progress, achievements, icon and your levels, in a save only you can read</small></span><input type="checkbox" class="sr" id="acctSync"><span class="tog"></span></label>
         <div class="setrow"><span><b>Save passphrase</b><small id="acctEncState">Not encrypted</small></span><input type="password" class="field" id="acctPass" autocomplete="new-password" aria-label="Save passphrase"></div>
-        <div class="btnrow"><button id="acctEncrypt">Encrypt with passphrase</button><button class="primary" id="acctUnlock" hidden>Unlock cloud save</button><button class="ghost" id="acctDecrypt" hidden>Stop encrypting</button><button class="ghost" id="acctSaveNow">Save now</button></div>
-        <p class="note" id="acctMsg"></p>
+        <div class="btnrow"><button id="acctEncrypt">Encrypt with passphrase</button><button class="primary" id="acctUnlock" hidden>Unlock cloud save</button><button class="ghost" id="acctDecrypt" hidden>Stop encrypting</button><button class="ghost" id="acctSaveNow">Save now</button><button class="ghost" id="authOut" hidden>Sign out</button></div>
       </div>
+      <p class="note" id="acctMsg"></p>
     </div>
   </div>
 </section>
@@ -689,7 +695,7 @@ const store = {
 // changes to the synced keys as soon as anything is saved.
 const SYNCED = new Set(['zd-best', 'zd-ach', 'zd-stats', 'zd-icon', 'zd-levels']);
 const NET = { ready: false, write: false, reason: '', db: null, uid: null, owner: false, defaultName: 'Player', sync: true, key: null, salt: null,
-  locked: false, cloudEnc: null, players: {}, uploads: {}, likes: {}, loaded: {}, slow: false, profileChecked: false };
+  locked: false, cloudEnc: null, players: {}, uploads: {}, likes: {}, loaded: {}, slow: false, profileChecked: false, supa: false, sb: null };
 let W, H, S, dpr;
 function resize() { dpr = Math.min(devicePixelRatio || 1, 2); W = cv.clientWidth; H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr; S = H / VH; }
 addEventListener('resize', resize); resize();
@@ -1777,26 +1783,108 @@ async function cloudLoad() {
   try { mergeSave(JSON.parse(json)); } catch (e) { /* unreadable save: keep this device's data */ }
   NET.locked = false; renderNetAll();
 }
+// ---------- Supabase backend (the copy hosted outside claude.ai, e.g. GitHub Pages) ----------
+// Answers the same doc()/collection() calls as the claude.ai db, mapped onto the tables in supabase/schema.sql.
+// The key below is the public one; Row Level Security on the server decides what each player may read or change.
+const SUPA = { url: 'https://ktzhnbqtkizxeeezzmzb.supabase.co', key: 'sb_publishable_iL38PKMlG-v4YUdNYWt47Q__XQnOCoa' };
+const accountEmail = name => name.toLowerCase() + '@players.ica-dash.invalid'; // accounts are username + password; this address is never mailed
+function supaDb(sb, uid) {
+  const raw = { profiles: [], levels: [], likes: [] }, subs = [], ok = r => { if (r.error) throw r.error; return r.data; };
+  const lkey = l => l.author + ':' + (l.local_id || l.id); // same key shape as the claude.ai version: author:levelId
+  const shape = {
+    players: () => Object.fromEntries(raw.profiles.map(p => [p.id, { name: p.username, icon: p.icon }])),
+    uploads: () => { const o = {}; for (const l of raw.levels) (o[l.author] ??= { levels: [] }).levels.push({ id: l.local_id || l.id, name: l.name, code: l.code, created: Date.parse(l.created_at) }); return o; },
+    likes: () => { const keys = new Map(raw.levels.map(l => [l.id, lkey(l)])), o = {}; for (const k of raw.likes) if (keys.has(k.level_id)) (o[k.user_id] ??= { ids: [] }).ids.push(keys.get(k.level_id)); return o; },
+  };
+  let pending = null;
+  // shortcut: reads whole tables (the API caps each at 1000 rows); switch to paged queries on level_list if the game outgrows that.
+  const refresh = () => pending ??= (async () => {
+    try {
+      const [p, l, k] = await Promise.all([sb.from('profiles').select('id,username,icon'),
+        sb.from('levels').select('id,local_id,author,name,code,created_at').order('created_at', { ascending: false }), sb.from('likes').select('user_id,level_id')]);
+      raw.profiles = ok(p); raw.levels = ok(l); raw.likes = ok(k);
+      for (const s of subs) s.next({ docs: Object.entries(shape[s.col]()).map(([id, v]) => ({ id, data: () => v })) });
+    } catch (e) { for (const s of subs) s.fail?.(e); }
+  })().finally(() => { pending = null; });
+  setInterval(() => { if (!document.hidden && !$('online').hidden) refresh(); }, 30000); // the browser stays fresh while it's open
+  const writers = {
+    async players(id, body) { ok(await sb.from('profiles').upsert({ id, username: NET.defaultName, icon: body.icon })); },
+    async uploads(author, body) { // the claude.ai version writes a player's whole level list; here that becomes row inserts, updates and deletes
+      await refresh();
+      const want = new Map(body.levels.map(l => [l.id, l])), have = raw.levels.filter(l => l.author === author);
+      for (const h of have) if (!want.has(h.local_id || h.id)) ok(await sb.from('levels').delete().eq('id', h.id));
+      for (const l of want.values()) {
+        const h = have.find(x => (x.local_id || x.id) === l.id);
+        if (!h) ok(await sb.from('levels').insert({ local_id: l.id, name: l.name, code: l.code }));
+        else if (h.name !== l.name || h.code !== l.code) ok(await sb.from('levels').update({ name: l.name, code: l.code, updated_at: new Date().toISOString() }).eq('id', h.id));
+      }
+    },
+    async likes(_, body) {
+      const ids = new Map(raw.levels.map(l => [lkey(l), l.id])), want = new Set(body.ids.map(k => ids.get(k)).filter(Boolean));
+      const have = new Set(raw.likes.filter(k => k.user_id === uid).map(k => k.level_id));
+      for (const id of have) if (!want.has(id)) ok(await sb.from('likes').delete().eq('user_id', uid).eq('level_id', id));
+      for (const id of want) if (!have.has(id)) ok(await sb.from('likes').insert({ level_id: id }));
+    },
+  };
+  return {
+    collection: col => ({ onSnapshot(next, fail) { subs.push({ col, next, fail }); refresh(); } }),
+    doc(path) {
+      const [col, id] = path.split('/');
+      if (col === 'data') return { // data/users/<uid>/save: the private cloud save
+        async get() { const r = ok(await sb.from('saves').select('data').eq('user_id', uid).maybeSingle()); return { exists: !!r, data: () => { try { return JSON.parse(r.data); } catch (e) { return {}; } } }; },
+        async set(body) { ok(await sb.from('saves').upsert({ user_id: uid, data: JSON.stringify(body), updated_at: new Date().toISOString() })); },
+      };
+      return { async set(body) { try { await writers[col](id, body); } finally { refresh(); } } };
+    },
+  };
+}
+async function supaAuth(create) {
+  const name = $('authUser').value.trim(), pass = $('authPass').value;
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(name)) return acctMsg('Usernames are 3–20 letters, numbers or _.');
+  if (pass.length < 8) return acctMsg('Use a password of at least 8 characters.');
+  acctMsg(create ? 'Creating your account…' : 'Signing in…');
+  const email = accountEmail(name), r = create
+    ? await NET.sb.auth.signUp({ email, password: pass, options: { data: { username: name } } })
+    : await NET.sb.auth.signInWithPassword({ email, password: pass });
+  if (r.error) return acctMsg(/already|exists/i.test(r.error.message) ? 'That username is taken. Pick another one.'
+    : /invalid login/i.test(r.error.message) ? 'Wrong username or password.' : 'Couldn\'t do that: ' + r.error.message);
+  if (!r.data.session) return acctMsg('The account was made but the server is waiting for an email confirmation. Ask the game\'s owner to turn that off.');
+  location.reload(); // start clean as the new player: the cloud save is merged in on load
+}
+$('authIn').onclick = () => supaAuth(false);
+$('authUp').onclick = () => supaAuth(true);
+$('authPass').addEventListener('keydown', e => { if (e.key === 'Enter') supaAuth(false); });
+$('authOut').onclick = async () => {
+  try { localStorage.removeItem('zd-savekey'); } catch (e) { /* nothing stored */ } // a shared computer shouldn't keep the next player's key
+  await NET.sb.auth.signOut(); location.reload();
+};
 async function netInit() {
-  if (!window.claude?.use) { NET.reason = 'host'; return renderNetAll(); }
-  let db = null, user = null;
-  try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) { /* treated as signed out */ }
-  NET.uid = user ? await user.id() : null;
-  if (!db || !NET.uid) { NET.reason = 'signin'; return renderNetAll(); }
-  NET.db = db; NET.owner = await user.isOwner();
-  NET.write = (await user.can('data.write')) !== false; // null = the platform didn't say: try, and let a refused write decide
-  NET.defaultName = ((await user.name()) || 'Player').slice(0, 20);
+  if (window.claude?.use) {
+    let db = null, user = null;
+    try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) { /* treated as signed out */ }
+    NET.uid = user ? await user.id() : null;
+    if (!db || !NET.uid) { NET.reason = 'signin'; return renderNetAll(); }
+    NET.db = db; NET.owner = await user.isOwner();
+    NET.write = (await user.can('data.write')) !== false; // null = the platform didn't say: try, and let a refused write decide
+    NET.defaultName = ((await user.name()) || 'Player').slice(0, 20);
+  } else if (window.supabase) { // signed out still browses and plays online levels; an account adds saving, uploads and likes
+    const sb = NET.sb = window.supabase.createClient(SUPA.url, SUPA.key);
+    let u = null; try { u = (await sb.auth.getSession()).data.session?.user || null; } catch (e) { /* offline: browse only */ }
+    NET.supa = true; NET.uid = u?.id || null; NET.write = !!u; NET.db = supaDb(sb, NET.uid);
+    NET.defaultName = String(u?.user_metadata?.username || 'Player').slice(0, 20);
+    if (u) try { NET.owner = !!(await sb.from('admins').select('user_id').eq('user_id', u.id).maybeSingle()).data; } catch (e) { /* not a moderator */ }
+  } else { NET.reason = 'host'; return renderNetAll(); }
   NET.sync = store.get('zd-sync', true);
   await loadRememberedKey();
   NET.ready = true;
-  const watch = (col) => db.collection(col).onSnapshot(snap => {
+  const watch = (col) => NET.db.collection(col).onSnapshot(snap => {
     NET[col] = Object.fromEntries(snap.docs.map(d => [d.id, d.data()])); NET.loaded[col] = true;
     if (col === 'players' && !NET.profileChecked && NET.write) { NET.profileChecked = true; if (!NET.players[NET.uid]) pushProfile(NET.defaultName); }
     renderNetAll();
   }, e => { NET.slow = true; renderNetAll(); });
   watch('players'); watch('uploads'); watch('likes');
   setTimeout(() => { if (!NET.loaded.uploads) { NET.slow = true; renderNetAll(); } }, 10000);
-  await cloudLoad();
+  if (NET.uid) await cloudLoad();
   renderNetAll();
 }
 function onlineItems() {
@@ -1825,7 +1913,8 @@ function renderOnline() {
   if (onSort === 'mine') items = items.filter(it => it.author === NET.uid);
   items.sort(onSort === 'liked' ? (a, b) => b.likes - a.likes || b.created - a.created : (a, b) => b.created - a.created);
   $('onMsg').textContent = (NET.slow && !NET.loaded.uploads ? 'Online levels can\'t be reached yet. ' : '')
-    + (NET.write ? 'Upload your own from Create → Your levels.' : 'You can play online levels; uploading and likes need Contributor access to this game.');
+    + (NET.write ? 'Upload your own from Create → Your levels.' : NET.supa ? 'Sign in under Settings → Account to upload and like levels.'
+      : 'You can play online levels; uploading and likes need Contributor access to this game.');
   $('onList').innerHTML = items.slice(0, 100).map(it => {
     let facts;
     try { const w = worldFor(it.code); facts = `<span>${Math.round(w.end / B)} blk</span><span>${Math.round(duration(w))} s</span>`; } catch (e) { facts = '<span>Unreadable level</span>'; }
@@ -1836,16 +1925,22 @@ function renderOnline() {
 }
 function renderAccount() {
   const st = $('acctStatus');
+  $('acctAuth').hidden = !(NET.ready && NET.supa && !NET.uid); $('authOut').hidden = !NET.supa;
+  if (NET.ready && NET.supa && !NET.uid) {
+    st.textContent = 'Playing works without an account. Make one to keep your progress in the cloud and to upload and like levels.';
+    $('acctBody').hidden = true; return;
+  }
   if (!NET.ready) {
     st.textContent = NET.reason === 'host' ? 'Accounts work when this game is opened on claude.ai.' : NET.reason === 'signin'
       ? 'Sign in to claude.ai to get an account here: cloud save and online levels.' : 'Checking your sign-in…';
     $('acctBody').hidden = true; return;
   }
   $('acctBody').hidden = false;
-  st.textContent = NET.write ? `Signed in with your claude.ai account${NET.owner ? ' (you own this game)' : ''}. No game password needed.`
+  st.textContent = NET.supa ? `Signed in as ${NET.defaultName}${NET.owner ? ' (moderator)' : ''}.`
+    : NET.write ? `Signed in with your claude.ai account${NET.owner ? ' (you own this game)' : ''}. No game password needed.`
     : 'Signed in, view-only: you can play online levels, but saving, uploading and likes are off.';
   if (document.activeElement !== $('acctName')) $('acctName').value = NET.players[NET.uid]?.name || NET.defaultName;
-  $('acctName').disabled = !NET.write; $('acctSync').checked = NET.sync; $('acctSync').disabled = !NET.write;
+  $('acctName').disabled = !NET.write || NET.supa; // with game accounts the player name is the username $('acctSync').checked = NET.sync; $('acctSync').disabled = !NET.write;
   $('acctEncState').textContent = NET.locked ? 'Your cloud save is encrypted: enter its passphrase to unlock it'
     : NET.key ? 'Encrypted with your passphrase (AES-256); the passphrase never leaves your devices' : 'Not encrypted, but still private to you';
   $('acctEncrypt').hidden = NET.locked || !NET.write; $('acctEncrypt').textContent = NET.key ? 'Change passphrase' : 'Encrypt with passphrase';
@@ -2001,6 +2096,5 @@ netInit(); // connects the account and online levels once the platform answers; 
 document.fonts?.ready.then(renderHome);
 requestAnimationFrame(frame);
 </script>
-
 </body>
 </html>
