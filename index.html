@@ -383,6 +383,16 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
             <p class="warn" id="customMsg"></p>
           </div>
         </div>
+        <h3>Cube</h3>
+        <div class="custom" style="grid-template-columns:minmax(0,1fr)">
+          <div class="shapes" style="grid-template-columns:96px 96px"><button id="cubeTileDef"><canvas width="120" height="120"></canvas>Standard</button><button id="cubeTile"><canvas width="120" height="120"></canvas>Custom</button></div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="btnrow"><button id="cubeUpload">Upload cube image</button><button class="ghost" id="cubeRemove">Remove</button></div>
+            <input type="file" id="cubeFile" accept="image/*" class="sr" tabindex="-1" aria-hidden="true">
+            <p class="note">Used in cube mode. It fills the cube's square and spins with it; the hitbox stays the same. Saved in this browser.</p>
+            <p class="warn" id="cubeMsg"></p>
+          </div>
+        </div>
         <h3>Main colour · trail</h3><div class="swatches" id="c1"></div>
         <h3>Outline · detail</h3><div class="swatches" id="c2"></div>
       </div>
@@ -804,6 +814,9 @@ if (!colorOpen(icon.c2)) icon.c2 = 11;
 const customImg = new Image(); // player's uploaded icon, stored as a small PNG data URL
 customImg.onload = () => { renderHome(); if (!$('icons').hidden) renderIcons(); };
 if (icon.custom) customImg.src = icon.custom;
+const cubeImg = new Image(); // player's uploaded cube picture, same format
+cubeImg.onload = customImg.onload;
+if (icon.cubeCustom) cubeImg.src = icon.cubeCustom;
 let keys = store.get('zd-keys', DEFAULT_KEYS);
 if (!Array.isArray(keys.climb) || typeof keys.exit !== 'string') keys = structuredClone(DEFAULT_KEYS);
 if (typeof keys.restart !== 'string') keys.restart = DEFAULT_KEYS.restart; // saved before the restart key existed
@@ -1175,11 +1188,15 @@ function spikePath(g, o, u) { // a spike filling its cell, base on the side oppo
     [[x, y], [x + u / 2, y + u], [x + u, y]], [[x + u, y], [x, y + u / 2], [x + u, y + u]]][o.o];
   g.moveTo(...P[0]); g.lineTo(...P[1]); g.lineTo(...P[2]); g.closePath();
 }
-// Cube icon (original design): your colours, a square with an inset square and a core. A custom image is a wave icon,
-// so the cube doesn't use it.
+// Cube icon (original design): your colours, a square with an inset square and a core. Or your own cube picture, fitted
+// inside the square (the wave's custom image is a wave icon, so the cube never uses that one).
 function drawCube(g, x, y, a, s, ic) {
   const h = CUBE_H * s;
   g.save(); g.translate(x, y); g.rotate(a);
+  if (ic.useCubeCustom && cubeImg.naturalWidth) {
+    const k = 2 * h / Math.max(cubeImg.naturalWidth, cubeImg.naturalHeight), w = cubeImg.naturalWidth * k, ih = cubeImg.naturalHeight * k;
+    g.drawImage(cubeImg, -w / 2, -ih / 2, w, ih); g.restore(); return;
+  }
   g.fillStyle = '#0c0e1c'; g.fillRect(-h, -h, h * 2, h * 2);
   g.fillStyle = COLORS[ic.c1]; g.fillRect(-h + 3 * s, -h + 3 * s, h * 2 - 6 * s, h * 2 - 6 * s);
   g.fillStyle = '#0c0e1c'; g.fillRect(-h * 0.55, -h * 0.55, h * 1.1, h * 1.1);
@@ -1800,6 +1817,14 @@ function renderIcons() {
   $('shapeName').textContent = SHAPES[icon.shape].name;
   $('shapeNo').textContent = `Shape ${String(icon.shape + 1).padStart(2, '0')} / ${String(SHAPES.length).padStart(2, '0')}`;
   if (icon.useCustom && has) { $('shapeName').textContent = 'Custom'; $('shapeNo').textContent = 'Your image'; }
+  const hasC = !!cubeImg.naturalWidth, onC = !!icon.useCubeCustom && hasC;
+  for (const [id, custom] of [['cubeTileDef', false], ['cubeTile', true]]) {
+    const tile = $(id), g = tile.querySelector('canvas').getContext('2d');
+    tile.setAttribute('aria-pressed', String(custom === onC)); g.clearRect(0, 0, 120, 120);
+    if (!custom || hasC) drawCube(g, 60, 60, 0, 1.4, { ...icon, useCubeCustom: custom });
+    else { g.strokeStyle = 'rgba(233,237,247,.4)'; g.lineWidth = 4; g.setLineDash([10, 8]); g.strokeRect(20, 20, 80, 80); g.setLineDash([]); g.fillStyle = 'rgba(233,237,247,.6)'; g.fillRect(56, 40, 8, 40); g.fillRect(40, 56, 40, 8); }
+  }
+  $('cubeRemove').hidden = !hasC;
 }
 
 document.addEventListener('click', e => {
@@ -1848,20 +1873,39 @@ $('customTile').onclick = () => {
 $('customRemove').onclick = () => {
   delete icon.custom; icon.useCustom = false; customImg.removeAttribute('src'); store.set('zd-icon', icon); customMsg(''); renderIcons();
 };
-$('iconFile').addEventListener('change', async () => {
-  const f = $('iconFile').files[0]; $('iconFile').value = '';
-  if (!f) return;
-  if (!f.type.startsWith('image/')) return customMsg('That file isn\'t an image. Pick a PNG, JPG, GIF or WebP.');
-  if (f.size > 5e6) return customMsg('That image is over 5 MB. Pick a smaller one.');
-  let url;
+// Read a picked file as a PNG data URL of at most 128 px; returns { url } or { err } with a message for the player.
+async function readIconFile(input) {
+  const f = input.files[0]; input.value = '';
+  if (!f) return {};
+  if (!f.type.startsWith('image/')) return { err: 'That file isn\'t an image. Pick a PNG, JPG, GIF or WebP.' };
+  if (f.size > 5e6) return { err: 'That image is over 5 MB. Pick a smaller one.' };
   try {
     const bmp = await createImageBitmap(f), k = Math.min(1, 128 / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
     c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-    url = c.toDataURL('image/png');
-  } catch (e) { return customMsg('Couldn\'t read that image. Try saving it as a PNG first.'); }
+    return { url: c.toDataURL('image/png') };
+  } catch (e) { return { err: 'Couldn\'t read that image. Try saving it as a PNG first.' }; }
+}
+const NOT_SAVED = 'Your browser wouldn\'t save the image, so it will be gone after a reload.';
+$('iconFile').addEventListener('change', async () => {
+  const { url, err } = await readIconFile($('iconFile')); if (err) return customMsg(err); if (!url) return;
   icon.custom = url; icon.useCustom = true; customImg.src = url;
-  customMsg(store.set('zd-icon', icon) ? '' : 'Your browser wouldn\'t save the image, so it will be gone after a reload.');
+  customMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
+});
+const cubeMsg = t => { $('cubeMsg').textContent = t; };
+$('cubeUpload').onclick = () => $('cubeFile').click();
+$('cubeTileDef').onclick = () => { icon.useCubeCustom = false; store.set('zd-icon', icon); renderIcons(); };
+$('cubeTile').onclick = () => {
+  if (!cubeImg.naturalWidth) return $('cubeFile').click();
+  icon.useCubeCustom = true; store.set('zd-icon', icon); renderIcons();
+};
+$('cubeRemove').onclick = () => {
+  delete icon.cubeCustom; icon.useCubeCustom = false; cubeImg.removeAttribute('src'); store.set('zd-icon', icon); cubeMsg(''); renderIcons();
+};
+$('cubeFile').addEventListener('change', async () => {
+  const { url, err } = await readIconFile($('cubeFile')); if (err) return cubeMsg(err); if (!url) return;
+  icon.cubeCustom = url; icon.useCubeCustom = true; cubeImg.src = url;
+  cubeMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
 });
 // A new level starts with a floor and a ceiling so there's something to build between.
 $('newLevel').onclick = () => openEditor({ id: 'c' + Date.now(), name: 'Untitled level', code: 'ICA2;r,-12,0,42,1;r,-12,9,42,1' });
@@ -1954,7 +1998,7 @@ function pushProfile(name) { // public profile: player name + icon colours, debo
 }
 function savePayload() {
   const p = { v: 1, bests, ach, stats, customs, icon: { ...icon } };
-  if (JSON.stringify(p).length > 180000) delete p.icon.custom; // the uploaded icon picture is the first thing dropped from a too-big save
+  for (const k of ['cubeCustom', 'custom']) if (JSON.stringify(p).length > 180000) delete p.icon[k]; // uploaded pictures are the first things dropped from a too-big save
   return p;
 }
 function cloudSave(manual) {
@@ -1986,8 +2030,11 @@ function mergeSave(s) {
       customs.push({ id: l.id.slice(0, 40), name: String(l.name || 'Untitled level').slice(0, 40), code: l.code });
   }
   if (s.icon && !localStorage.getItem('zd-icon')) { // a device that never picked an icon takes the saved one
-    const i = s.icon; if (SHAPES[i.shape] && COLORS[i.c1] && COLORS[i.c2]) icon = { shape: i.shape, c1: i.c1, c2: i.c2, ...(typeof i.custom === 'string' && i.custom.startsWith('data:image/png') ? { custom: i.custom, useCustom: !!i.useCustom } : {}) };
+    const i = s.icon, png = u => typeof u === 'string' && u.startsWith('data:image/png');
+    if (SHAPES[i.shape] && COLORS[i.c1] && COLORS[i.c2]) icon = { shape: i.shape, c1: i.c1, c2: i.c2, ...(png(i.custom) ? { custom: i.custom, useCustom: !!i.useCustom } : {}),
+      ...(png(i.cubeCustom) ? { cubeCustom: i.cubeCustom, useCubeCustom: !!i.useCubeCustom } : {}) };
     if (icon.custom) customImg.src = icon.custom;
+    if (icon.cubeCustom) cubeImg.src = icon.cubeCustom;
   }
   store.set('zd-best', bests); store.set('zd-ach', ach); store.set('zd-stats', stats); store.set('zd-levels', customs); store.set('zd-icon', icon);
   renderHome();
