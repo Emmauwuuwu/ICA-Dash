@@ -593,12 +593,15 @@ const ORB_R = 0.45, ORB_HIT = 0.6, ORB_MAX = 75; // dash orbs: drawn radius, tou
 //      g green (flip gravity and launch), k black (slam toward the ground). Cube only; the wave ignores them, as in GD.
 //   j  jump pad {x, y, o, c}: in its cell, sitting on side o (0 floor, 1 left wall, 2 ceiling, 3 right wall); touching it
 //      launches you. c: y yellow, p pink, r red, b blue (flip gravity), s spider (flip and snap to the surface opposite).
-// v: launch speed in GD units per frame, the same scale as the cube's 11.180032 jump (blue: speed toward the new ground).
-// shortcut: these strengths are estimates of GD's values, not measured yet; calibrate them from GD recordings like the jump.
-const RING = { y: { v: 11.2, col: '#ffd84a', name: 'Yellow orb' }, p: { v: 8, col: '#ff5fe6', name: 'Pink orb' }, r: { v: 15.6, col: '#ff5a2e', name: 'Red orb' },
-  b: { v: 6, col: '#3fe6ff', name: 'Blue orb', flip: true }, g: { v: 11.2, col: '#56ff4a', name: 'Green orb', flip: true }, k: { v: 15, col: '#14141c', name: 'Black orb' } };
-const PAD = { y: { v: 16, col: '#ffd84a', name: 'Yellow pad' }, p: { v: 10.4, col: '#ff5fe6', name: 'Pink pad' }, r: { v: 20, col: '#ff5a2e', name: 'Red pad' },
-  b: { v: 6, col: '#3fe6ff', name: 'Blue pad', flip: true }, s: { col: '#b04dff', name: 'Spider pad', spider: true } };
+// v: launch speed away from the ground (after any flip; negative = toward it) in GD units per frame, the same scale as the
+// cube's 11.180032 jump. Measured from recorded GD paths (normal size, 1x); each one sets a fixed speed whatever the cube was
+// doing: yellow orb = green orb = the jump, pink orb 0.72x, blue orb ~0.4x toward the new ground, black orb hits the fall cap.
+// Mini (0.8x) and the per-speed factors apply exactly as they do to the jump.
+const JMP = 11.180032;
+const RING = { y: { v: JMP, col: '#ffd84a', name: 'Yellow orb' }, p: { v: JMP * 0.72, col: '#ff5fe6', name: 'Pink orb' }, r: { v: 15.40, col: '#ff5a2e', name: 'Red orb' },
+  b: { v: -4.437, col: '#3fe6ff', name: 'Blue orb', flip: true }, g: { v: JMP, col: '#56ff4a', name: 'Green orb', flip: true }, k: { v: -16, col: '#14141c', name: 'Black orb' } };
+const PAD = { y: { v: 15.80, col: '#ffd84a', name: 'Yellow pad' }, p: { v: 10.47, col: '#ff5fe6', name: 'Pink pad' }, r: { v: 19.97, col: '#ff5a2e', name: 'Red pad' },
+  b: { v: -6.52, col: '#3fe6ff', name: 'Blue pad', flip: true }, s: { col: '#b04dff', name: 'Spider pad', spider: true } };
 const padBox = o => [[o.x + 0.1, o.y + 0.8, o.x + 0.9, o.y + 1], [o.x, o.y + 0.1, o.x + 0.2, o.y + 0.9], [o.x + 0.1, o.y, o.x + 0.9, o.y + 0.2], [o.x + 0.8, o.y + 0.1, o.x + 1, o.y + 0.9]][o.o];
 function encodeLevel(objs) {
   const n = v => +v.toFixed(3), D = o => o.d ? ',1' : '';
@@ -737,16 +740,16 @@ function orbAt(wd, s, r) {
 }
 // A hold uses at most one orb (letting go frees the next press); the dash holds its angle until release.
 function dashStart(wd, s, i) { const o = wd.orbs[i]; s.lastOrb = i; s.spent = true; s.dash = Math.tan(o.a * Math.PI / 180); if (o.f) s.flip = !s.flip; }
-// Cube launches from orbs and pads: v (GD units per frame) scaled like the jump (size, game speed, GD's step loss).
-// Positive v sends the cube away from its ground; the dual twin always gets the mirror image.
+// Cube launches from orbs and pads: v (GD units per frame, away from the ground) scaled like the jump (size, game speed).
+// GD's step loss always works against the "away" direction, so it's subtracted whatever v's sign. The dual twin gets the mirror.
 function launch(s, v) {
-  const gs = s.flip ? -1 : 1, sp = (Math.abs(v) * GD * (s.mini ? 0.8 : 1) - GD_STEP_LOSS) * JUMP_AT_SPEED[s.speedI] * Math.sign(v);
+  const gs = s.flip ? -1 : 1, sp = (v * GD * (s.mini ? 0.8 : 1) - GD_STEP_LOSS) * JUMP_AT_SPEED[s.speedI];
   s.vy = -gs * sp; s.vy2 = gs * sp; s.gnd = s.gnd2 = false; s.dash = null;
 }
 function ringUse(wd, s, i) { // a jump orb: uses up the press
   const o = wd.orbs[i], k = RING[o.c]; s.lastOrb = i; s.spent = true;
   if (k.flip) s.flip = !s.flip;
-  launch(s, o.c === 'b' ? -k.v : o.c === 'k' ? -k.v : k.v); // blue: toward the new ground; black: slammed toward the ground
+  launch(s, k.v);
 }
 // Pads: the index of a pad the cube's main box touches (not the one it just used), or -1.
 function padAt(wd, s, h) {
@@ -768,7 +771,7 @@ function padUse(wd, s, i, h) {
     return;
   }
   if (k.flip) s.flip = !s.flip;
-  launch(s, k.flip ? -k.v : k.v);
+  launch(s, k.v);
 }
 // Seconds to finish, following the speed portals.
 function duration(wd) {
