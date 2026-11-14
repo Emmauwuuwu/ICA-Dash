@@ -1,0 +1,2006 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="ICA Dash: a one-button wave game with fifteen levels, a level editor, icons and achievements.">
+<style>:root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>ICA Dash</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Space+Mono:wght@400;700&family=Archivo:wght@500;700&display=swap">
+<style>
+/* Layout: menus hug the left edge like a cabinet menu; every surface is flat with 45° cut corners, echoing the wave's only angle.
+   Single dark look on purpose. */
+:root {
+  --ink: #0c0e1c;
+  --ink-2: #161a33;
+  --cobalt: #2340ff;
+  --cobalt-hi: #3d58ff;
+  --paper: #e9edf7;
+  --sun: #ffcc1a;
+  --sun-hi: #ffd84d;
+  --rose: #ff4d6d;
+  --muted: #8f98bf;
+  --hair: rgba(233, 237, 247, .22);
+  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --mono: "Space Mono", ui-monospace, Consolas, monospace;
+  --body: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --cut: 12px;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; overflow: hidden; background: var(--ink); color: var(--paper); font-family: var(--body); }
+body { user-select: none; -webkit-user-select: none; }
+#c { display: block; width: 100%; height: 100%; touch-action: none; }
+button, input, textarea { font: inherit; color: inherit; }
+h1, h2, h3 { margin: 0; font-weight: 900; }
+.chamfer { clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.mono { font-family: var(--mono); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* buttons: flat, cut corners, focus drawn inside (outlines get clipped) */
+button { font-family: var(--mono); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--paper);
+  background: var(--cobalt); border: 0; padding: 12px 18px; cursor: pointer; transition: background .12s, color .12s;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+button:hover { background: var(--cobalt-hi); }
+button:active { transform: translate(1px, 1px); }
+button:focus-visible { outline: none; box-shadow: inset 0 0 0 3px var(--sun); }
+button.primary { background: var(--sun); color: var(--ink); }
+button.primary:hover { background: var(--sun-hi); }
+button.primary:focus-visible { box-shadow: inset 0 0 0 3px var(--ink); }
+button.ghost { background: transparent; box-shadow: inset 0 0 0 2px var(--hair); }
+button.ghost:hover { box-shadow: inset 0 0 0 2px var(--paper); background: transparent; }
+button.ghost:focus-visible { box-shadow: inset 0 0 0 3px var(--sun); }
+button.danger { background: transparent; color: var(--rose); box-shadow: inset 0 0 0 2px var(--rose); }
+
+/* auto margins centre short screens but let tall ones (Icons) start at the top and scroll, so Back never ends up off-screen */
+.screen:not(#editor) > :first-child { margin-top: auto; }
+.screen:not(#editor) > :last-child { margin-bottom: auto; }
+.screen { position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: 20px; box-sizing: border-box; overflow: auto;
+  padding-block: calc(28px + env(safe-area-inset-top, 0px)) calc(28px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: linear-gradient(90deg, rgba(12, 14, 28, .9) 0%, rgba(12, 14, 28, .72) 45%, rgba(12, 14, 28, .25) 100%); }
+.wrap { width: min(1080px, 100%); margin-inline: auto; display: flex; flex-direction: column; gap: 18px; }
+
+/* panel: ink slab, hazard-stripe band on top */
+.panel { background: var(--ink); padding: 0 22px 22px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; width: min(620px, 100%);
+  clip-path: polygon(22px 0, 100% 0, 100% calc(100% - 22px), calc(100% - 22px) 100%, 0 100%, 0 22px); max-height: 100%; overflow: auto; }
+.panel::before { content: ""; display: block; height: 8px; margin: 0 -22px; flex: none;
+  background: repeating-linear-gradient(-45deg, var(--sun) 0 10px, var(--ink) 10px 20px); }
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.head h2 { font-family: var(--display); font-size: clamp(40px, 7vw, 64px); line-height: .9; text-transform: uppercase; letter-spacing: .01em; }
+.label { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.note { color: var(--muted); font-size: 14px; margin: 0; line-height: 1.45; max-width: 62ch; }
+.warn { color: var(--rose); font-family: var(--mono); font-size: 13px; margin: 0; }
+.backbtn { align-self: flex-start; }
+
+/* home: logo + menu stacked on the left */
+#home .wrap { align-items: flex-start; }
+.logo { font-family: var(--display); font-weight: 900; text-transform: uppercase; line-height: .82; font-size: clamp(88px, 17vw, 190px); letter-spacing: -.01em; }
+.logo span { display: block; }
+.logo .dash { color: var(--sun); }
+.zig { width: min(420px, 80%); height: 34px; display: block; margin-top: 6px; }
+.menu { display: flex; flex-direction: column; gap: 6px; width: min(460px, 100%); margin-top: 10px; }
+.menu button { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; text-align: left; padding: 10px 18px 10px 20px;
+  background: transparent; box-shadow: inset 3px 0 0 var(--hair); clip-path: none; }
+.menu button:hover, .menu button:focus-visible { background: var(--paper); color: var(--ink); box-shadow: inset 6px 0 0 var(--sun); }
+.menu button.primary { background: var(--sun); color: var(--ink); box-shadow: none; }
+.menu b { font-family: var(--display); font-weight: 900; font-size: 40px; line-height: 1; letter-spacing: .02em; text-transform: uppercase; }
+.menu small { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; opacity: .75; text-align: right; display: flex; align-items: center; gap: 8px; }
+.menu canvas { width: 28px; height: 28px; }
+.controls { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; color: var(--muted); margin: 6px 0 0; max-width: 60ch; }
+
+/* departures board */
+.board { display: flex; flex-direction: column; gap: 6px; }
+.board > button, .board .row { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; text-align: left;
+  text-transform: none; letter-spacing: 0; padding: 14px 18px; background: var(--ink-2); clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
+.board > button:hover, .board > button:focus-visible { background: var(--sun); color: var(--ink); box-shadow: none; }
+.board .no { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--muted); grid-row: span 2; }
+.board > button:hover .no, .board > button:focus-visible .no { color: var(--ink); }
+.board .name { font-family: var(--display); font-weight: 900; font-size: 36px; line-height: 1; text-transform: uppercase; overflow-wrap: anywhere; }
+.board .facts { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; text-transform: uppercase; }
+.board .facts i { display: inline-block; width: 10px; height: 10px; background: var(--c); margin-right: 6px; vertical-align: -1px; }
+.board .best { grid-row: span 2; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; font-family: var(--mono); font-size: 12px; min-width: 110px; }
+.board .best strong { font-size: 26px; }
+.meter { width: 110px; height: 6px; background: rgba(233, 237, 247, .15); }
+.meter i { display: block; height: 100%; background: currentColor; }
+.board .row { grid-template-columns: minmax(0, 1fr) auto; }
+.board .row .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.board .row .acts button { padding: 9px 12px; font-size: 12px; }
+.board .row .name { font-size: 28px; }
+
+/* HUD */
+#hud { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: 1fr minmax(0, 520px) 1fr; align-items: center; gap: 14px; pointer-events: none; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+#exitBtn { pointer-events: auto; justify-self: start; padding: 10px 14px; }
+.prog { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 15px; }
+.track { flex: 1; height: 10px; background: rgba(12, 14, 28, .6); box-shadow: inset 0 0 0 1px var(--hair); position: relative; }
+.track i { display: block; height: 100%; background: var(--sun); }
+.track::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(12, 14, 28, .8) calc(10% - 2px) 10%); }
+.hudr { justify-self: end; text-align: right; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+#hackTag { display: block; color: var(--rose); }
+
+/* settings */
+.setrow { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid var(--hair); cursor: pointer; }
+.setrow b { display: block; font-size: 16px; }
+.setrow small { color: var(--muted); font-size: 13px; }
+.tog { flex: none; width: 70px; height: 30px; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: .1em;
+  box-shadow: inset 0 0 0 2px var(--hair); color: var(--muted); clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+.tog::after { content: "OFF"; }
+input:checked + .tog { background: var(--sun); color: var(--ink); box-shadow: none; }
+input:checked + .tog::after { content: "ON"; }
+input:focus-visible + .tog { box-shadow: inset 0 0 0 3px var(--sun); }
+input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
+.binds { display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; align-items: center; }
+.binds span { font-weight: 700; }
+.binds button { min-width: 150px; }
+.binds button.listening { background: var(--sun); color: var(--ink); }
+.panel h3 { font-family: var(--mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--sun); margin-top: 8px; font-weight: 700; }
+
+/* icon garage */
+.garage { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 780px) { .garage { grid-template-columns: minmax(0, 1fr); } }
+.window { position: relative; background: var(--ink); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.window canvas { width: 100%; height: auto; aspect-ratio: 2 / 1; display: block; }
+.window::before, .window::after { content: ""; position: absolute; width: 22px; height: 22px; border: 3px solid var(--sun); }
+.window::before { top: 0; left: 0; border-right: 0; border-bottom: 0; }
+.window::after { bottom: 0; right: 0; border-left: 0; border-top: 0; }
+.window .meta { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.window h2 { font-family: var(--display); font-size: 52px; line-height: .9; text-transform: uppercase; }
+.shapes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.shapes button { background: var(--ink-2); padding: 8px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; }
+.shapes canvas { width: 64%; height: auto; aspect-ratio: 1; display: block; }
+.shapes [aria-pressed=true] { background: var(--sun); color: var(--ink); }
+.custom { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; }
+.swatches { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.swatches button { aspect-ratio: 1; padding: 0; background: var(--sw); }
+.swatches button:hover { background: var(--sw); filter: brightness(1.1); }
+.swatches [aria-pressed=true] { box-shadow: inset 0 0 0 3px var(--ink), inset 0 0 0 6px var(--paper); }
+.shapes button:disabled, .swatches button:disabled { cursor: not-allowed; opacity: .45; }
+.shapes button:disabled:hover { background: var(--ink-2); }
+.swatches button:disabled, .swatches button:disabled:hover { background: repeating-linear-gradient(-45deg, var(--sw) 0 5px, var(--ink) 5px 10px); filter: none; }
+.board > button:disabled { cursor: not-allowed; opacity: .5; }
+.board > button:disabled:hover { background: var(--ink-2); color: var(--paper); }
+.board > button:disabled:hover .no { color: var(--muted); }
+.ach .reward { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.ach .reward canvas { width: 40px; height: 40px; }
+.ach .reward .sw { width: 26px; height: 26px; display: block; background: var(--sw); }
+.ach .reward b { min-width: 56px; text-align: right; color: var(--muted); }
+.ach.done { box-shadow: inset 6px 0 0 var(--sun); }
+.ach.done .reward b { color: var(--sun); }
+.ach:not(.done) .name { color: var(--muted); }
+
+
+/* editor: the level fills the screen; a slim top bar and a build bar sit over it */
+#editor { justify-content: space-between; background: none; pointer-events: none; padding-block: calc(10px + env(safe-area-inset-top, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)); }
+#editor > * { pointer-events: auto; }
+.edtop { display: flex; gap: 8px; align-items: center; width: min(1080px, 100%); margin-inline: auto; flex-wrap: wrap; }
+.edtop input { flex: 1; min-width: 0; font-family: var(--display); font-weight: 900; font-size: 26px; text-transform: uppercase; background: var(--ink); border: 0;
+  border-bottom: 3px solid var(--sun); padding: 4px 10px; }
+.edtop input:focus-visible { outline: none; background: var(--ink-2); }
+.edtop input[readonly] { border-bottom-color: var(--hair); }
+.edbottom { display: flex; flex-direction: column; gap: 6px; width: min(1080px, 100%); margin-inline: auto; }
+.edbottom .controls { margin: 0; text-shadow: 0 1px 2px #000; }
+.edbar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 12px; }
+.edbar::before { flex: 0 0 calc(100% + 44px); }
+.edtabs { display: flex; flex-direction: column; gap: 4px; }
+.edtabs button, .edside button, .edpane .act { clip-path: none; background: var(--ink-2); padding: 9px 12px; text-align: left; }
+.edtabs [aria-pressed=true], .edside [aria-pressed=true], .edpane [aria-pressed=true] { background: var(--sun); color: var(--ink); }
+.edpane { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; align-items: flex-start; max-height: 150px; overflow: auto; }
+.edpane .act:disabled { opacity: .4; cursor: not-allowed; }
+.edpane .act.danger { background: transparent; }
+.pal { width: 62px; height: 64px; padding: 4px 2px; clip-path: none; background: var(--ink-2); display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 9px; letter-spacing: .04em; }
+.pal canvas { width: 40px; height: 40px; }
+.edside { display: grid; grid-template-columns: repeat(2, minmax(0, auto)); gap: 4px; align-content: start; }
+#sharePop { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(580px, calc(100% - 32px)); z-index: 5; }
+textarea { width: 100%; box-sizing: border-box; min-height: 110px; background: var(--ink-2); border: 0; border-left: 3px solid var(--sun); padding: 10px;
+  font-family: var(--mono); font-size: 13px; resize: vertical; user-select: text; }
+textarea:focus-visible { outline: 2px solid var(--sun); }
+.btnrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* hack menu: small draggable tool windows */
+#hackMenu { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+.hwin { position: absolute; width: 230px; background: var(--ink); pointer-events: auto; font-family: var(--mono); font-size: 13px;
+  box-shadow: 0 0 0 1px var(--hair), 6px 6px 0 rgba(0, 0, 0, .5); }
+.hbar { display: flex; justify-content: space-between; gap: 8px; background: var(--sun); color: var(--ink); font-weight: 700; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .12em; padding: 7px 10px; cursor: grab; touch-action: none; }
+.hrow { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-top: 1px solid var(--hair); cursor: pointer; margin: 0; }
+.hrow:hover { background: var(--ink-2); }
+.hcol { flex-direction: column; align-items: stretch; gap: 6px; }
+.hcol input[type=range] { width: 100%; }
+.hval { color: var(--sun); }
+.hchk { width: 14px; height: 14px; flex: none; box-shadow: inset 0 0 0 2px var(--muted); }
+input:checked + .hchk { background: var(--sun); box-shadow: none; }
+input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px; }
+.hbtn { width: 100%; background: transparent; clip-path: none; text-align: left; font-size: 12px; }
+.hbtn:hover { background: var(--ink-2); }
+.hfoot { color: var(--muted); font-size: 11px; cursor: default; line-height: 1.4; }
+.hfoot:hover { background: none; }
+.hwin.folded > :not(.hbar) { display: none; } /* click a title bar to fold its window */
+.hbar::after { content: "–"; margin-left: 6px; }
+.hwin.folded .hbar::after { content: "+"; }
+#fps { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 21;
+  font-family: var(--mono); font-weight: 700; font-size: 13px; color: var(--sun); text-shadow: 0 1px 2px #000; pointer-events: none; }
+#toast { position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 22; background: var(--sun); color: var(--ink);
+  font-family: var(--mono); font-weight: 700; font-size: 13px; letter-spacing: .06em; padding: 12px 18px; max-width: calc(100% - 32px); box-sizing: border-box;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+
+#done .panel, #pause .panel { margin-inline: auto; }
+#pause { background: rgba(12, 14, 28, .6); }
+.stat { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; font-family: var(--mono); font-size: 14px; }
+.stat dt { color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-size: 12px; align-self: center; }
+.stat dd { margin: 0; font-weight: 700; }
+/* online + account */
+.field { flex: 1; min-width: 180px; background: var(--ink-2); border: 0; border-bottom: 3px solid var(--sun); padding: 10px 12px; font: inherit; color: inherit; user-select: text; }
+.field:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
+.field:disabled { opacity: .5; }
+.setrow .field { flex: 0 1 230px; min-width: 0; }
+.btnrow [data-sort][aria-pressed=true] { background: var(--sun); color: var(--ink); box-shadow: none; }
+</style>
+
+<canvas id="c" aria-label="ICA Dash game"></canvas>
+
+<div id="hud" hidden>
+  <button class="ghost" id="exitBtn" aria-label="Pause">II</button>
+  <div class="prog"><div class="track"><i id="pbar"></i></div><span id="pct">0%</span></div>
+  <div class="hudr"><span id="att">Att 1</span><span id="hackTag"></span></div>
+</div>
+
+<div id="hackMenu" hidden>
+  <div class="hwin" data-win="player">
+    <div class="hbar"><span>Player</span><span>Tab</span></div>
+    <label class="hrow"><input type="checkbox" class="sr" id="hNoclip"><span class="hchk"></span>Noclip</label>
+    <label class="hrow"><input type="checkbox" class="sr" id="hHitbox"><span class="hchk"></span>Show hitboxes</label>
+    <label class="hrow"><input type="checkbox" class="sr" id="hPath"><span class="hchk"></span>Show path</label>
+    <p class="hrow hfoot">Show path draws where you'll go if you hold (yellow) or let go (blue); an X marks a crash.</p>
+  </div>
+  <div class="hwin" data-win="speed">
+    <div class="hbar"><span>Speedhack</span><output id="hSpeedOut">1x</output></div>
+    <label class="hrow hcol"><span class="sr">Game speed</span><input type="range" id="hSpeed" min="0.25" max="2" step="0.05" value="1"></label>
+    <button class="hrow hbtn" id="hSpeedReset">Reset to 1x</button>
+  </div>
+  <div class="hwin" data-win="level">
+    <div class="hbar"><span>Level</span></div>
+    <label class="hrow hcol"><span>Start at <b class="hval" id="hStartOut">0%</b></span><input type="range" id="hStart" min="0" max="0.9" step="0.05" value="0"></label>
+    <label class="hrow"><input type="checkbox" class="sr" id="hPractice"><span class="hchk"></span>Practice mode</label>
+    <p class="hrow hfoot">Checkpoints drop every 1.5 s where it's safe. Z places one, X removes the last. You respawn at the newest.</p>
+    <label class="hrow"><input type="checkbox" class="sr" id="hAuto"><span class="hchk"></span>Autoplay</label>
+    <p class="hrow hfoot">Bests and achievements aren't saved while noclip, speedhack, a start position, show path, practice or autoplay is on.</p>
+  </div>
+  <div class="hwin" data-win="display">
+    <div class="hbar"><span>Display</span></div>
+    <label class="hrow"><input type="checkbox" class="sr" id="hFps"><span class="hchk"></span>Show FPS</label>
+    <label class="hrow"><input type="checkbox" class="sr" id="hAcc"><span class="hchk"></span>Accurate percentage</label>
+    <label class="hrow"><input type="checkbox" class="sr" id="hNoAtt"><span class="hchk"></span>Hide attempts</label>
+    <label class="hrow"><input type="checkbox" class="sr" id="hLayout"><span class="hchk"></span>Layout mode</label>
+    <label class="hrow hcol"><span>Respawn delay <b class="hval" id="hRespawnOut">0.75 s</b></span><input type="range" id="hRespawn" min="0" max="1.5" step="0.05" value="0.75"></label>
+  </div>
+  <div class="hwin" data-win="perf">
+    <div class="hbar"><span>Performance</span></div>
+    <label class="hrow"><input type="checkbox" class="sr" id="hCbf"><span class="hchk"></span>Click between frames</label>
+    <label class="hrow"><input type="checkbox" class="sr" id="hUncap"><span class="hchk"></span>Unlock FPS (no vsync)</label>
+    <label class="hrow hcol"><span>FPS cap <b class="hval" id="hCapOut">240</b></span><input type="range" id="hCap" min="0" max="4" step="1" value="1"></label>
+    <p class="hrow hfoot">Click between frames counts each press from the exact moment you made it. Unlock FPS redraws as fast as your PC can, ignoring the browser's frame timing; it uses a lot more CPU.</p>
+  </div>
+</div>
+<div id="fps" hidden></div>
+<div id="toast" hidden></div>
+
+<section class="screen" id="home">
+  <div class="wrap">
+    <h1 class="logo"><span>ICA</span><span class="dash">Dash</span></h1>
+    <svg class="zig" viewBox="0 0 420 34" aria-hidden="true"><polyline points="0,30 26,4 52,30 78,4 104,30 130,4 156,30 182,4 208,30 234,4 260,30 286,4 312,30 338,4 364,30 390,4 416,30" fill="none" stroke="#ffcc1a" stroke-width="5" stroke-linejoin="miter"/></svg>
+    <nav class="menu">
+      <button class="primary" data-go="levels"><b>Play</b><small id="mPlay"></small></button>
+      <button data-go="create"><b>Create</b><small id="mCreate"></small></button>
+      <button data-go="online"><b>Online</b><small id="mOnline"></small></button>
+      <button data-go="icons"><b>Icons</b><small><span id="mIcon"></span><canvas id="homeIcon" width="56" height="56"></canvas></small></button>
+      <button data-go="achievements"><b>Achievements</b><small id="mAch"></small></button>
+      <button data-go="settings"><b>Settings</b><small>Keybinds</small></button>
+    </nav>
+    <p class="controls" id="homeHint"></p>
+  </div>
+</section>
+
+<section class="screen" id="levels" hidden>
+  <div class="wrap" style="width:min(780px,100%);margin-inline:0">
+    <button class="ghost backbtn" data-go="home">← Back</button>
+    <div class="head"><h2 style="font-family:var(--display);font-size:clamp(48px,9vw,88px);line-height:.9;text-transform:uppercase">Levels</h2><span class="label">↑ ↓ to pick · Enter to play</span></div>
+    <div class="btnrow" id="devBar" hidden>
+      <button class="ghost" id="lvEditMode" aria-pressed="false">Edit levels: Off</button>
+      <button class="ghost" id="lvCopyEdits">Copy all edits</button>
+      <span class="note" id="devMsg"></span>
+      <textarea id="editsOut" readonly hidden aria-label="All level edits"></textarea>
+    </div>
+    <div class="board" id="board"></div>
+  </div>
+</section>
+
+<section class="screen" id="create" hidden>
+  <div class="wrap" style="width:min(780px,100%);margin-inline:0">
+    <button class="ghost backbtn" data-go="home">← Back</button>
+    <div class="head"><h2 style="font-family:var(--display);font-size:clamp(48px,9vw,88px);line-height:.9;text-transform:uppercase">Your levels</h2><button class="primary" id="newLevel">+ New level</button></div>
+    <div class="board" id="customList"></div>
+  </div>
+</section>
+
+<section class="screen" id="editor" hidden>
+  <div class="edtop">
+    <button class="primary" id="edDone">Save &amp; exit</button>
+    <input type="text" id="lvName" maxlength="40" aria-label="Level name">
+    <button class="ghost" id="edReset" hidden>Reset to original</button>
+    <button class="ghost" id="edShare">Share code</button>
+    <button class="ghost" id="edTestHere" title="Start the test about a third of the way across the current view">▶ From here</button>
+    <button class="primary" id="edTest">▶ Test</button>
+  </div>
+  <div class="edbottom">
+    <p class="controls"><span id="edHelp"></span> <span id="edStats"></span></p>
+    <div class="panel edbar">
+      <div class="edtabs" role="group" aria-label="Editor tool">
+        <button data-tool="build" aria-pressed="true">Build · 1</button>
+        <button data-tool="edit" aria-pressed="false">Edit · 2</button>
+        <button data-tool="delete" aria-pressed="false">Delete · 3</button>
+      </div>
+      <div class="edpane" id="edPane"></div>
+      <div class="edside">
+        <button id="edUndo">Undo</button><button id="edRedo">Redo</button>
+        <button id="edZoomOut">Zoom −</button><button id="edZoomIn">Zoom +</button>
+        <button id="edSwipe" aria-pressed="false">Swipe</button><button id="edGrid">Grid 1</button>
+      </div>
+    </div>
+  </div>
+  <div class="panel" id="sharePop" hidden>
+    <div class="head"><h2>Share code</h2><span class="label" id="edInfo"></span></div>
+    <textarea id="code" spellcheck="false" aria-label="Level code"></textarea>
+    <div class="btnrow"><button class="primary" id="edCopy">Copy</button><button class="ghost" id="edLoad">Load pasted code</button><button class="ghost" id="edClose">Close</button></div>
+    <p class="warn" id="codeMsg"></p>
+    <p class="note">Copy this to share your level. To load someone else's, paste their code here and press Load pasted code (Undo brings yours back). Codes from the older path editor still load.</p>
+  </div>
+</section>
+
+
+<section class="screen" id="icons" hidden>
+  <div class="wrap">
+    <button class="ghost backbtn" data-go="home">← Back</button>
+    <div class="garage">
+      <div class="window">
+        <canvas id="iconPreview" width="640" height="320"></canvas>
+        <div class="meta"><h2 id="shapeName">Dart</h2><span class="label" id="shapeNo"></span></div>
+      </div>
+      <div class="panel" style="width:auto">
+        <h3>Shape</h3><div class="shapes" id="shapes"></div>
+        <h3>Custom image</h3>
+        <div class="custom">
+          <div class="shapes" style="grid-template-columns:1fr"><button id="customTile"><canvas width="120" height="120"></canvas>Custom</button></div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="btnrow"><button id="customUpload">Upload image</button><button class="ghost" id="customRemove">Remove</button></div>
+            <input type="file" id="iconFile" accept="image/*" class="sr" tabindex="-1" aria-hidden="true">
+            <p class="note">A PNG with a see-through background looks best. Draw it facing right; the game turns it for you. It's saved in this browser only, and your hitbox stays the same size.</p>
+            <p class="warn" id="customMsg"></p>
+          </div>
+        </div>
+        <h3>Main colour · trail</h3><div class="swatches" id="c1"></div>
+        <h3>Outline · detail</h3><div class="swatches" id="c2"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="online" hidden>
+  <div class="wrap" style="width:min(820px,100%);margin-inline:0">
+    <button class="ghost backbtn" data-go="home">← Back</button>
+    <div class="head"><h2 style="font-family:var(--display);font-size:clamp(48px,9vw,88px);line-height:.9;text-transform:uppercase">Online levels</h2><span class="label" id="onCount"></span></div>
+    <div class="btnrow">
+      <input type="search" class="field" id="onSearch" placeholder="Search levels or players" aria-label="Search online levels">
+      <button class="ghost" data-sort="new" aria-pressed="true">Newest</button><button class="ghost" data-sort="liked" aria-pressed="false">Most liked</button><button class="ghost" data-sort="mine" aria-pressed="false">Mine</button>
+    </div>
+    <p class="note" id="onMsg"></p>
+    <div class="board" id="onList"></div>
+  </div>
+</section>
+
+<section class="screen" id="achievements" hidden>
+  <div class="wrap" style="width:min(780px,100%);margin-inline:0">
+    <button class="ghost backbtn" data-go="home">← Back</button>
+    <div class="head"><h2 style="font-family:var(--display);font-size:clamp(48px,9vw,88px);line-height:.9;text-transform:uppercase">Achievements</h2><span class="label" id="achCount"></span></div>
+    <p class="note">Every icon shape and colour past the starters comes from an achievement. Runs with hacks on don't count.</p>
+    <div class="board" id="achList"></div>
+  </div>
+</section>
+
+<section class="screen" id="settings" hidden>
+  <div class="wrap" style="width:min(640px,100%);margin-inline:0">
+    <button class="ghost backbtn" data-go="home">← Back</button>
+    <div class="panel" style="width:100%">
+      <div class="head"><h2>Settings</h2></div>
+      <h3>Keybinds</h3>
+      <p class="note">Click a slot, then press a key. Esc clears a climb slot. Mouse and touch always climb.</p>
+      <div class="binds" id="binds"></div>
+      <button class="ghost" id="bindReset" style="align-self:flex-start">Reset keybinds</button>
+      <p class="note" id="hackNote" hidden>Hack menu unlocked · press Tab anywhere to open or close it.</p>
+      <h3>Account</h3>
+      <p class="note" id="acctStatus">Checking your sign-in…</p>
+      <div id="acctBody" hidden>
+        <label class="setrow"><span><b>Player name</b><small>Shown next to levels you upload</small></span><input type="text" class="field" id="acctName" maxlength="20" autocomplete="nickname"></label>
+        <label class="setrow"><span><b>Cloud save</b><small>Progress, achievements, icon and your levels, in a save only you can read</small></span><input type="checkbox" class="sr" id="acctSync"><span class="tog"></span></label>
+        <div class="setrow"><span><b>Save passphrase</b><small id="acctEncState">Not encrypted</small></span><input type="password" class="field" id="acctPass" autocomplete="new-password" aria-label="Save passphrase"></div>
+        <div class="btnrow"><button id="acctEncrypt">Encrypt with passphrase</button><button class="primary" id="acctUnlock" hidden>Unlock cloud save</button><button class="ghost" id="acctDecrypt" hidden>Stop encrypting</button><button class="ghost" id="acctSaveNow">Save now</button></div>
+        <p class="note" id="acctMsg"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="pause" hidden>
+  <div class="panel">
+    <div class="head"><h2>Paused</h2><span class="label" id="pauseInfo"></span></div>
+    <p class="note" id="pauseName"></p>
+    <div class="btnrow"><button class="primary" id="pResume">Resume</button><button class="ghost" id="pRestart">Restart</button><button class="ghost" id="pExit">Exit level</button></div>
+    <p class="note" id="pauseHint"></p>
+  </div>
+</section>
+
+<section class="screen" id="done" hidden>
+  <div class="panel">
+    <div class="head"><h2>Complete</h2><span class="label">100%</span></div>
+    <dl class="stat" id="doneStats"></dl>
+    <p class="note" id="doneMsg"></p>
+    <div class="btnrow"><button class="primary" id="doneReplay">Replay</button><button class="ghost" id="doneBack">Back</button></div>
+  </div>
+</section>
+
+<script>
+const B = 60, VH = 600, R = 7, RM = 4.5; // 1 block = 60 units; the screen is 10 blocks tall; R / RM = half-size of the square hitbox (normal / mini)
+// --- course ---
+const SPEEDS = [8.37, 10.386, 12.91, 15.6, 19.2]; // blocks/s for 0.5x, 1x, 2x, 3x, 4x (tokens s0..s4)
+// Main levels are built from short sections that each start and end in the middle of the screen.
+// Levels 2, 4, 5, 7-10 are assembled from these pools with a fixed seed, so they're the same for everyone.
+const POOLS = {
+  calm: ['u2 f2 d2 f2', 'u3 d3 f2', 'd2 f2 u2 f2', 'u2 d1 u1 d2 f2', 'd3 u1 d1 u3 f2', 'd2 f1 u4 f1 d2 f2',
+    'u3 d3 d3 u3 f2', 'u2 f1 u1 f1 d3 f2', 'd3 f2 u3 f2', 'u2 d2 u2 d2 f2'],
+  zig: ['u1 d1 u1 d1 f2', 'u1 d1 u1 d1 u1 d1 f2', 'd1 u1 d1 u1 f2', 'u2 d1 u1 d1 u1 d2 f2'],
+  // dual pieces: gentle, with at least 2 blocks of flat between direction changes, and they stay in the top half
+  dual: ['u1 f2 d1 f2', 'd1 f3 u1 f3', 'u1 f3 d1 f2', 'd1 f2 u1 f3', 'f3', 'u1 f2 d1 f3'],
+  // easy pieces for the first levels: only 2-block climbs and dives, long flats, never more than 2 blocks off the middle
+  easy: ['u2 f3 d2 f3', 'd2 f3 u2 f3', 'u2 d2 f3', 'd2 u2 f3', 'f4', 'u2 f2 d2 f4', 'd2 f2 u2 f4'],
+};
+function compose(seed, phases) {
+  let a = seed * 7919; const rnd = () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const out = ['f4'];
+  for (const ph of phases) { // ph: s speed, g gap, n sections, zig/saw chance (zigzags only up to 2x), mini/flip/dual mode
+    if (ph.dual) { // lift the path into the top half, open the mirrored second path, put saws in either one
+      // Corridors are 2.8 blocks tall; a saw sits 0.85 blocks off the middle, leaving about 1.4 blocks to pass it, and two
+      // saw sections never come back to back (you're watching two icons at once).
+      out.push(`s${ph.s} f2 g3 u2.5 g2.8 f3 w1 f2`);
+      let sawLast = false;
+      for (let n = 0; n < ph.n; n++) {
+        if (ph.saw && !sawLast && rnd() < ph.saw) { out.push(`f2 ${rnd() < 0.5 ? 'o' : 'b'}${rnd() < 0.5 ? -0.85 : 0.85} f3`); sawLast = true; }
+        else { out.push(POOLS.dual[Math.floor(rnd() * POOLS.dual.length)]); sawLast = false; }
+      }
+      out.push('f2 w0 f2 g3 d2.5 f2');
+      continue;
+    }
+    out.push(`s${ph.s} g${ph.g} f3` + (ph.mini ? ' m1 f2' : '') + (ph.flip ? ' v1 f2' : ''));
+    for (let n = 0; n < ph.n; n++) {
+      if (ph.saw && rnd() < ph.saw) { out.push(`f2 o${((rnd() < 0.5 ? -1 : 1) * ph.g * 0.25).toFixed(2)} f3`); continue; }
+      const pool = ph.pool ? POOLS[ph.pool] : ph.zig && ph.s <= 2 && !ph.mini && rnd() < ph.zig ? POOLS.zig
+        : ph.s >= 3 || ph.mini ? POOLS.calm.filter(sec => !/[ud]1\b/.test(sec)) : POOLS.calm; // no 1-block moves at 3x/4x or in mini
+      out.push(pool[Math.floor(rnd() * pool.length)]);
+    }
+    if (ph.mini) out.push('f2 m0 f2');
+    if (ph.flip) out.push('f2 v0 f2');
+  }
+  out.push('f6');
+  return out.join(' ');
+}
+const LEVELS = [
+  { id: 'm1', name: 'Lantern Steps', diff: 'Easy', hue: 205, code: compose(1, [{ s: 1, g: 5, n: 16, pool: 'easy' }, { s: 1, g: 4.5, n: 14, pool: 'easy' }]) },
+  { id: 'l2', name: 'Tidewalk', diff: 'Easy', hue: 185, code: compose(2, [{ s: 1, g: 4.5, n: 14, pool: 'easy' }, { s: 1, g: 5, n: 8, mini: true, pool: 'easy' }, { s: 1, g: 4.5, n: 10, pool: 'easy' }]) },
+  { id: 'n1', name: 'Driftwood', diff: 'Easy', hue: 130, code: compose(11, [{ s: 1, g: 4.5, n: 16, pool: 'easy', saw: 0.15 }, { s: 1, g: 4, n: 14, pool: 'easy', saw: 0.1 }]) },
+  { id: 'm2', name: 'Saw Mill', diff: 'Normal', hue: 275, code: compose(3, [{ s: 1, g: 4, n: 16, pool: 'easy', saw: 0.3 }, { s: 1, g: 3.5, n: 16, saw: 0.25 }]) },
+  { id: 'l4', name: 'Copper Coil', diff: 'Normal', hue: 25, code: compose(4, [{ s: 1, g: 3.5, n: 12, zig: 0.3, saw: 0.15 }, { s: 1, g: 3.5, n: 8, flip: true }, { s: 2, g: 3.5, n: 12, zig: 0.2, saw: 0.2 }]) },
+  { id: 'n2', name: 'Pinwheel', diff: 'Normal', hue: 60, code: compose(12, [{ s: 2, g: 4, n: 12, pool: 'easy' }, { s: 2, g: 3.5, n: 14, zig: 0.25, saw: 0.15 }]) },
+  // Glass Teeth: hand-built in the object editor (ICA2 code), replacing the generated version.
+  { id: 'l5', name: 'Glass Teeth', diff: 'Hard', hue: 160, code: 'ICA2;r,-12,-1,27,4;r,-12,7,27,4;t,12,3,3,0.5,2;t,12,6.5,3,0.5,1;r,15,-1,2,4.5;t,15,3.5,2,2,2;t,15,6.5,2,2,0;r,15,8.5,6,2.5;r,17,-1,2,6.5;r,19,-1,19,4.5;t,19,3.5,2,2,3;t,19,6.5,2,2,1;r,21,6.5,23,4.5;r,38,-1,4,3.5;t,38,2.5,1,1,3;t,38,5.5,1,1,1;t,39,2.5,1,1,2;t,39,5.5,1,1,0;t,40,2.5,1,1,3;t,40,5.5,1,1,1;t,41,2.5,1,1,2;t,41,5.5,1,1,0;r,42,-1,8,4.5;t,44,3.5,1,1,2;t,44,6.5,1,1,0;r,44,7.5,4,3.5;t,45,3.5,1,1,3;t,45,6.5,1,1,1;t,46,3.5,1,1,2;t,46,6.5,1,1,0;t,47,3.5,1,1,3;t,47,6.5,1,1,1;r,48,6.5,4,4.5;r,50,-1,6,2.5;t,50,1.5,2,2,3;t,50,4.5,2,2,1;r,52,4.5,2,6.5;t,54,1.5,2,2,2;t,54,4.5,2,2,0;r,54,6.5,27,4.5;r,56,-1,12,4.5;r,68,-1,4,3.5;t,68,2.5,1,1,3;t,68,5.5,1,1,1;t,69,2.5,1,1,2;t,69,5.5,1,1,0;t,70,2.5,1,1,3;t,70,5.5,1,1,1;t,71,2.5,1,1,2;t,71,5.5,1,1,0;r,72,-1,7,4.5;r,79,-1,3,2.5;t,79,1.5,2,2,3;t,79,4.5,2,2,1;r,81,4.5,2,6.5;r,82,-1,5,1.5;t,82,0.5,1,1,3;t,82,3.5,1,1,1;r,83,3.5,1,7.5;t,84,0.5,3,3,2;t,84,3.5,3,3,0;r,84,6.5,23,4.5;r,87,-1,2,4.5;r,89,-1,6,3.5;t,89,2.5,1,1,3;t,89,5.5,1,1,1;t,90,2.5,1,1,2;t,90,5.5,1,1,0;t,91,2.5,1,1,3;t,91,5.5,1,1,1;t,92,2.5,1,1,2;t,92,5.5,1,1,0;t,93,2.5,1,1,3;t,93,5.5,1,1,1;t,94,2.5,1,1,2;t,94,5.5,1,1,0;r,95,-1,15,4.5;t,107,3.5,3,3,2;t,107,6.5,3,3,0;r,107,9.5,8,1.5;r,110,-1,2,6.5;t,110,5.5,1,1,3;t,110,8.5,1,1,1;t,111,5.5,1,1,2;t,111,8.5,1,1,0;r,112,-1,12,4.5;t,112,3.5,3,3,3;t,112,6.5,3,3,1;r,115,6.5,7,4.5;t,122,3.5,2,2,2;t,122,6.5,2,2,0;r,122,8.5,6,2.5;r,124,-1,2,6.5;r,126,-1,11,4.5;t,126,3.5,2,2,3;t,126,6.5,2,2,1;r,128,6.5,7,4.5;t,135,3.5,2,2,2;t,135,6.5,2,2,0;r,135,8.5,7,2.5;r,137,-1,1,6.5;r,138,-1,7,2.5;t,138,1.5,4,4,3;t,138,4.5,4,4,1;r,142,4.5,1,6.5;t,143,1.5,2,2,2;t,143,4.5,2,2,0;r,143,6.5,4,4.5;r,145,-1,8,4.5;t,147,3.5,1,1,2;t,147,6.5,1,1,0;r,147,7.5,4,3.5;t,148,3.5,1,1,3;t,148,6.5,1,1,1;t,149,3.5,1,1,2;t,149,6.5,1,1,0;t,150,3.5,1,1,3;t,150,6.5,1,1,1;r,151,6.5,4,4.5;r,153,-1,8,2.5;t,153,1.5,2,2,3;t,153,4.5,2,2,1;t,155,1.5,1,1,2;t,155,4.5,1,1,0;r,155,5.5,4,5.5;t,156,1.5,1,1,3;t,156,4.5,1,1,1;t,157,1.5,1,1,2;t,157,4.5,1,1,0;t,158,1.5,1,1,3;t,158,4.5,1,1,1;t,159,1.5,2,2,2;t,159,4.5,2,2,0;r,159,6.5,12,4.5;r,161,-1,7,4.5;r,168,-1,3,1.5;t,168,0.5,1.5,3,3;t,168,3.5,1.5,3,1;t,169.5,0.5,1.5,3,2;t,169.5,3.5,1.5,3,0;r,171,-1,5,4.5;t,171,3.5,1.5,3,2;t,171,6.5,1.5,3,0;r,171,9.5,3,1.5;t,172.5,3.5,1.5,3,3;t,172.5,6.5,1.5,3,1;r,174,6.5,19,4.5;r,176,-1,4,2.5;t,176,1.5,1,2,3;t,176,4.5,1,2,1;t,177,1.5,1,2,2;t,177,4.5,1,2,0;t,178,1.5,1,2,3;t,178,4.5,1,2,1;t,179,1.5,1,2,2;t,179,4.5,1,2,0;r,180,-1,12,4.5;r,192,-1,4,2.5;t,192,1.5,1,2,3;t,192,4.5,1,2,1;r,193,4.5,2,6.5;t,195,1.5,1,2,2;t,195,4.5,1,2,0;r,195,6.5,19,4.5;r,196,-1,2,4.5;r,198,-1,4,2.5;t,198,1.5,1,2,3;t,198,4.5,1,2,1;t,199,1.5,1,2,2;t,199,4.5,1,2,0;t,200,1.5,1,2,3;t,200,4.5,1,2,1;t,201,1.5,1,2,2;t,201,4.5,1,2,0;r,202,-1,13.5,4.5;t,214,3.5,1.5,3,2;t,214,6.5,1.5,3,0;r,214,9.5,5,1.5;r,215.5,-1,2,7.5;r,217.5,-1,5,4.5;t,217.5,3.5,1.5,3,3;t,217.5,6.5,1.5,3,1;r,219,6.5,2,4.5;t,221,3.5,1.5,3,2;t,221,6.5,1.5,3,0;r,221,9.5,5,1.5;r,222.5,-1,2,7.5;r,224.5,-1,10.5,4.5;t,224.5,3.5,1.5,3,3;t,224.5,6.5,1.5,3,1;r,226,6.5,9,4.5;s,25,4.25;s,30,4.25;s,35,5.75;s,60,4.25;s,65,4.25;s,76,5.75;s,99,5.75;s,104,5.75;s,119,4.25;s,132,4.25;p,12,3,4,S,2;p,163,3.5,3,S,2;p,166,3.5,3,m,1;p,230,3.5,3,m,0' },
+  { id: 'm3', name: 'Needle Run', diff: 'Hard', hue: 335, code: [
+    's2 f4', 'g3 u3 d3 u3 d3 f2', 'u1 d1 u1 d1 u1 d1 f2', 'f2 o-0.8 f3', 'd2 u4 d2 f2', 'f2 o0.8 f3',
+    'g2.5 u2 d2 u2 d2 f2', 'u3 d3 d3 u3 f2', 'u1 d1 u1 d1 u1 d1 u1 d1 f2', 'd2 f1 u4 f1 d2 f2', 'u2 d1 u1 d2 f2',
+    // 3x part: every move is at least 2 blocks (about 0.13 s at 15.6 blocks/s) and gaps stay 2.5 or wider.
+    's3 g3 f3', 'u2 d2 f2', 'd3 u3 f2', 'u2 d2 u2 d2 f2', 'u3 f2 d3 f2', 'd2 f2 u2 f2',
+    'g2.5 u2 d2 f2', 'd3 u3 f3', 'u2 f1 d2 f1', 'g3 f2 o-0.8 f3', 'f2 o0.8 f3',
+    'g2.5 d2 u2 d2 u2 f2', 'u3 d3 d3 u3 f2', 'd2 f2 u4 f2 d2 f2', 'u2 d2 f2',
+    'g3 u2 d2 u2 d2 f2', 'd3 u3 f2', 'f2 o-0.8 f3', 'u3 f2 d3 f2', 'g2.5 u2 d2 u2 d2 f2', 'd2 f2 u2 f2', 'f6'].join(' ') },
+  // Quarry: hand-built in the object editor (ICA2 code), replacing the generated version.
+  { id: 'n3', name: 'Quarry', diff: 'Hard', hue: 250, code: 'ICA2;r,-12,-1,27,4;r,-12,7,27,4;t,12,3,3,0.25,2;t,12,6.75,3,0.25,1;r,15,-1,2,4.25;r,15,6.75,5,4.25;r,17,-1,3,1.25;t,17,0.25,1.5,3,3;t,17,3.75,1.5,3,1;t,18.5,0.25,1.5,3,2;t,18.5,3.75,1.5,3,0;r,20,-1,6.5,4.25;t,20,3.25,1.5,3,2;t,20,6.75,1.5,3,0;r,20,9.75,3,1.25;t,21.5,3.25,1.5,3,3;t,21.5,6.75,1.5,3,1;r,23,6.75,2,4.25;t,25,3.25,1.5,3,2;t,25,6.75,1.5,3,0;r,25,9.75,5,1.25;r,26.5,-1,2,7.25;r,28.5,-1,4.5,4.25;t,28.5,3.25,1.5,3,3;t,28.5,6.75,1.5,3,1;r,30,6.75,2,4.25;t,32,3.25,1,2,2;t,32,6.75,1,2,0;r,32,8.75,4,2.25;r,33,-1,1,6.25;r,34,-1,4,2.25;t,34,1.25,2,4,3;t,34,4.75,2,4,1;r,36,4.75,1,6.25;t,37,1.25,1,2,2;t,37,4.75,1,2,0;r,37,6.75,6,4.25;r,38,-1,2,4.25;r,40,-1,3,1.25;t,40,0.25,1.5,3,3;t,40,3.75,1.5,3,1;t,41.5,0.25,1.5,3,2;t,41.5,3.75,1.5,3,0;r,43,-1,6.5,4.25;t,43,3.25,1.5,3,2;t,43,6.75,1.5,3,0;r,43,9.75,3,1.25;t,44.5,3.25,1.5,3,3;t,44.5,6.75,1.5,3,1;r,46,6.75,2,4.25;t,48,3.25,1.5,3,2;t,48,6.75,1.5,3,0;r,48,9.75,5,1.25;r,49.5,-1,2,7.25;r,51.5,-1,3.5,4.25;t,51.5,3.25,1.5,3,3;t,51.5,6.75,1.5,3,1;r,53,6.75,5,4.25;r,55,-1,3,1.25;t,55,0.25,1.5,3,3;t,55,3.75,1.5,3,1;t,56.5,0.25,1.5,3,2;t,56.5,3.75,1.5,3,0;r,58,-1,6.5,4.25;t,58,3.25,1.5,3,2;t,58,6.75,1.5,3,0;r,58,9.75,3,1.25;t,59.5,3.25,1.5,3,3;t,59.5,6.75,1.5,3,1;r,61,6.75,2,4.25;t,63,3.25,1.5,3,2;t,63,6.75,1.5,3,0;r,63,9.75,5,1.25;r,64.5,-1,2,7.25;r,66.5,-1,3.5,4.25;t,66.5,3.25,1.5,3,3;t,66.5,6.75,1.5,3,1;r,68,6.75,8,4.25;r,70,-1,3,1.25;t,70,0.25,1.5,3,3;t,70,3.75,1.5,3,1;t,71.5,0.25,1.5,3,2;t,71.5,3.75,1.5,3,0;r,73,-1,2,4.25;r,75,-1,4,2.25;t,75,1.25,1,2,3;t,75,4.75,1,2,1;r,76,4.75,2,6.25;t,78,1.25,1,2,2;t,78,4.75,1,2,0;r,78,6.75,3,4.25;r,79,-1,3,4.25;t,81,3.25,1,2,2;t,81,6.75,1,2,0;r,81,8.75,4,2.25;r,82,-1,1,6.25;r,83,-1,4,2.25;t,83,1.25,2,4,3;t,83,4.75,2,4,1;r,85,4.75,1,6.25;t,86,1.25,1,2,2;t,86,4.75,1,2,0;r,86,6.75,10,4.25;r,87,-1,9,4.25;t,93,3.25,3,0.25,2;t,93,6.5,3,0.25,1;r,96,-1,7,4.5;r,96,6.5,17,4.5;r,103,-1,8,2.5;t,103,1.5,2,2,3;t,103,4.5,2,2,1;t,105,1.5,2,2,2;t,105,4.5,2,2,0;t,107,1.5,2,2,3;t,107,4.5,2,2,1;t,109,1.5,2,2,2;t,109,4.5,2,2,0;r,111,-1,5,4.5;t,113,3.5,3,3,2;t,113,6.5,3,3,0;r,113,9.5,8,1.5;r,116,-1,2,7.5;r,118,-1,5,4.5;t,118,3.5,3,3,3;t,118,6.5,3,3,1;r,121,6.5,4,4.5;r,123,-1,6,2.5;t,123,1.5,2,2,3;t,123,4.5,2,2,1;t,125,1.5,1,1,2;t,125,4.5,1,1,0;r,125,5.5,2,5.5;t,126,1.5,1,1,3;t,126,4.5,1,1,1;t,127,1.5,2,2,2;t,127,4.5,2,2,0;r,127,6.5,4,4.5;r,129,-1,5,4.5;t,131,3.5,3,3,2;t,131,6.5,3,3,0;r,131,9.5,8,1.5;r,134,-1,2,7.5;r,136,-1,8,4.5;t,136,3.5,3,3,3;t,136,6.5,3,3,1;r,139,6.5,2,4.5;t,141,3.5,3,3,2;t,141,6.5,3,3,0;r,141,9.5,8,1.5;r,144,-1,2,6.5;t,144,5.5,1,1,3;t,144,8.5,1,1,1;t,145,5.5,1,1,2;t,145,8.5,1,1,0;r,146,-1,5,4.5;t,146,3.5,3,3,3;t,146,6.5,3,3,1;r,149,6.5,8,4.5;r,151,-1,6,1.5;t,151,0.5,3,3,3;t,151,3.5,3,3,1;t,154,0.5,3,3,2;t,154,3.5,3,3,0;r,157,-1,11,4.5;t,157,3.5,3,3,2;t,157,6.5,3,3,0;r,157,9.5,6,1.5;t,160,3.5,3,3,3;t,160,6.5,3,3,1;r,163,6.5,2,4.5;t,165,3.5,3,3,2;t,165,6.5,3,3,0;r,165,9.5,8,1.5;r,168,-1,2,6.5;t,168,5.5,1,1,3;t,168,8.5,1,1,1;t,169,5.5,1,1,2;t,169,8.5,1,1,0;r,170,-1,5,4.5;t,170,3.5,3,3,3;t,170,6.5,3,3,1;r,173,6.5,14,4.5;r,175,-1,8,2.5;t,175,1.5,2,2,3;t,175,4.5,2,2,1;t,177,1.5,2,2,2;t,177,4.5,2,2,0;t,179,1.5,2,2,3;t,179,4.5,2,2,1;t,181,1.5,2,2,2;t,181,4.5,2,2,0;r,183,-1,2,4.5;r,185,-1,6,2.5;t,185,1.5,2,2,3;t,185,4.5,2,2,1;t,187,1.5,1,1,2;t,187,4.5,1,1,0;r,187,5.5,2,5.5;t,188,1.5,1,1,3;t,188,4.5,1,1,1;t,189,1.5,2,2,2;t,189,4.5,2,2,0;r,189,6.5,6,4.5;r,191,-1,2,4.5;r,193,-1,3,2.5;t,193,1.5,2,2,3;t,193,4.5,2,2,1;r,195,4.5,2,6.5;r,196,-1,5,1.5;t,196,0.5,1,1,3;t,196,3.5,1,1,1;r,197,3.5,1,7.5;t,198,0.5,3,3,2;t,198,3.5,3,3,0;r,198,6.5,20,4.5;r,201,-1,2,4.5;r,203,-1,6,1.5;t,203,0.5,3,3,3;t,203,3.5,3,3,1;t,206,0.5,3,3,2;t,206,3.5,3,3,0;r,209,-1,12,4.5;t,218,3.5,3,3,2;t,218,6.5,3,3,0;r,218,9.5,8,1.5;r,221,-1,2,7.5;r,223,-1,5,4.5;t,223,3.5,3,3,3;t,223,6.5,3,3,1;r,226,6.5,4,4.5;r,228,-1,6,2.5;t,228,1.5,2,2,3;t,228,4.5,2,2,1;r,230,4.5,2,6.5;t,232,1.5,2,2,2;t,232,4.5,2,2,0;r,232,6.5,16,4.5;r,234,-1,2,4.5;r,236,-1,8,2.5;t,236,1.5,2,2,3;t,236,4.5,2,2,1;t,238,1.5,2,2,2;t,238,4.5,2,2,0;t,240,1.5,2,2,3;t,240,4.5,2,2,1;t,242,1.5,2,2,2;t,242,4.5,2,2,0;r,244,-1,2,4.5;r,246,-1,6,2.5;t,246,1.5,2,2,3;t,246,4.5,2,2,1;r,248,4.5,2,6.5;t,250,1.5,2,2,2;t,250,4.5,2,2,0;r,250,6.5,6,4.5;r,252,-1,2,4.5;r,254,-1,6,2.5;t,254,1.5,2,2,3;t,254,4.5,2,2,1;r,256,4.5,2,6.5;t,258,1.5,2,2,2;t,258,4.5,2,2,0;r,258,6.5,10,4.5;r,260,-1,2,4.5;r,262,-1,6,1.5;t,262,0.5,3,3,3;t,262,3.5,3,3,1;t,265,0.5,3,3,2;t,265,3.5,3,3,0;r,268,-1,10,4.5;t,268,3.5,3,3,2;t,268,6.5,3,3,0;r,268,9.5,6,1.5;t,271,3.5,3,3,3;t,271,6.5,3,3,1;r,274,6.5,2,4.5;t,276,3.5,2,2,2;t,276,6.5,2,2,0;r,276,8.5,7,2.5;r,278,-1,1,6.5;r,279,-1,7,2.5;t,279,1.5,4,4,3;t,279,4.5,4,4,1;r,283,4.5,1,6.5;t,284,1.5,2,2,2;t,284,4.5,2,2,0;r,284,6.5,18,4.5;r,286,-1,2,4.5;r,288,-1,6,1.5;t,288,0.5,3,3,3;t,288,3.5,3,3,1;t,291,0.5,3,3,2;t,291,3.5,3,3,0;r,294,-1,2,4.5;r,296,-1,6,1.5;t,296,0.5,3,3,3;t,296,3.5,3,3,1;t,299,0.5,3,3,2;t,299,3.5,3,3,0;r,302,-1,10,4.5;t,302,3.5,3,3,2;t,302,6.5,3,3,0;r,302,9.5,6,1.5;t,305,3.5,3,3,3;t,305,6.5,3,3,1;r,308,6.5,2,4.5;t,310,3.5,2,2,2;t,310,6.5,2,2,0;r,310,8.5,7,2.5;r,312,-1,1,6.5;r,313,-1,7,2.5;t,313,1.5,4,4,3;t,313,4.5,4,4,1;r,317,4.5,1,6.5;t,318,1.5,2,2,2;t,318,4.5,2,2,0;r,318,6.5,10,4.5;r,320,-1,2,4.5;r,322,-1,6,1.5;t,322,0.5,3,3,3;t,322,3.5,3,3,1;t,325,0.5,3,3,2;t,325,3.5,3,3,0;r,328,-1,8,4.5;t,328,3.5,3,3,2;t,328,6.5,3,3,0;r,328,9.5,6,1.5;t,331,3.5,3,3,3;t,331,6.5,3,3,1;r,334,6.5,15,4.5;r,336,-1,8,2.5;t,336,1.5,2,2,3;t,336,4.5,2,2,1;t,338,1.5,2,2,2;t,338,4.5,2,2,0;t,340,1.5,2,2,3;t,340,4.5,2,2,1;t,342,1.5,2,2,2;t,342,4.5,2,2,0;r,344,-1,5,4.5;s,100,5.75;p,12,3,4,S,2;p,93,3.25,3.5,S,2;p,215,3.5,3,S,3;p,15,3.25,3.5,m,1;p,91,3.25,3.5,m,0' },
+  { id: 'l7', name: 'Ember Gate', diff: 'Harder', hue: 12, code: compose(7, [{ s: 2, g: 2.5, n: 10, zig: 0.5 }, { s: 2, n: 10, dual: true, saw: 0.25 }, { s: 3, g: 3, n: 14, saw: 0.2 }]) },
+  { id: 'l8', name: 'Static Bloom', diff: 'Harder', hue: 300, code: compose(8, [{ s: 3, g: 2.5, n: 20, saw: 0.2 }, { s: 3, g: 3, n: 12, flip: true, saw: 0.15 }]) },
+  { id: 'n4', name: 'Mirror Lake', diff: 'Harder', hue: 175, code: compose(14, [{ s: 2, g: 3, n: 10, zig: 0.3 }, { s: 2, n: 14, dual: true, saw: 0.25 }, { s: 3, g: 3, n: 10, saw: 0.15 }]) },
+  { id: 'l9', name: 'Iron Hymn', diff: 'Insane', hue: 220, code: compose(9, [{ s: 2, g: 3, n: 10, mini: true }, { s: 3, g: 2.5, n: 10, saw: 0.15 }, { s: 2, n: 8, dual: true, saw: 0.25 }, { s: 4, g: 3, n: 12, saw: 0.15 }]) },
+  { id: 'l10', name: 'Last Light', diff: 'Extreme', hue: 45, code: compose(10, [{ s: 2, g: 2.2, n: 8, zig: 0.6 }, { s: 2, g: 3, n: 8, mini: true }, { s: 3, g: 2.5, n: 8, flip: true }, { s: 2, n: 8, dual: true, saw: 0.25 }, { s: 4, g: 2.5, n: 14, saw: 0.2 }]) },
+  { id: 'n5', name: 'Zero Hour', diff: 'Extreme', hue: 350, code: compose(15, [{ s: 3, g: 2.5, n: 12, saw: 0.15 }, { s: 4, g: 3, n: 14, saw: 0.15 }, { s: 4, g: 2.5, n: 14, flip: true, saw: 0.1 }]) },
+];
+// A level is a string of tokens; climbs and dives move 1 block up/down per block forward, the same 45° as the wave.
+// Mode tokens: m mini, v upside down, w dual (1 = on, 0 = off). In mini, climbs and dives are twice as steep (2 blocks up per
+// block forward) to match the mini wave. In dual, a second corridor mirrors the first across the middle of the screen;
+// b places a saw in that mirrored corridor. pts[j].w marks the segment from pts[j] to pts[j + 1] as dual.
+function parse(code) {
+  let x = 8, c = 5, g = 4, mini = false, flip = false, dual = false;
+  const pts = [{ x: -40 * B, c: c * B, g: g * B }, { x: x * B, c: c * B, g: g * B }], saws = [], speeds = [{ x: -Infinity, i: 1 }], modes = [];
+  for (const [, k, num, num2] of String(code).toLowerCase().matchAll(/([udfgsoabmvw])\s*(-?\d*\.?\d+)(?:\s*,\s*(-?\d*\.?\d+))?/g)) {
+    const n = parseFloat(num);
+    if (k === 'g') g = Math.min(9, Math.max(1.2, n));
+    else if (k === 's') speeds.push({ x: x * B, i: Math.min(4, Math.max(0, Math.round(n))) });
+    else if (k === 'o') saws.push({ x: x * B, y: (c + n) * B, r: 0.6 * B });
+    else if (k === 'b') saws.push({ x: x * B, y: VH - (c + n) * B, r: 0.6 * B });
+    else if (k === 'a') { if (num2 !== undefined) saws.push({ x: n * B, y: parseFloat(num2) * B, r: 0.6 * B }); }
+    else if (k === 'm' || k === 'v' || k === 'w') {
+      const on = n !== 0;
+      if (k === 'm') mini = on; else if (k === 'v') flip = on; else dual = on;
+      modes.push({ x: x * B, k, on, c: c * B, g: g * B });
+    }
+    else {
+      const len = Math.min(100, Math.max(0.5, n));
+      c += k === 'u' ? -len : k === 'd' ? len : 0; x += k !== 'f' && mini ? len / 2 : len;
+      pts[pts.length - 1].w = dual; pts.push({ x: x * B, c: c * B, g: g * B });
+    }
+  }
+  pts[pts.length - 1].w = dual;
+  pts.push({ x: (x + 40) * B, c: c * B, g: g * B });
+  return { pts, saws, speeds, modes, end: x * B, gap: g, mini, flip, dual };
+}
+// Block where a wall first leaves the screen (or the two dual corridors would overlap), or -1 if the course fits.
+function offscreen(k) {
+  const i = k.pts.findIndex((p, j) => p.c - p.g / 2 < 0 || p.c + p.g / 2 > VH || ((p.w || k.pts[j - 1]?.w) && p.c + p.g / 2 > VH / 2));
+  return i < 0 ? -1 : Math.round(k.pts[i].x / B);
+}
+const PORTALS = { m: ['#ff6bd6', 'MINI', 'BIG'], v: ['#4dff9a', 'FLIP', 'UPRIGHT'], w: ['#ff9f43', 'DUAL', 'SINGLE'] }; // colour, on label, off label
+
+// ---------- object levels ----------
+// A level is a list of objects in block units (x to the right, y down, the screen spans y 0 to 10):
+//   r  solid rectangle {x, y, w, h}
+//   t  solid right triangle {x, y, w, h, o}; o is the right-angle corner: 0 bottom-left, 1 bottom-right, 2 top-right, 3 top-left
+//   s  saw {x, y} (centre; radius SAW_R)
+//   p  portal {x, y, h, k, v}: a gate at x from y to y + h; k 'S' speed (v 0-4), 'm' mini, 'v' upside down, 'w' dual (v 1 on, 0 off)
+// Share codes are "ICA2;" plus one comma-separated object per ";". Older path codes (u/d/f tokens) are converted on load.
+const SAW_R = 0.6, SAW_HIT = SAW_R * 0.9; // saws are drawn at SAW_R; their hitbox is 10% smaller
+function encodeLevel(objs) {
+  const n = v => +v.toFixed(3);
+  return 'ICA2;' + objs.map(o => o.t === 'r' ? `r,${n(o.x)},${n(o.y)},${n(o.w)},${n(o.h)}`
+    : o.t === 't' ? `t,${n(o.x)},${n(o.y)},${n(o.w)},${n(o.h)},${o.o}`
+    : o.t === 's' ? `s,${n(o.x)},${n(o.y)}` : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`).join(';');
+}
+// Pasted codes are untrusted: every field is checked, sizes are capped, and anything malformed is skipped.
+function decodeLevel(code) {
+  const objs = [], num = s => { const v = Number(s); return Number.isFinite(v) ? v : NaN; };
+  const okPos = (x, y) => Math.abs(x) <= 1e5 && y >= -20 && y <= 30;
+  for (const part of String(code).trim().split(';').slice(1)) {
+    if (objs.length >= 20000) break; // keeps a huge pasted code from freezing the page
+    const f = part.trim().split(','), t = f[0], [a, b, c, d] = f.slice(1, 5).map(num);
+    if ((t === 'r' || t === 't') && okPos(a, b) && c > 0 && d > 0 && c <= 1000 && d <= 40) {
+      const o = { t, x: a, y: b, w: c, h: d };
+      if (t === 't') o.o = ((Math.round(num(f[5])) || 0) % 4 + 4) % 4;
+      objs.push(o);
+    } else if (t === 's' && okPos(a, b)) objs.push({ t, x: a, y: b });
+    else if (t === 'p' && okPos(a, b) && c > 0 && c <= 40 && ['S', 'm', 'v', 'w'].includes(f[4])) {
+      const v = Math.round(num(f[5])) || 0;
+      objs.push({ t, x: a, y: b, h: c, k: f[4], v: f[4] === 'S' ? Math.min(4, Math.max(0, v)) : v ? 1 : 0 });
+    }
+  }
+  return objs;
+}
+// Turn a path level into objects. Each stretch of wall between two path points becomes a rectangle plus a triangle on each
+// sloped edge, so the converted level has exactly the same walls; flat runs are merged into long rectangles.
+function pathToObjects(k) {
+  const objs = [], X0 = -12, X1 = k.end / B - 3, last = new Map();
+  const rect = (x, y, w, h) => {
+    if (h < 1e-6) return;
+    const key = y.toFixed(4) + ',' + h.toFixed(4), r = last.get(key);
+    if (r && Math.abs(r.x + r.w - x) < 1e-6) { r.w += w; return; }
+    const o = { t: 'r', x, y, w, h }; objs.push(o); last.set(key, o);
+  };
+  const tri = (x, y, w, h, o) => { if (h > 1e-6) objs.push({ t: 't', x, y, w, h, o }); };
+  // solid region between an upper line U and a lower line L over [xa, xa + w] (needs max(U) <= min(L))
+  const band = (xa, w, Ua, Ub, La, Lb) => {
+    const Umin = Math.min(Ua, Ub), Umax = Math.max(Ua, Ub), Lmin = Math.min(La, Lb), Lmax = Math.max(La, Lb);
+    tri(xa, Umin, w, Umax - Umin, Ub > Ua ? 0 : 1);
+    rect(xa, Umax, w, Lmin - Umax);
+    tri(xa, Lmin, w, Lmax - Lmin, Lb > La ? 2 : 3);
+  };
+  const P = k.pts.map(q => ({ x: q.x / B, c: q.c / B, g: q.g / B, w: q.w }));
+  const at = (a, b, x) => { const t = b.x > a.x ? (x - a.x) / (b.x - a.x) : 0, c = a.c + (b.c - a.c) * t, g = a.g + (b.g - a.g) * t; return [c - g / 2, c + g / 2]; };
+  for (let j = 0; j < P.length - 1; j++) {
+    const a = P[j], b = P[j + 1], xa = Math.max(a.x, X0), xb = Math.min(b.x, X1);
+    if (xb - xa < 1e-6) continue;
+    const [Ta, Ba] = at(a, b, xa), [Tb, Bb] = at(a, b, xb), w = xb - xa;
+    band(xa, w, -1, -1, Ta, Tb); // ceiling side
+    if (a.w) { band(xa, w, Ba, Bb, 10 - Ba, 10 - Bb); band(xa, w, 10 - Ta, 10 - Tb, 11, 11); } // dual: wall between the corridors, then the floor
+    else band(xa, w, Ba, Bb, 11, 11); // floor side
+  }
+  for (const s of k.saws) if (s.x / B >= X0 && s.x / B <= X1 + 3) objs.push({ t: 's', x: s.x / B, y: s.y / B });
+  const span = x => { // corridor top and height at x, for portals that fill the corridor
+    for (let j = 0; j < P.length - 1; j++) if (P[j + 1].x >= x) { const [T, Bt] = at(P[j], P[j + 1], x); return [T, Bt - T]; }
+    return [P[P.length - 1].c - P[P.length - 1].g / 2, P[P.length - 1].g];
+  };
+  for (const s of k.speeds.slice(1)) { const [y, h] = span(s.x / B); objs.push({ t: 'p', x: s.x / B, y, h, k: 'S', v: s.i }); }
+  // Dual portals sit half a block inside the second corridor (and the off portal half a block before it closes), so the
+  // second icon's square hitbox never starts or ends overlapping that corridor's end wall. Those spots are always flat.
+  for (const e of k.modes) objs.push({ t: 'p', x: e.x / B + (e.k === 'w' ? (e.on ? 0.5 : -0.5) : 0), y: (e.c - e.g / 2) / B, h: e.g / B, k: e.k, v: e.on ? 1 : 0 });
+  return objs;
+}
+const levelObjects = code => String(code).trim().startsWith('ICA2') ? decodeLevel(code) : pathToObjects(parse(code));
+// Index solids and saws by block column for collision and drawing; the level ends 3 blocks after its last solid or saw.
+function buildWorld(objs) {
+  const cols = new Map();
+  let right = -Infinity;
+  for (const o of objs) {
+    if (o.t === 'p') continue;
+    const l = o.t === 's' ? o.x - SAW_R : o.x, r = o.t === 's' ? o.x + SAW_R : o.x + o.w;
+    for (let c = Math.floor(l); c <= Math.floor(r); c++) { let a = cols.get(c); if (!a) cols.set(c, a = []); a.push(o); }
+    right = Math.max(right, r);
+  }
+  const portals = objs.filter(o => o.t === 'p').sort((a, b) => a.x - b.x);
+  return { objs, cols, portals, end: ((Number.isFinite(right) ? right : 7) + 3) * B };
+}
+// Is a point (in blocks) strictly inside a solid?
+function inside(o, px, py) {
+  if (px <= o.x || px >= o.x + o.w || py <= o.y || py >= o.y + o.h) return false;
+  if (o.t === 'r') return true;
+  const u = (px - o.x) / o.w, v = (py - o.y) / o.h;
+  return o.o === 0 ? v >= u : o.o === 1 ? u + v >= 1 : o.o === 2 ? u >= v : u + v <= 1;
+}
+// Wave hitbox: the top, middle and bottom of a small vertical line at the icon (x, y, r in game units), plus saw circles.
+// The wave's hitbox is a square of half-size r around the icon (x, y, r in game units). Solids are tested at its corners,
+// edge midpoints and centre; saws by the distance from the saw's centre to the nearest point of the square.
+function solidHit(wd, x, y, r) {
+  const bx = x / B, by = y / B, br = r / B, pts = [];
+  for (const dx of [-br, 0, br]) for (const dy of [-br, 0, br]) pts.push([bx + dx, by + dy]);
+  for (let c = Math.floor(bx - br); c <= Math.floor(bx + br); c++) for (const o of wd.cols.get(c) || []) {
+    if (o.t === 's') { if (Math.hypot(Math.max(0, Math.abs(o.x - bx) - br), Math.max(0, Math.abs(o.y - by) - br)) < SAW_HIT - 2 / B) return true; }
+    else for (const [px, py] of pts) if (inside(o, px, py)) return true;
+  }
+  return false;
+}
+// Seconds to finish, following the speed portals.
+function duration(wd) {
+  let t = 0, i = 1, x = 0;
+  for (const o of wd.portals) if (o.k === 'S') { const sx = Math.max(0, Math.min(o.x * B, wd.end)); t += Math.max(0, sx - x) / (SPEEDS[i] * B); x = Math.max(x, sx); i = o.v; }
+  return t + Math.max(0, wd.end - x) / (SPEEDS[i] * B);
+}
+// --- end course ---
+console.assert(LEVELS.every(l => offscreen(parse(l.code)) < 0), 'a main level leaves the screen');
+
+const $ = id => document.getElementById(id);
+let cv = $('c'), ctx = cv.getContext('2d', { alpha: false });
+// Canvas context options are fixed once created, so switching low-latency mode means swapping in a fresh canvas.
+function makeCanvas(lowLatency) {
+  const fresh = cv.cloneNode(false); cv.replaceWith(fresh); cv = fresh;
+  ctx = cv.getContext('2d', { alpha: false, desynchronized: lowLatency }); bindCanvas(cv); resize();
+}
+const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const esc = s => String(s).replace(/[&<>"']/g, ch => '&#' + ch.charCodeAt(0) + ';');
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); if (SYNCED.has(k)) cloudDirty(k); return true; } catch (e) { return false; } },
+};
+// Online state, filled in once the platform answers (see "online" further down). Declared here because store.set reports
+// changes to the synced keys as soon as anything is saved.
+const SYNCED = new Set(['zd-best', 'zd-ach', 'zd-stats', 'zd-icon', 'zd-levels']);
+const NET = { ready: false, write: false, reason: '', db: null, uid: null, owner: false, defaultName: 'Player', sync: true, key: null, salt: null,
+  locked: false, cloudEnc: null, players: {}, uploads: {}, likes: {}, loaded: {}, slow: false, profileChecked: false };
+let W, H, S, dpr;
+function resize() { dpr = Math.min(devicePixelRatio || 1, 2); W = cv.clientWidth; H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr; S = H / VH; }
+addEventListener('resize', resize); resize();
+
+const SHAPES = [
+  { name: 'Dart', pts: [[12, 0], [-8, -8], [-4, 0], [-8, 8]] },
+  { name: 'Wedge', pts: [[12, 0], [-8, -9], [-8, 9]] },
+  { name: 'Kite', pts: [[13, 0], [0, -7], [-9, 0], [0, 7]] },
+  { name: 'Fork', pts: [[12, 0], [-2, -4], [-9, -9], [-5, 0], [-9, 9], [-2, 4]] },
+  { name: 'Blade', pts: [[14, 0], [-4, -5], [-9, -2], [-9, 2], [-4, 5]] },
+  { name: 'Spade', pts: [[12, 0], [4, -6], [-6, -8], [-3, 0], [-6, 8], [4, 6]] },
+  { name: 'Star', pts: [[14, 0], [2, -3], [-3, -10], [-4, -3], [-10, 0], [-4, 3], [-3, 10], [2, 3]] },
+  { name: 'Comet', pts: [[12, 0], [6, -6], [-2, -7], [-10, -4], [-6, 0], [-10, 4], [-2, 7], [6, 6]] },
+  { name: 'Talon', pts: [[13, 0], [-1, -9], [-9, -6], [-3, 0], [-9, 6], [-1, 9]] },
+  // rewards for the five newer levels
+  { name: 'Fang', pts: [[14, 0], [-2, -6], [-10, -6], [-6, 0], [-10, 6], [-2, 6]] },
+  { name: 'Wisp', pts: [[13, 0], [3, -4], [-6, -10], [-2, -2], [-10, 0], [-2, 2], [-6, 10], [3, 4]] },
+  { name: 'Crown', pts: [[12, 0], [-2, -10], [-4, -4], [-10, -8], [-8, 0], [-10, 8], [-4, 4], [-2, 10]] },
+  { name: 'Bolt', pts: [[14, 0], [0, -6], [-2, -2], [-10, -5], [-4, 0], [-10, 5], [-2, 2], [0, 6]] },
+  { name: 'Shard', pts: [[14, 0], [-1, -4], [-9, -10], [-4, -1], [-10, 2], [-3, 3], [-7, 10]] },
+];
+const COLORS = ['#ffd23f', '#ff9f43', '#ff4f79', '#ff6bd6', '#d36bff', '#6b7bff', '#3fd8ff', '#4dff9a', '#b8ff3f', '#ffffff', '#8a97b8', '#20263f'];
+const SPD_LABELS = ['0.5x', '1x', '2x', '3x', '4x'];
+const DEFAULT_KEYS = { climb: ['Space', 'ArrowUp', 'KeyW'], exit: 'Escape' };
+let bests = store.get('zd-best', {}), customs = store.get('zd-levels', []);
+let icon = { shape: 0, c1: 0, c2: 11, ...store.get('zd-icon', {}) };
+if (!SHAPES[icon.shape]) icon.shape = 0; if (!COLORS[icon.c1]) icon.c1 = 0; if (!COLORS[icon.c2]) icon.c2 = 11;
+
+// ---------- achievements: every shape and colour past the starters is a reward ----------
+// Keyed by level id, not position, so inserting levels never changes which icon a level you've already beaten gave you.
+const LEVEL_REWARDS = { m1: { s: 1 }, l2: { c: 1 }, m2: { s: 2 }, l4: { c: 6 }, l5: { s: 3 }, m3: { c: 2 }, l7: { s: 4 }, l8: { c: 4 }, l9: { s: 6 }, l10: { c: 3 },
+  n1: { s: 9 }, n2: { s: 10 }, n3: { s: 11 }, n4: { s: 12 }, n5: { s: 13 } };
+const ACH = [
+  ...LEVELS.map((l, i) => ({ id: 'beat-' + l.id, name: l.name, desc: `Beat level ${String(i + 1).padStart(2, '0')}`, reward: LEVEL_REWARDS[l.id] })),
+  { id: 'att100', name: 'Persistent', desc: 'Make 100 attempts', reward: { c: 5 } },
+  { id: 'att1000', name: 'Stubborn', desc: 'Make 1000 attempts', reward: { s: 8 } },
+  { id: 'close', name: 'So Close', desc: 'Crash at 90% or later in a main level', reward: { c: 7 } },
+  { id: 'flawless', name: 'Flawless', desc: 'Beat a main level on your first attempt', reward: { s: 7 } },
+  { id: 'architect', name: 'Architect', desc: 'Save a level in the editor', reward: { s: 5 } },
+  { id: 'broadcast', name: 'Broadcast', desc: 'Copy a level\'s share code', reward: { c: 8 } },
+  { id: 'secret', name: 'Secret', desc: 'Find the hidden menu', reward: { c: 10 } },
+];
+console.assert(ACH.every(a => a.reward) && new Set(ACH.map(a => JSON.stringify(a.reward))).size === ACH.length, 'each achievement needs its own reward');
+const STARTER_COLORS = [0, 9, 11];
+let ach = store.get('zd-ach', {}), stats = { attempts: 0, ...store.get('zd-stats', {}) };
+const shapeOpen = i => i === 0 || ACH.some(a => ach[a.id] && a.reward.s === i);
+const colorOpen = i => STARTER_COLORS.includes(i) || ACH.some(a => ach[a.id] && a.reward.c === i);
+// Open if the level before it is beaten, or if you've already played this one (so new levels slotted in earlier don't
+// re-lock levels you'd already reached).
+const levelOpen = i => i === 0 || bests[LEVELS[i - 1].id] === 100 || (bests[LEVELS[i].id] || 0) > 0;
+const rewardName = r => r.s !== undefined ? `the ${SHAPES[r.s].name} icon` : 'a new colour';
+const lockMsg = r => { const a = ACH.find(a => r.s !== undefined ? a.reward.s === r.s : a.reward.c === r.c); return a ? `Locked · ${a.desc}` : 'Locked'; };
+function grant(id, quiet) {
+  if (ach[id]) return;
+  ach[id] = true; store.set('zd-ach', ach);
+  const a = ACH.find(a => a.id === id);
+  if (!quiet) toast(`Achievement · ${a.name} · unlocked ${rewardName(a.reward)}`);
+}
+for (const l of LEVELS) if (bests[l.id] === 100) grant('beat-' + l.id, true); // credit levels beaten before achievements existed
+if (store.get('zd-unlocked', false)) grant('secret', true);
+if (!shapeOpen(icon.shape)) icon.shape = 0;
+if (!colorOpen(icon.c1)) icon.c1 = 0;
+if (!colorOpen(icon.c2)) icon.c2 = 11;
+const customImg = new Image(); // player's uploaded icon, stored as a small PNG data URL
+customImg.onload = () => { renderHome(); if (!$('icons').hidden) renderIcons(); };
+if (icon.custom) customImg.src = icon.custom;
+let keys = store.get('zd-keys', DEFAULT_KEYS);
+if (!Array.isArray(keys.climb) || typeof keys.exit !== 'string') keys = structuredClone(DEFAULT_KEYS);
+const HACK_DEFAULTS = { noclip: false, hitbox: false, speed: 1, start: 0, fps: false, cbf: true, uncap: false, cap: 1,
+  path: false, practice: false, auto: false, acc: false, noAtt: false, layout: false, respawn: 0.75 };
+let hacks = { ...HACK_DEFAULTS, ...store.get('zd-hacks', {}) };
+let unlocked = store.get('zd-unlocked', false);
+// Balance edits to main levels (made with "Edit levels" once the hack menu is unlocked). They're kept in this browser and
+// replace the built-in code; l.orig keeps the shipped version for "Reset to original".
+let overrides = store.get('zd-overrides', {});
+for (const l of LEVELS) if (overrides[l.id] === l.code) delete overrides[l.id]; // an edit that became the official level is no longer an edit
+store.set('zd-overrides', overrides);
+for (const l of LEVELS) { l.orig = l.code; if (typeof overrides[l.id] === 'string') l.code = overrides[l.id]; }
+let editMain = false;
+if (!unlocked) hacks = { ...HACK_DEFAULTS }; // hacks only apply once the menu is found
+const cheating = () => hacks.noclip || hacks.speed !== 1 || hacks.start > 0 || hacks.path || hacks.practice || hacks.auto;
+
+function drawIcon(g, x, y, a, s, ic) {
+  if (ic.useCustom && customImg.naturalWidth) { // same footprint as the built-in shapes (about 26 units across)
+    const k = 26 * s / Math.max(customImg.naturalWidth, customImg.naturalHeight), w = customImg.naturalWidth * k, h = customImg.naturalHeight * k;
+    g.save(); g.translate(x, y); g.rotate(a); g.drawImage(customImg, -w / 2, -h / 2, w, h); g.restore(); return;
+  }
+  const pts = SHAPES[ic.shape].pts;
+  g.save(); g.translate(x, y); g.rotate(a); g.scale(s, s); g.lineJoin = 'round';
+  g.beginPath(); for (const [px, py] of pts) g.lineTo(px, py); g.closePath();
+  g.fillStyle = COLORS[ic.c1]; g.fill(); g.lineWidth = 2.2; g.strokeStyle = COLORS[ic.c2]; g.stroke();
+  g.beginPath(); for (const [px, py] of pts) g.lineTo(px * 0.42 + 1.5, py * 0.42); g.closePath();
+  g.fillStyle = COLORS[ic.c2]; g.fill();
+  g.restore();
+}
+// Visual-only easing for the icon on the Icons screen preview.
+const turn = (a, target, dt) => a + (target - a) * (1 - Math.exp(-dt * 120));
+
+// ---------- game state ----------
+const worldCache = new Map(); // level code -> built world (converting a path level takes a few ms, so do it once)
+function worldFor(code) { let w = worldCache.get(code); if (!w) { w = buildWorld(levelObjects(code)); worldCache.set(code, w); } return w; }
+let mode = 'menu', from = 'levels', cur = LEVELS[0], world = worldFor(cur.code);
+let held = false, attempt = 1, p, trail = [], trail2 = [], parts = [], deadT = 0, shake = 0, flash = 0, hitFlash = 0, speedI = 1;
+let camX = 0, camY = 0, editCam = 0, hue = LEVELS[0].hue, baseHue = LEVELS[0].hue, editing = null, usedHacks = false, lvIndex = 0, testFrom = null;
+const inputs = []; // [timestamp, held] queued so each press lands on the exact sub-step it happened in
+
+// ---------- look-ahead simulation (safe spawns, show path, practice checkpoints, autoplay) ----------
+// simulate() runs the exact same physics as step() on a copy of the wave's state, without touching the real game.
+const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
+let checkpoints = [], spawnCache = null, plan = [];
+const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi });
+function portalState(s, o) {
+  if (o.k === 'S') s.speedI = o.v; else if (o.k === 'm') s.mini = !!o.v; else if (o.k === 'v') s.flip = !!o.v;
+  else { if (o.v && !s.dual) s.y2 = VH - s.y; s.dual = !!o.v; }
+}
+function simulate(wd, s, hold, n, pts) { // returns the new state, null if it crashes (pts collects the route for drawing)
+  s = { ...s };
+  for (let i = 0; i < n; i++) {
+    const v = SPEEDS[s.speedI] * B, dir = (hold ? -1 : 1) * (s.flip ? -1 : 1), vy = v * (s.mini ? 2 : 1), r = s.mini ? RM : R;
+    s.dir = dir; s.x += v * STEP; s.y += dir * vy * STEP; s.y2 -= dir * vy * STEP;
+    if (s.x >= wd.end) { s.won = true; return s; }
+    while (s.pi < wd.portals.length && wd.portals[s.pi].x * B <= s.x) {
+      const o = wd.portals[s.pi++], by = s.y / B;
+      if (by >= o.y - 0.5 && by <= o.y + o.h + 0.5) portalState(s, o);
+    }
+    s.y = Math.min(VH - r, Math.max(r, s.y)); s.y2 = Math.min(VH - r, Math.max(r, s.y2));
+    if (pts && i % 4 === 0) pts.push([s.x, s.y]);
+    if (solidHit(wd, s.x, s.y, r) || (s.dual && solidHit(wd, s.x, s.y2, r))) { if (pts) pts.push([s.x, s.y]); return null; }
+  }
+  return s;
+}
+// Depth-first search for a sequence of hold/release choices that survives `decisions` steps (or reaches the end).
+// Repeating the last input is tried first, and states already visited on a 3-unit grid are skipped.
+function findPath(wd, s0, decisions, budget, firstHold = held, untilX = Infinity) {
+  const seen = new Set(), stack = [{ s: s0, hold: firstHold, depth: 0, up: null }];
+  for (let n = 0; stack.length && n < budget; n++) {
+    const node = stack.pop();
+    for (const hold of [!node.hold, node.hold]) {
+      const t = simulate(wd, node.s, hold, K_DEC); if (!t) continue;
+      const nn = { s: t, hold, depth: node.depth + 1, up: node };
+      if (t.won || nn.depth >= decisions || t.x >= untilX) { const out = []; for (let q = nn; q.up; q = q.up) out.push(q.hold); return out.reverse(); }
+      const key = (t.x / 3 | 0) + ',' + Math.round(t.y / 3) + ',' + (t.mini ? 1 : 0);
+      if (seen.has(key)) continue; seen.add(key); stack.push(nn);
+    }
+  }
+  return null;
+}
+// How long (in sub-steps, up to cap) the wave survives from s if the input never changes: your reaction time at a spawn.
+function survival(s, hold, cap = 192) {
+  for (let t = 0; t < cap; t += K_DEC) { s = simulate(world, s, hold, K_DEC); if (!s) return t; if (s.won) return cap; }
+  return cap;
+}
+// Middles of the open gaps at x, with every portal before x applied.
+function gapMiddles(x) {
+  const base = { x, y: VH / 2, y2: VH / 2, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0 };
+  while (base.pi < world.portals.length && world.portals[base.pi].x * B <= x) portalState(base, world.portals[base.pi++]);
+  const r = base.mini ? RM : R, out = [];
+  let start = null;
+  for (let y = r + 1; y <= VH - r - 1 + 3; y += 3) {
+    const free = y <= VH - r - 1 && !solidHit(world, x, y, r) && !(base.dual && solidHit(world, x, VH - y, r));
+    if (free && start === null) start = y;
+    if (!free && start !== null) { const m = (start + y - 3) / 2; out.push({ ...base, y: m, y2: VH - m }); start = null; }
+  }
+  return out;
+}
+// Where to put the wave when starting partway in (start % hack, editor "From here"). It finds a real route from the start of the
+// level to that point, then looks at the last 4 blocks of the route (plus the gap middles there) and picks the spot where holding
+// lasts longest (a mid-level spawn waits for your first press, so the run always begins with a hold), nearest to where you asked
+// to start, and with a way to keep going.
+function spawnState(x) {
+  const start = { x: 0, y: VH / 2, y2: VH / 2, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0 }, cands = [];
+  const route = findPath(world, start, Infinity, 300000, false, x);
+  if (route) { let s = start; for (const h of route) { s = simulate(world, s, h, K_DEC); if (!s) break; if (s.x >= x - 4 * B) cands.push(s); } }
+  for (let cx = x - 4 * B; cx <= x + 1; cx += B / 2) cands.push(...gapMiddles(cx));
+  cands.sort((a, b) => b.x - a.x); // nearest to the requested start first, so ties go to it
+  let best = null, bestScore = -1;
+  for (const s of cands) {
+    if (s.x > x + 1) continue;
+    const score = survival(s, true);
+    if (score <= bestScore || !findPath(world, s, 60, 4000, true)) continue;
+    best = s; bestScore = score;
+  }
+  const pick = best || cands[0] || start;
+  return { x: pick.x, y: pick.y, y2: pick.y2, dir: pick.dir, speedI: pick.speedI, mini: pick.mini, flip: pick.flip, dual: pick.dual, pi: pick.pi };
+}
+function applyPortal(o, quiet) {
+  if (o.k === 'S') { if (p.speedI !== o.v && !quiet && !calm) flash = 0.45; p.speedI = o.v; }
+  else if (o.k === 'm') { const on = !!o.v; if (on !== p.mini && !quiet) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } p.mini = on; }
+  else if (o.k === 'v') p.flip = !!o.v;
+  else { const on = !!o.v; if (on && !p.dual) { p.y2 = VH - p.y; trail2 = [[p.x, p.y2]]; } p.dual = on; } // second wave appears mirrored
+}
+function reset() {
+  p = { x: 0, y: VH / 2, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false };
+  trail = []; trail2 = []; parts = [];
+  const cp = hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
+  const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
+  if (cp) Object.assign(p, cp); // practice: back to the newest checkpoint
+  else if (sx > 0) Object.assign(p, spawnCache ??= spawnState(sx)); // start partway in at a safe spot (worked out once per level)
+  else p.y2 = VH - p.y;
+  // A mid-level spawn (start %, From here, practice checkpoint) waits for your first press instead of moving straight away.
+  p.wait = !hacks.auto && (!!cp || sx > 0);
+  if (p.wait) p.dir = p.flip ? 1 : -1; // facing the way a press will send it
+  p.ang = p.from = p.dir * (p.mini ? Math.atan(2) : Math.PI / 4); p.cpT = 0; p.sub = 0; speedI = p.speedI;
+  trail = [[p.x, p.y]]; trail2 = p.dual ? [[p.x, p.y2]] : [];
+  plan = hacks.auto ? findPath(world, stateOf(p), Infinity, 300000, false) || [] : []; // autoplay: route to the end, worked out now
+}
+function show(id) { document.querySelectorAll('.screen').forEach(s => s.hidden = s.id !== id); }
+
+function play(level, origin) {
+  cur = level; from = origin; world = level.id === 'test' ? buildWorld(edObjs) : worldFor(level.code); baseHue = level.hue ?? 200;
+  attempt = 1; usedHacks = cheating(); checkpoints = []; spawnCache = null; held = false;
+  reset(); mode = 'play'; inputs.length = 0; show(null); $('hud').hidden = false;
+  updateHackTag();
+  document.activeElement?.blur();
+}
+function exitPlay() {
+  $('hud').hidden = true; held = false; inputs.length = 0;
+  if (from === 'editor') return resumeEditor();
+  go(from);
+}
+function saveBest(pct) { if (cur.id !== 'test' && !usedHacks && pct > (bests[cur.id] || 0)) { bests[cur.id] = pct; store.set('zd-best', bests); } }
+function die() {
+  mode = 'dead'; deadT = hacks.respawn; shake = calm || hacks.layout ? 0 : 10; trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]);
+  for (let i = 0; i < 40; i++) { const a = Math.random() * 6.283, v = 80 + Math.random() * 320; parts.push({ x: p.x, y: p.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.4 }); }
+  saveBest(Math.min(99, Math.floor(p.x / world.end * 100)));
+  if (!usedHacks && cur.id !== 'test') {
+    stats.attempts++; store.set('zd-stats', stats);
+    if (stats.attempts >= 100) grant('att100');
+    if (stats.attempts >= 1000) grant('att1000');
+    if (LEVELS.includes(cur) && p.x / world.end >= 0.9) grant('close');
+  }
+}
+function win() {
+  mode = 'win'; saveBest(100); $('hud').hidden = true; show('done');
+  $('doneStats').innerHTML = `<dt>Level</dt><dd>${esc(cur.name)}</dd><dt>Attempts</dt><dd>${attempt}</dd><dt>Length</dt><dd>${Math.round(world.end / B)} blocks</dd>`;
+  const idx = LEVELS.indexOf(cur), nextLv = LEVELS[idx + 1];
+  if (!usedHacks && idx >= 0) { grant('beat-' + cur.id); if (attempt === 1) grant('flawless'); }
+  $('doneMsg').textContent = usedHacks ? 'Hacks were on, so this run isn\'t saved and nothing unlocks.'
+    : idx >= 0 && nextLv ? `Level ${String(idx + 2).padStart(2, '0')} is open: ${nextLv.name}.` : idx === LEVELS.length - 1 ? 'That was the last level. Every main level is cleared.' : '';
+}
+
+// ---------- pause ----------
+// Pausing freezes the simulation (step() does nothing while mode is 'pause'); resuming restarts the clock from now so the
+// game doesn't jump ahead to catch up on the paused time, and drops any key that was held when the pause began.
+let pausedFrom = 'play';
+function pauseGame() {
+  if (!inGame()) return;
+  pausedFrom = mode; mode = 'pause'; held = false; inputs.length = 0;
+  show('pause');
+  $('pauseInfo').textContent = `${Math.min(100, Math.max(0, Math.floor(p.x / world.end * 100)))}% · Attempt ${attempt}`;
+  $('pauseName').textContent = cur.name + (usedHacks ? ' · hacks on' : '');
+  $('pExit').textContent = from === 'editor' ? 'Back to editor' : 'Exit level';
+  $('pauseHint').textContent = `${keyName(keys.exit)} resumes.`;
+  $('pResume').focus();
+}
+function resumeGame() {
+  if (mode !== 'pause') return;
+  show(null); mode = pausedFrom; held = false; inputs.length = 0;
+  simT = lastDraw = performance.now();
+  document.activeElement?.blur();
+}
+function restartGame() {
+  show(null); held = false; inputs.length = 0; attempt++; checkpoints = []; reset(); mode = 'play'; // Restart always means from the start
+  simT = lastDraw = performance.now();
+  document.activeElement?.blur();
+}
+
+function step(dt) {
+  if (mode === 'pause') return;
+  if (mode === 'play') {
+    if (p.wait) return; // waiting at a mid-level spawn for the first press
+    if (hacks.auto) { // autoplay: follow the planned route; if it ever runs out, plan the next two seconds from here
+      let idx = Math.floor(p.sub / K_DEC + 1e-9);
+      if (idx >= plan.length) { plan = findPath(world, stateOf(p), 120, 60000, held) || []; p.sub = 0; idx = 0; }
+      held = plan[idx] ?? false;
+    }
+    p.sub += dt / STEP;
+    const v = SPEEDS[p.speedI] * B;
+    const dir = (held ? -1 : 1) * (p.flip ? -1 : 1); // upside down: holding dives instead of climbs
+    if (dir !== p.dir) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.dir = dir; p.from = p.ang; p.turnT = 0; } // trail keeps only the corners
+    while (trail.length > 1 && trail[1][0] < p.x - 2500) trail.shift();
+    while (trail2.length > 1 && trail2[1][0] < p.x - 2500) trail2.shift();
+    const vy = v * (p.mini ? 2 : 1), r = p.mini ? RM : R; // mini: twice as steep, smaller hitbox
+    p.x += v * dt; p.y += p.dir * vy * dt; p.y2 -= p.dir * vy * dt;
+    if (p.x >= world.end) return win();
+    // Portals apply after the move and before collisions, so a wave never spends a step in a corridor that just closed.
+    while (p.pi < world.portals.length && world.portals[p.pi].x * B <= p.x) {
+      const o = world.portals[p.pi++], by = p.y / B;
+      if (by >= o.y - 0.5 && by <= o.y + o.h + 0.5) applyPortal(o);
+    }
+    speedI = p.speedI;
+    // The top and bottom of the screen act as ceiling and floor: the wave slides along them.
+    const cy = Math.min(VH - r, Math.max(r, p.y)), slid = cy !== p.y;
+    if (slid && !p.slid) trail.push([p.x, cy]);
+    p.y = cy; p.slid = slid;
+    if (p.dual) { const cy2 = Math.min(VH - r, Math.max(r, p.y2)), s2 = cy2 !== p.y2; if (s2 && !p.slid2) trail2.push([p.x, cy2]); p.y2 = cy2; p.slid2 = s2; }
+    if (solidHit(world, p.x, p.y, r) || (p.dual && solidHit(world, p.x, p.y2, r))) { if (hacks.noclip) hitFlash = 0.3; else return die(); }
+    // practice: drop a checkpoint every 1.5 s, but only where there's a way to keep going for at least half a second
+    // (respawning there starts with a press, so holding has to last at least 0.2 s from that spot)
+    if (hacks.practice && (p.cpT += dt) >= 1.5) { p.cpT = 0; const st = stateOf(p); if (survival(st, true) >= 96 && findPath(world, st, 30, 3000, true)) checkpoints.push(st); }
+  } else if (mode === 'dead') {
+    deadT -= dt;
+    if (deadT <= 0) { attempt++; reset(); mode = 'play'; }
+  }
+  for (const q of parts) { q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.98; q.vy *= 0.98; q.life -= dt; }
+  shake *= 0.95;
+}
+
+// ---------- drawing ----------
+function sawPath(g, x, y, r, t) {
+  g.beginPath();
+  for (let i = 0; i < 24; i++) { const a = t * 6 + i * Math.PI / 12, rr = i % 2 ? r * 0.78 : r; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  g.closePath();
+}
+function triPath(g, o, u) { // the box corner opposite the right angle is left out
+  const x = o.x * u, y = o.y * u, w = o.w * u, h = o.h * u, P = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], skip = [1, 0, 3, 2][o.o];
+  let first = true;
+  for (let i = 0; i < 4; i++) if (i !== skip) { if (first) g.moveTo(P[i][0], P[i][1]); else g.lineTo(P[i][0], P[i][1]); first = false; }
+  g.closePath();
+}
+function addSolid(g, o, u) { if (o.t === 'r') g.rect(o.x * u, o.y * u, o.w * u, o.h * u); else triPath(g, o, u); }
+function drawPortal(g, o, u, label = true) {
+  const x = o.x * u, y = o.y * u, h = o.h * u, on = o.k === 'S' || !!o.v;
+  const col = o.k === 'S' ? `hsl(${50 + o.v * 70},100%,65%)` : PORTALS[o.k][0];
+  const text = o.k === 'S' ? SPD_LABELS[o.v] : PORTALS[o.k][o.v ? 1 : 2], bw = u / 5;
+  g.globalAlpha = on ? 0.35 : 0.12; g.fillStyle = col; g.fillRect(x - bw / 2, y, bw, h); g.globalAlpha = 1;
+  g.strokeStyle = col; g.lineWidth = u / 20; g.setLineDash(on ? [] : [u / 10, u / 10]); g.strokeRect(x - bw / 2, y, bw, h); g.setLineDash([]);
+  if (label) { g.fillStyle = col; g.font = `700 ${Math.round(u * 0.22)}px "Space Mono", monospace`; g.textAlign = 'center'; g.fillText(text, x, y - u * 0.14); }
+}
+function renderObj(g, o, u, t) { // one object in its editor colours (palette icons and the build ghost)
+  if (o.t === 'r' || o.t === 't') { g.beginPath(); addSolid(g, o, u); g.fillStyle = '#2340ff'; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = Math.max(1.5, u / 20); g.stroke(); }
+  else if (o.t === 's') { sawPath(g, o.x * u, o.y * u, SAW_R * u, t); g.fillStyle = '#ffd23f'; g.fill(); g.strokeStyle = '#ff9f43'; g.lineWidth = Math.max(1, u / 20); g.stroke(); }
+  else drawPortal(g, o, u, u >= 30);
+}
+// Cheap glow: a wide faint stroke under a thin bright one (shadowBlur costs frames, and dropped frames feel like input lag).
+function glowStroke(g, color, glow, w) {
+  g.strokeStyle = glow; g.globalAlpha = 0.35; g.lineWidth = w * 3.5; g.stroke();
+  g.globalAlpha = 1; g.strokeStyle = color; g.lineWidth = w; g.stroke();
+}
+function visibleObjs(wd, a, b) { const set = new Set(); for (let c = Math.floor(a) - 1; c <= Math.ceil(b) + 1; c++) for (const o of wd.cols.get(c) || []) set.add(o); return set; }
+
+function draw(t, dt) {
+  const ed = mode === 'edit', z = ed ? edZoom : 1, k = S * z, viewW = W / k, viewH = H / k;
+  const inGame = mode === 'play' || mode === 'dead' || mode === 'win' || mode === 'pause';
+  const alive = mode === 'play' || (mode === 'pause' && pausedFrom === 'play'); // icon is on screen (not mid-death)
+  if (inGame) { camX = p.x - viewW * 0.3; camY = 0; }
+  else if (ed) { camX = editCam; camY = edCamY; }
+  else { camX += 150 * dt; if (camX > world.end) camX = -viewW * 0.3; camY = 0; }
+  const target = baseHue + (inGame ? (speedI - 1) * 35 : 0);
+  hue += (target - hue) * Math.min(1, dt * 3);
+
+  // background: hue-shifting gradient + slow parallax squares
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, `hsl(${hue},65%,27%)`); bg.addColorStop(1, `hsl(${hue},70%,10%)`);
+  const layout = hacks.layout && !ed; // layout mode: flat background, plain walls, no effects
+  ctx.fillStyle = layout ? '#141726' : bg; ctx.fillRect(0, 0, W, H);
+  if (!layout) {
+    const sz = 150 * S, off = -((camX * S * 0.25) % sz + sz) % sz;
+    ctx.strokeStyle = `hsla(${hue},90%,75%,.09)`; ctx.lineWidth = 2; ctx.beginPath();
+    for (let x = off - sz; x < W + sz; x += sz) for (let y = 0; y < H; y += sz) ctx.rect(x + 10, y + 10, sz - 20, sz - 20);
+    ctx.stroke();
+  }
+
+  const sx = shake > 0.3 ? (Math.random() - 0.5) * shake : 0, sy = shake > 0.3 ? (Math.random() - 0.5) * shake : 0;
+  ctx.setTransform(dpr * k, 0, 0, dpr * k, (-camX * k + sx) * dpr, (-camY * k + sy) * dpr);
+  const x0 = Math.floor(camX / B) * B, x1 = camX + viewW + B, y0 = Math.floor(camY / B) * B, y1 = camY + viewH + B;
+
+  if (ed) { // build grid over the whole view, brighter every 5 blocks; shade outside the playable 10-block band
+    ctx.lineWidth = 1 / z; ctx.beginPath();
+    for (let x = x0; x < x1; x += B) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+    for (let y = y0; y < y1; y += B) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+    ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.stroke();
+    ctx.beginPath(); for (let x = Math.floor(camX / B / 5) * 5 * B; x < x1; x += 5 * B) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+    ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x0, y0, x1 - x0, -y0); ctx.fillRect(x0, VH, x1 - x0, y1 - VH);
+    ctx.strokeStyle = 'rgba(255,204,26,.5)'; ctx.lineWidth = 2 / z; ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x1, 0); ctx.moveTo(x0, VH); ctx.lineTo(x1, VH); ctx.stroke();
+  }
+
+  // solids: bright outline drawn first, then the fill covers its inner half and every seam between neighbouring pieces,
+  // so only the outside edge of each wall shows; then the block grid is clipped inside the walls
+  const vis = visibleObjs(world, camX / B, (camX + viewW) / B), solids = [], saws = [];
+  for (const o of vis) (o.t === 's' ? saws : solids).push(o);
+  const wallCol = layout ? '#3a4066' : `hsl(${hue},60%,8%)`;
+  ctx.beginPath(); for (const o of solids) addSolid(ctx, o, B);
+  ctx.lineJoin = 'round';
+  if (layout) { ctx.strokeStyle = '#c9cfe8'; ctx.lineWidth = 4; ctx.stroke(); ctx.fillStyle = wallCol; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = wallCol; ctx.stroke(); }
+  else {
+    glowStroke(ctx, '#fff', `hsl(${hue},100%,65%)`, 6);
+    ctx.fillStyle = wallCol; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = wallCol; ctx.stroke();
+    ctx.save(); ctx.clip(); ctx.beginPath();
+    for (let x = x0; x < x1; x += B) { ctx.moveTo(x, y0 - B); ctx.lineTo(x, y1); }
+    for (let y = y0 - B; y < y1; y += B) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+    ctx.strokeStyle = `hsla(${hue},90%,65%,.28)`; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+  }
+  if (ed) { // in the editor every object shows its own outline so you can see the pieces
+    ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 1.5 / z;
+    for (const o of solids) { ctx.beginPath(); addSolid(ctx, o, B); ctx.stroke(); }
+  }
+
+  // finish gate
+  if (world.end > camX - 40 && world.end < camX + viewW + 40) {
+    for (let y = 0; y < VH; y += 30) { ctx.fillStyle = (y / 30) % 2 ? '#fff' : `hsl(${hue},80%,20%)`; ctx.fillRect(world.end - 8, y, 16, 30); }
+  }
+  for (const s of saws) {
+    sawPath(ctx, s.x * B, s.y * B, SAW_R * B, t); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = wallCol; ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_R * B * 0.25, 0, 7); ctx.fill();
+  }
+  for (const o of world.portals) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawPortal(ctx, o, B);
+  if (inGame && hacks.practice) for (const c of checkpoints) if (c.x > camX - 30 && c.x < camX + viewW + 30) { // practice checkpoints: green diamonds
+    ctx.beginPath(); ctx.moveTo(c.x, c.y - 14); ctx.lineTo(c.x + 10, c.y); ctx.lineTo(c.x, c.y + 14); ctx.lineTo(c.x - 10, c.y); ctx.closePath();
+    ctx.fillStyle = '#4dff9a'; ctx.fill(); ctx.strokeStyle = '#0c0e1c'; ctx.lineWidth = 2; ctx.stroke();
+  }
+  if (alive && hacks.path) { // show path: 0.6 s ahead if you hold (yellow) or let go (blue); an X marks where that line would crash
+    for (const [hold, col] of [[true, '#ffcc1a'], [false, '#3fd8ff']]) {
+      const pts = [[p.x, p.y]], end = simulate(world, stateOf(p), hold, 288, pts);
+      ctx.beginPath(); for (const [x, y] of pts) ctx.lineTo(x, y);
+      ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.stroke(); ctx.setLineDash([]);
+      if (!end) { const [x, y] = pts[pts.length - 1]; ctx.beginPath(); ctx.moveTo(x - 9, y - 9); ctx.lineTo(x + 9, y + 9); ctx.moveTo(x + 9, y - 9); ctx.lineTo(x - 9, y + 9); ctx.lineWidth = 4; ctx.stroke(); }
+    }
+  }
+
+  if (ed) { // ruler, start marker, selection, and a ghost of what a click would place
+    ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = '700 15px "Space Mono", monospace'; ctx.textAlign = 'center';
+    for (let b = Math.ceil(camX / B / 5) * 5; b * B < camX + viewW; b += 5) ctx.fillText(b, b * B, camY + 22 / z);
+    ctx.globalAlpha = 0.6; drawIcon(ctx, 0, VH / 2, Math.PI / 4, 1.1, icon); ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#ffcc1a'; ctx.lineWidth = 3 / z;
+    for (const o of sel) {
+      ctx.beginPath();
+      if (o.t === 's') ctx.arc(o.x * B, o.y * B, SAW_R * B + 4, 0, 7); else if (o.t === 'p') ctx.rect(o.x * B - 10, o.y * B, 20, o.h * B); else addSolid(ctx, o, B);
+      ctx.stroke();
+    }
+    if (hoverCell && edTool === 'build' && !pdrag) {
+      const item = PALETTE.find(q => q.id === edPal);
+      ctx.globalAlpha = 0.45; renderObj(ctx, item.make(snap(hoverCell[0]), snap(hoverCell[1])), B, t); ctx.globalAlpha = 1;
+    }
+  }
+  // trail + player
+  if (inGame) {
+    if (trail.length) {
+      ctx.beginPath(); for (const [x, y] of trail) ctx.lineTo(x, y); if (alive) ctx.lineTo(p.x, p.y);
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7; ctx.stroke(); // solid trail, no glow band
+    }
+    if (trail2.length) {
+      ctx.beginPath(); for (const [x, y] of trail2) ctx.lineTo(x, y); if (alive && p.dual) ctx.lineTo(p.x, p.y2);
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7; ctx.stroke();
+    }
+    if (alive) { // two-step turn: 70% of the way on the first frame, the rest ~20 ms later
+      const full = p.mini ? Math.atan(2) : Math.PI / 4, tgt = p.slid ? 0 : p.dir * full; p.turnT += dt;
+      p.ang = p.turnT < 0.02 ? p.from + (tgt - p.from) * 0.7 : tgt;
+      const s = p.mini ? 0.7 : 1.1;
+      drawIcon(ctx, p.x, p.y, p.ang, s, icon);
+      if (p.dual) drawIcon(ctx, p.x, p.y2, -p.ang, s, icon);
+      if (p.wait) { // waiting spawn: pulsing ring and a prompt
+        ctx.strokeStyle = '#ffcc1a'; ctx.lineWidth = 3; ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 6);
+        ctx.beginPath(); ctx.arc(p.x, p.y, 26, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.fillStyle = '#fff'; ctx.font = '700 16px "Space Mono", monospace'; ctx.textAlign = 'center';
+        ctx.fillText('Press to go', p.x, p.y < 120 ? p.y + 52 : p.y - 38);
+      }
+    }
+    if (!layout) for (const q of parts) if (q.life > 0) { ctx.globalAlpha = Math.min(1, q.life * 2); ctx.fillStyle = COLORS[icon.c1]; ctx.fillRect(q.x - 3, q.y - 3, 6, 6); }
+    ctx.globalAlpha = 1;
+  }
+  // hitboxes: what the game actually tests against
+  if (hacks.hitbox && (inGame || ed)) {
+    ctx.lineWidth = 2; ctx.strokeStyle = '#ff3355';
+    ctx.beginPath(); for (const o of solids) addSolid(ctx, o, B); ctx.stroke();
+    for (const s of saws) { ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_HIT * B - 2, 0, 7); ctx.stroke(); }
+    if (inGame && mode !== 'dead') {
+      const r = p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
+      for (const y of p.dual ? [p.y, p.y2] : [p.y]) ctx.strokeRect(p.x - r, y - r, r * 2, r * 2);
+    }
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (layout) flash = 0;
+  if (flash > 0.01) { ctx.fillStyle = `rgba(255,255,255,${flash})`; ctx.fillRect(0, 0, W, H); flash *= Math.pow(0.9, dt * 60); }
+  if (hitFlash > 0.01) { ctx.fillStyle = `rgba(255,40,70,${hitFlash})`; ctx.fillRect(0, 0, W, H); hitFlash *= Math.pow(0.85, dt * 60); } // fade per second, not per frame
+
+  if (inGame) {
+    const exact = Math.min(100, Math.max(0, p.x / world.end * 100));
+    const pct = hacks.acc ? exact.toFixed(2) : String(Math.floor(exact)); // accurate percentage shows two decimals
+    if (pct !== hudPct || attempt !== hudAtt) { // only touch the DOM when the numbers change; matters at unlocked FPS
+      hudPct = pct; hudAtt = attempt;
+      $('pct').textContent = pct + '%'; $('pbar').style.width = exact + '%'; $('att').textContent = 'Att ' + attempt;
+    }
+    $('att').hidden = hacks.noAtt;
+  }
+}
+
+// Icon screen preview: the icon riding an endless 45° zigzag on a build grid, turning smoothly at each corner.
+const pv = $('iconPreview'), pg = pv.getContext('2d');
+let pvAng = Math.PI / 4;
+function drawPreview(t, dt) {
+  const w = pv.width, h = pv.height, A = 70, P = 2 * A, v = 230, ix = w * 0.62, u0 = t * v; // P = 2A keeps the zigzag at 45°
+  const tri = u => { const f = ((u / P) % 2 + 2) % 2; return f < 1 ? -1 + 2 * f : 3 - 2 * f; };
+  pg.fillStyle = '#161a33'; pg.fillRect(0, 0, w, h);
+  pg.strokeStyle = 'rgba(233,237,247,.08)'; pg.lineWidth = 2; pg.beginPath();
+  const gs = 40, go = -(u0 % gs);
+  for (let x = go; x < w; x += gs) { pg.moveTo(x, 0); pg.lineTo(x, h); }
+  for (let y = 0; y < h; y += gs) { pg.moveTo(0, y); pg.lineTo(w, y); }
+  pg.stroke();
+  pg.beginPath();
+  for (let x = 0; x <= ix; x += 3) pg.lineTo(x, h / 2 + tri(u0 - (ix - x)) * A);
+  pg.lineJoin = 'round'; pg.strokeStyle = COLORS[icon.c1]; pg.lineWidth = 10; pg.stroke();
+  const goingUp = tri(u0 + 1) < tri(u0);
+  pvAng = turn(pvAng, (goingUp ? -1 : 1) * Math.PI / 4, dt);
+  drawIcon(pg, ix, h / 2 + tri(u0) * A, pvAng, 4, icon);
+}
+
+// Fixed 480 Hz simulation driven by real time; queued inputs are applied at the sub-step matching their timestamp,
+// so a press counts from the moment it happened, not from the next frame.
+const STEP = 1 / 480;
+let simT = performance.now(), lastDraw = simT, fpsN = 0, fpsT = simT, hudPct = -1, hudAtt = -1;
+function frame() {
+  const now = performance.now();
+  if (now - simT > 100) simT = now - 100;
+  if (!hacks.cbf) for (const q of inputs) q[0] = now; // without click-between-frames, a press only counts from the frame after it
+  while (simT + STEP * 1000 <= now) {
+    simT += STEP * 1000;
+    while (inputs.length && inputs[0][0] <= simT) held = inputs.shift()[1];
+    step(STEP * (mode === 'play' || mode === 'dead' ? hacks.speed : 1));
+  }
+  const dt = Math.min(0.05, (now - lastDraw) / 1000); lastDraw = now;
+  draw(now / 1000, dt);
+  if (!$('icons').hidden) drawPreview(now / 1000, dt);
+  if (hacks.fps) { fpsN++; if (now - fpsT > 500) { $('fps').textContent = Math.round(fpsN * 1000 / (now - fpsT)) + ' FPS'; fpsN = 0; fpsT = now; } }
+  next();
+}
+// Unlock FPS: run frames on our own timer at the chosen cap instead of the display's refresh. It sleeps with setTimeout while it
+// can and only spins (MessageChannel) for the last ~2 ms, so the browser keeps time to handle input and paint the menus.
+// In this mode the canvas uses desynchronized: true, which lets browsers that support it show those frames right away.
+const CAPS = [144, 240, 360, 500, 1000];
+const mc = new MessageChannel();
+let nextDue = 0;
+function tick() {
+  const wait = nextDue - performance.now();
+  if (wait > 2) setTimeout(tick, wait - 1.5); else if (wait > 0) mc.port2.postMessage(0); else frame();
+}
+mc.port1.onmessage = tick;
+function next() {
+  if (!hacks.uncap || document.hidden) return requestAnimationFrame(frame);
+  nextDue = Math.max(nextDue + 1000 / CAPS[hacks.cap], performance.now()); // steady pacing; a late frame never triggers a burst
+  mc.port2.postMessage(0); // always hand control back to the browser between frames
+}
+function setHeld(v, e) {
+  if (v && p?.wait && mode === 'play') { p.wait = false; held = true; inputs.length = 0; return; } // first press starts a waiting spawn
+  const now = performance.now(); let ts = e && e.timeStamp;
+  if (!(ts > now - 250 && ts <= now)) ts = now; // fall back if the browser's event clock differs
+  if (inputs.length && ts < inputs[inputs.length - 1][0]) ts = inputs[inputs.length - 1][0];
+  inputs.push([ts, v]);
+}
+
+// ---------- menus ----------
+function go(id) {
+  mode = 'menu'; show(id);
+  if (id === 'levels') renderBoard();
+  if (id === 'create') renderCustoms();
+  if (id === 'icons') renderIcons();
+  if (id === 'settings') { listening = null; renderBinds(); $('hackNote').hidden = !unlocked; renderAccount(); }
+  if (id === 'online') renderOnline();
+  if (id === 'home') renderHome();
+  if (id === 'achievements') renderAch();
+}
+function renderAch() {
+  $('achCount').textContent = `${ACH.filter(a => ach[a.id]).length} / ${ACH.length} unlocked`;
+  $('achList').innerHTML = ACH.map(a => {
+    const done = !!ach[a.id], r = a.reward;
+    const prize = r.s !== undefined ? `<canvas width="80" height="80" data-rs="${r.s}" data-done="${done}"></canvas><span>${SHAPES[r.s].name}</span>`
+      : `<i class="sw" style="--sw:${COLORS[r.c]}"></i><span>Colour</span>`;
+    return `<div class="row ach${done ? ' done' : ''}"><div><div class="name">${a.name}</div><div class="facts"><span>${a.desc}</span></div></div>
+      <div class="reward">${prize}<b>${done ? 'Done' : 'Locked'}</b></div></div>`;
+  }).join('');
+  $('achList').querySelectorAll('canvas').forEach(c => drawIcon(c.getContext('2d'), 38, 40, 0, 2.4,
+    { shape: +c.dataset.rs, c1: c.dataset.done === 'true' ? 0 : 10, c2: 11 }));
+}
+function renderHome() {
+  const done = LEVELS.filter(l => bests[l.id] === 100).length;
+  $('mPlay').textContent = `${LEVELS.length} levels · ${done} cleared`;
+  $('mCreate').textContent = customs.length ? `${customs.length} saved` : 'Build your own';
+  $('mAch').textContent = `${ACH.filter(a => ach[a.id]).length} / ${ACH.length}`;
+  $('mOnline').textContent = NET.ready ? `${onlineItems().length} levels` : NET.reason ? 'Sign in to play' : 'Connecting…';
+  $('mIcon').textContent = icon.useCustom && customImg.naturalWidth ? 'Custom' : SHAPES[icon.shape].name;
+  const g = $('homeIcon').getContext('2d'); g.clearRect(0, 0, 56, 56); drawIcon(g, 26, 28, 0, 1.9, icon);
+}
+function previewLevel(i) {
+  lvIndex = i; const l = LEVELS[i]; world = worldFor(l.code); baseHue = l.hue; camX = -W / S * 0.3;
+}
+function levelFacts(wd) { // speeds used and modes used, from the level's portals
+  const speeds = [...new Set(wd.portals.filter(o => o.k === 'S').map(o => SPD_LABELS[o.v]))];
+  const modes = [...new Set(wd.portals.filter(o => o.k !== 'S' && o.v).map(o => o.k))];
+  return `<span>${Math.round(wd.end / B)} blk</span><span>${Math.round(duration(wd))} s</span><span>${(speeds.length ? speeds : ['1x']).join(' → ')}</span>`
+    + modes.map(m => `<span style="color:${PORTALS[m][0]}">${PORTALS[m][1]}</span>`).join('');
+}
+function renderBoard() {
+  if (!levelOpen(lvIndex) && !editMain) lvIndex = 0;
+  $('devBar').hidden = !unlocked;
+  $('lvEditMode').textContent = `Edit levels: ${editMain ? 'On' : 'Off'}`; $('lvEditMode').setAttribute('aria-pressed', String(editMain));
+  const nEdits = Object.keys(overrides).length;
+  $('lvCopyEdits').hidden = !nEdits;
+  $('devMsg').textContent = editMain ? 'Click a level to open it in the editor.' : nEdits ? `${nEdits} level${nEdits === 1 ? '' : 's'} edited in this browser.` : '';
+  $('board').innerHTML = LEVELS.map((l, i) => {
+    const best = bests[l.id] || 0, open = levelOpen(i) || editMain; // editing reaches locked levels too
+    return `<button data-play="${l.id}" data-idx="${i}" ${open ? '' : 'disabled'} style="--c:hsl(${l.hue},90%,65%)">
+      <span class="no">${String(i + 1).padStart(2, '0')}</span>
+      <span class="name">${open ? l.name : 'Locked'}</span>
+      <span class="best">${open ? `<strong>${best}%</strong><span class="meter"><i style="width:${best}%"></i></span>` : ''}</span>
+      <span class="facts"><span><i></i>${l.diff}</span>${open
+        ? levelFacts(worldFor(l.code)) + (overrides[l.id] !== undefined ? '<span style="color:var(--rose)">Edited</span>' : '')
+        : `<span>Beat ${LEVELS[i - 1].name} to unlock</span>`}</span>
+    </button>`;
+  }).join('');
+  previewLevel(lvIndex);
+  $('board').querySelectorAll('button')[lvIndex].focus({ preventScroll: true });
+}
+function renderCustoms() {
+  $('customList').innerHTML = customs.length ? customs.map(l => `<div class="row"><div><div class="name">${esc(l.name)}</div>
+    <div class="facts"><span>${Math.round(worldFor(l.code).end / B)} blk</span><span>Best ${bests[l.id] || 0}%</span></div></div>
+    <div class="acts"><button class="primary" data-play="${l.id}">▶ Play</button><button data-edit="${l.id}">Edit</button>${NET.ready && NET.write
+      ? `<button class="ghost" data-up="${l.id}">${(NET.uploads[NET.uid]?.levels || []).some(x => x.id === l.id) ? 'Update online' : 'Upload'}</button>` : ''}<button class="danger" data-del="${l.id}">Delete</button></div></div>`).join('')
+    : '<p class="note">No levels yet. Press New level to build one, or open Share code in a new level and paste someone\'s code.</p>';
+}
+
+// ---------- editor ----------
+// Works like a classic platformer editor: Build places objects on the grid, Edit selects and changes them, Delete removes them.
+let edObjs = [], sel = new Set(), edTool = 'build', edPal = 'block', edRot = 0, edSwipe = false, edGrid = 1, edZoom = 1, edCamY = 0;
+let undoS = [], redoS = [], pdrag = null, hoverCell = null, clearArmed = false;
+const PALETTE = [
+  { id: 'block', label: 'Block', make: (x, y) => ({ t: 'r', x, y, w: 1, h: 1 }) },
+  { id: 'half', label: 'Half', make: (x, y) => ({ t: 'r', x, y, w: 1, h: 0.5 }) },
+  { id: 'slope', label: 'Slope', make: (x, y) => ({ t: 't', x, y, w: 1, h: 1, o: edRot }) },
+  { id: 'steep', label: 'Steep', make: (x, y) => ({ t: 't', x, y, w: 1, h: 2, o: edRot }) }, // 2 up per 1 forward, the mini angle
+  { id: 'saw', label: 'Saw', make: (x, y) => ({ t: 's', x: x + 0.5, y: y + 0.5 }) },
+  ...SPD_LABELS.map((n, v) => ({ id: 'spd' + v, label: n, make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'S', v }) })),
+  ...[['m', 'Mini'], ['v', 'Flip'], ['w', 'Dual']].flatMap(([k, n]) => [1, 0].map(v => ({
+    id: k + v, label: n + (v ? ' on' : ' off'), make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k, v }) }))),
+];
+const HELP = {
+  build: 'Click to place · drag to look around (turn on Swipe to paint) · R rotates slopes',
+  edit: 'Click to select · Shift+click adds · drag to move · arrows nudge by the grid · Shift+arrows nudge a tiny step · R rotate · Ctrl+D duplicate · Del deletes',
+  delete: 'Click an object to delete it · turn on Swipe to delete by dragging',
+};
+// Grid steps the Grid button cycles through; 0 is free placement (no snapping).
+const GRIDS = [[1, '1'], [0.5, '½'], [0.25, '¼'], [0.1, '⅒'], [0, 'Free']], FINE = 1 / 30;
+const tidy = v => +v.toFixed(4); // keeps repeated small moves from piling up float noise in share codes
+const snap = v => edGrid ? tidy(Math.floor(v / edGrid + 1e-9) * edGrid) : +v.toFixed(2);
+const stepSize = () => edGrid || 0.1; // what arrows and the size buttons change by
+function toBlocks(e) { const r = cv.getBoundingClientRect(), k = S * edZoom; return [(editCam + (e.clientX - r.left) / k) / B, (edCamY + (e.clientY - r.top) / k) / B]; }
+function clampEd() {
+  const k = S * edZoom, viewW = W / k, viewH = H / k;
+  editCam = Math.min(Math.max(-15 * B, editCam), Math.max(-15 * B, world.end + 5 * B - viewW * 0.5));
+  edCamY = viewH >= VH + 2 * B ? (VH - viewH) / 2 : Math.min(Math.max(-B, edCamY), VH + B - viewH);
+}
+function zoomBy(f, sx = W / 2, sy = H / 2) { // keeps the point under (sx, sy) in place
+  const k0 = S * edZoom, wx = editCam + sx / k0, wy = edCamY + sy / k0;
+  edZoom = Math.min(2.5, Math.max(0.35, edZoom * f));
+  const k1 = S * edZoom; editCam = wx - sx / k1; edCamY = wy - sy / k1; clampEd();
+}
+function edChanged() { world = buildWorld(edObjs); updateEdInfo(); }
+function commit(before) { undoS.push(before); if (undoS.length > 200) undoS.shift(); redoS = []; }
+function restore(json) { edObjs = JSON.parse(json); sel = new Set(); edChanged(); renderPane(); }
+function undo() { if (!undoS.length) return; redoS.push(JSON.stringify(edObjs)); restore(undoS.pop()); }
+function redo() { if (!redoS.length) return; undoS.push(JSON.stringify(edObjs)); restore(redoS.pop()); }
+function placeAt(bx, by) {
+  const o = PALETTE.find(q => q.id === edPal).make(snap(bx), snap(by));
+  if (edObjs.some(q => q.t === o.t && Math.abs(q.x - o.x) < 1e-6 && Math.abs(q.y - o.y) < 1e-6 && q.k === o.k && q.o === o.o)) return false; // already there
+  edObjs.push(o); edChanged(); return true;
+}
+function objectAt(bx, by) { // portals over saws over solids; within a kind, the one drawn last
+  let best = null, rank = 0;
+  const consider = (o, r) => { if (r >= rank) { best = o; rank = r; } };
+  for (const o of world.portals) if (Math.abs(o.x - bx) < 0.3 && by >= o.y && by <= o.y + o.h) consider(o, 3);
+  for (const o of world.cols.get(Math.floor(bx)) || []) {
+    if (o.t === 's') { if (Math.hypot(o.x - bx, o.y - by) < SAW_R) consider(o, 2); }
+    else if (bx >= o.x && bx <= o.x + o.w && by >= o.y && by <= o.y + o.h) consider(o, 1);
+  }
+  return best;
+}
+function removeAt(bx, by) { const o = objectAt(bx, by); if (!o) return false; edObjs = edObjs.filter(q => q !== o); sel.delete(o); edChanged(); return true; }
+function edAction(a, fine) {
+  if (a === 'rotpal') { edRot = (edRot + 1) % 4; return renderPane(); }
+  if (a === 'clear') {
+    if (!clearArmed) { clearArmed = true; return renderPane(); }
+    clearArmed = false; if (!edObjs.length) return renderPane();
+    commit(JSON.stringify(edObjs)); edObjs = []; sel = new Set(); edChanged(); return renderPane();
+  }
+  if (a === 'none') { sel = new Set(); return renderPane(); }
+  const objs = [...sel]; if (!objs.length) return;
+  const before = JSON.stringify(edObjs), g = fine ? FINE : stepSize(), solid = o => o.t === 'r' || o.t === 't';
+  const mv = { left: [-g, 0], right: [g, 0], up: [0, -g], down: [0, g] }[a];
+  if (mv) for (const o of objs) { o.x = tidy(o.x + mv[0]); o.y = tidy(o.y + mv[1]); }
+  else if (a === 'rot') { if (!objs.some(o => o.t === 't')) return; for (const o of objs) if (o.t === 't') o.o = (o.o + 1) % 4; }
+  else if (a === 'w-' || a === 'w+') { for (const o of objs) if (solid(o)) o.w = tidy(Math.max(g, o.w + (a === 'w+' ? g : -g))); }
+  else if (a === 'h-' || a === 'h+') { for (const o of objs) if (solid(o) || o.t === 'p') o.h = tidy(Math.max(g, o.h + (a === 'h+' ? g : -g))); }
+  else if (a === 'dup') { const copies = objs.map(o => ({ ...o, x: o.x + 1 })); edObjs.push(...copies); sel = new Set(copies); }
+  else if (a === 'del') { edObjs = edObjs.filter(o => !sel.has(o)); sel = new Set(); }
+  else return;
+  commit(before); edChanged(); renderPane();
+}
+function drawPaletteIcon(c, item) {
+  const g = c.getContext('2d'), o = item.make(0, 0);
+  g.clearRect(0, 0, c.width, c.height); g.save();
+  const box = o.t === 's' ? [o.x, o.y, 1.2, 1.2] : o.t === 'p' ? [o.x, o.y + o.h / 2, 0.6, o.h] : [o.x + o.w / 2, o.y + o.h / 2, o.w, o.h];
+  const u = Math.min(c.width / (box[2] + 0.6), c.height / (box[3] + 0.6));
+  g.translate(c.width / 2 - box[0] * u, c.height / 2 - box[1] * u);
+  renderObj(g, o, u, 0); g.restore();
+}
+function renderPane() {
+  document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === edTool)));
+  $('edSwipe').setAttribute('aria-pressed', String(edSwipe)); $('edGrid').textContent = 'Grid ' + GRIDS.find(([v]) => v === edGrid)[1];
+  $('edUndo').disabled = !undoS.length; $('edRedo').disabled = !redoS.length;
+  const pane = $('edPane');
+  if (edTool === 'build') {
+    pane.innerHTML = PALETTE.map(q => `<button class="pal" data-pal="${q.id}" aria-pressed="${q.id === edPal}"><canvas width="80" height="80"></canvas>${q.label}</button>`).join('')
+      + '<button class="act" data-ed="rotpal">Rotate · R</button>';
+    pane.querySelectorAll('canvas').forEach((c, i) => drawPaletteIcon(c, PALETTE[i]));
+  } else if (edTool === 'edit') {
+    const n = sel.size, dis = n ? '' : 'disabled';
+    pane.innerHTML = `<span class="label" style="width:100%">${n ? `${n} selected` : 'Nothing selected · click an object (Shift+click to add more)'}</span>`
+      + [['left', '←'], ['up', '↑'], ['down', '↓'], ['right', '→'], ['rot', 'Rotate'], ['w-', 'Width −'], ['w+', 'Width +'], ['h-', 'Height −'], ['h+', 'Height +'],
+        ['dup', 'Duplicate'], ['del', 'Delete'], ['none', 'Deselect']].map(([a, txt]) => `<button class="act" data-ed="${a}" ${dis}>${txt}</button>`).join('');
+  } else {
+    pane.innerHTML = `<span class="label" style="width:100%">${edSwipe ? 'Click or drag over objects to delete them' : 'Click an object to delete it'}</span>`
+      + `<button class="act danger" data-ed="clear">${clearArmed ? 'Confirm: clear everything' : 'Clear all'}</button>`;
+  }
+  $('edHelp').textContent = HELP[edTool];
+}
+function updateEdInfo() {
+  const n = edObjs.length, txt = `${n} object${n === 1 ? '' : 's'} · ${Math.round(world.end / B)} blocks · ${Math.round(duration(world))} s`;
+  $('edStats').textContent = '· ' + txt; $('edInfo').textContent = txt;
+}
+function openEditor(l) {
+  editing = l; edObjs = levelObjects(l.code); sel = new Set(); undoS = []; redoS = []; edTool = 'build'; clearArmed = false;
+  edZoom = 1; edCamY = 0; editCam = -3 * B; testFrom = null;
+  $('lvName').value = l.name; $('lvName').readOnly = !!l.main; $('edReset').hidden = !l.main; // main levels keep their names
+  $('codeMsg').textContent = '';
+  resumeEditor();
+}
+function resumeEditor() {
+  mode = 'edit'; $('hud').hidden = true; show('editor'); $('sharePop').hidden = true;
+  world = buildWorld(edObjs); baseHue = 200; clampEd(); renderPane(); updateEdInfo();
+}
+// Save a main level's edits as a local override (or drop the override when it matches the shipped level again).
+function saveMain() {
+  const l = LEVELS.find(l => l.id === editing.id), code = encodeLevel(edObjs);
+  if (code === encodeLevel(levelObjects(l.orig))) delete overrides[l.id]; else overrides[l.id] = code;
+  l.code = overrides[l.id] ?? l.orig; store.set('zd-overrides', overrides);
+}
+function saveEditing() {
+  const copy = { id: editing.id, name: $('lvName').value.trim() || 'Untitled level', code: encodeLevel(edObjs) }, i = customs.findIndex(l => l.id === copy.id);
+  if (i < 0) customs.push(copy); else customs[i] = copy;
+  if (!store.set('zd-levels', customs)) toast('Your browser wouldn\'t save the level. Copy its share code to keep it.');
+  grant('architect');
+}
+function editorKey(e) {
+  const k = e.key, ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && (k === 'z' || k === 'Z')) { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
+  if (ctrl && (k === 'y' || k === 'Y')) { e.preventDefault(); return redo(); }
+  if (ctrl && (k === 'd' || k === 'D')) { e.preventDefault(); return edAction('dup'); }
+  if (ctrl || !$('sharePop').hidden) return;
+  if (k === '1' || k === '2' || k === '3') { edTool = ['build', 'edit', 'delete'][+k - 1]; clearArmed = false; return renderPane(); }
+  if (k === 'r' || k === 'R') return edAction(edTool === 'edit' && sel.size ? 'rot' : 'rotpal');
+  if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); return edAction('del'); }
+  if (k === 'Escape') { e.preventDefault(); return edAction('none'); }
+  if (k === '+' || k === '=') return zoomBy(1.25);
+  if (k === '-' || k === '_') return zoomBy(0.8);
+  const arrow = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[k];
+  if (!arrow) return;
+  e.preventDefault();
+  if (sel.size) return edAction(arrow, e.shiftKey);
+  const [dx, dy] = { left: [-3, 0], right: [3, 0], up: [0, -1], down: [0, 1] }[arrow]; // nothing selected: arrows look around
+  editCam += dx * B; edCamY += dy * B; clampEd();
+}
+
+// ---------- settings ----------
+const keyName = c => !c ? 'Empty' : c === 'Space' ? 'Space' : c.replace(/^Key|^Digit/, '').replace(/^Arrow(.*)/, '$1 arrow');
+let listening = null;
+function renderBinds() {
+  const slot = (label, id) => `<span>${label}</span><button class="${listening === String(id) ? 'listening' : 'ghost'}" data-bind="${id}">${listening === String(id) ? 'Press a key…' : keyName(id === 'exit' ? keys.exit : keys.climb[id])}</button>`;
+  $('binds').innerHTML = slot('Climb', 0) + slot('Climb · 2nd', 1) + slot('Climb · 3rd', 2) + slot('Pause', 'exit');
+  const names = keys.climb.filter(Boolean).map(keyName);
+  $('homeHint').textContent = `Hold ${names.length ? names.join(' / ') + ' / click / tap' : 'click / tap'} to climb · let go to dive · ${keyName(keys.exit)} pauses`;
+}
+// ---------- secret hack menu ----------
+function updateHackTag() {
+  $('hackTag').textContent = [hacks.noclip && 'Noclip', hacks.speed !== 1 && hacks.speed + 'x', hacks.start > 0 && 'From ' + Math.round(hacks.start * 100) + '%',
+    hacks.practice && 'Practice', hacks.auto && 'Autoplay', hacks.path && 'Path'].filter(Boolean).join(' · ');
+}
+function renderHacks() {
+  $('hNoclip').checked = hacks.noclip; $('hHitbox').checked = hacks.hitbox; $('hFps').checked = hacks.fps;
+  $('hPath').checked = hacks.path; $('hPractice').checked = hacks.practice; $('hAuto').checked = hacks.auto;
+  $('hAcc').checked = hacks.acc; $('hNoAtt').checked = hacks.noAtt; $('hLayout').checked = hacks.layout;
+  $('hRespawn').value = hacks.respawn; $('hRespawnOut').textContent = hacks.respawn.toFixed(2) + ' s';
+  $('hCbf').checked = hacks.cbf; $('hUncap').checked = hacks.uncap;
+  $('hCap').value = hacks.cap; $('hCapOut').textContent = CAPS[hacks.cap]; $('hCap').disabled = !hacks.uncap;
+  $('hSpeed').value = hacks.speed; $('hSpeedOut').textContent = hacks.speed + 'x';
+  $('hStart').value = hacks.start; $('hStartOut').textContent = Math.round(hacks.start * 100) + '%';
+  $('fps').hidden = !hacks.fps;
+}
+function readHacks() {
+  const was = hacks;
+  hacks = { noclip: $('hNoclip').checked, hitbox: $('hHitbox').checked, speed: +(+$('hSpeed').value).toFixed(2), start: +$('hStart').value, fps: $('hFps').checked,
+    cbf: $('hCbf').checked, uncap: $('hUncap').checked, cap: +$('hCap').value, path: $('hPath').checked, practice: $('hPractice').checked,
+    auto: $('hAuto').checked, acc: $('hAcc').checked, noAtt: $('hNoAtt').checked, layout: $('hLayout').checked, respawn: +(+$('hRespawn').value).toFixed(2) };
+  if (hacks.uncap !== !!ctx.getContextAttributes?.().desynchronized) makeCanvas(hacks.uncap);
+  if (!hacks.practice) checkpoints = [];
+  if (hacks.start !== was.start) spawnCache = null;
+  if (hacks.auto && !was.auto && p) { plan = []; p.sub = 0; } // turning autoplay on mid-run: plan from where you are
+  store.set('zd-hacks', hacks); renderHacks();
+  if (cheating() && (mode === 'play' || mode === 'dead' || mode === 'pause')) usedHacks = true; // switching a hack on mid-run voids that run's best
+  updateHackTag();
+}
+for (const id of ['hNoclip', 'hHitbox', 'hSpeed', 'hStart', 'hFps', 'hCbf', 'hUncap', 'hCap', 'hPath', 'hPractice', 'hAuto', 'hAcc', 'hNoAtt', 'hLayout', 'hRespawn'])
+  $(id).addEventListener('input', readHacks);
+$('hSpeedReset').onclick = () => { $('hSpeed').value = 1; readHacks(); };
+
+let winPos = store.get('zd-hackpos', {}), folded = store.get('zd-hackfold', {});
+function placeWindows() {
+  const cols = Math.max(1, Math.floor((innerWidth - 16) / 246)); // default layout wraps into rows on narrower screens
+  document.querySelectorAll('.hwin').forEach((w, i) => {
+    w.classList.toggle('folded', !!folded[w.dataset.win]);
+    const [x, y] = winPos[w.dataset.win] || [16 + (i % cols) * 246, 70 + Math.floor(i / cols) * 330];
+    w.style.left = Math.max(0, Math.min(innerWidth - w.offsetWidth, x)) + 'px';
+    w.style.top = Math.max(0, Math.min(innerHeight - 40, y)) + 'px';
+  });
+}
+function toggleHackMenu(open = $('hackMenu').hidden) {
+  $('hackMenu').hidden = !open;
+  if (open) { renderHacks(); placeWindows(); }
+}
+let winDrag = null;
+document.querySelectorAll('.hbar').forEach(bar => {
+  bar.addEventListener('pointerdown', e => {
+    const w = bar.parentElement; winDrag = { w, dx: e.clientX - w.offsetLeft, dy: e.clientY - w.offsetTop, sx: e.clientX, sy: e.clientY }; try { bar.setPointerCapture(e.pointerId); } catch (err) { /* drag still works without capture */ }
+  });
+  bar.title = 'Drag to move · click to fold';
+  bar.addEventListener('pointermove', e => {
+    if (!winDrag) return;
+    winDrag.w.style.left = Math.max(0, Math.min(innerWidth - winDrag.w.offsetWidth, e.clientX - winDrag.dx)) + 'px';
+    winDrag.w.style.top = Math.max(0, Math.min(innerHeight - 40, e.clientY - winDrag.dy)) + 'px';
+  });
+  bar.addEventListener('pointerup', e => {
+    if (!winDrag) return;
+    const id = winDrag.w.dataset.win;
+    if (Math.hypot(e.clientX - winDrag.sx, e.clientY - winDrag.sy) < 4) { // a click, not a drag: fold or unfold
+      folded[id] = !folded[id]; winDrag.w.classList.toggle('folded', folded[id]); store.set('zd-hackfold', folded);
+    } else { winPos[id] = [winDrag.w.offsetLeft, winDrag.w.offsetTop]; store.set('zd-hackpos', winPos); }
+    winDrag = null;
+  });
+});
+function toast(t) { const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 3500); }
+// The secret: type the unlock word anywhere (not inside a text box); spaces are ignored. Unlocking is saved, so Tab works from
+// then on. Only a SHA-256 hash of the word is kept here, so it can't be read from the source.
+const SECRET_LEN = 10, SECRET_HASH = '8548ebf403811bc58ae0e0c13454c43ccb0fdc1666620482c20b939ee5139259';
+let typed = '';
+addEventListener('keydown', async e => {
+  if (e.key.length !== 1 || e.key === ' ' || e.target.closest?.('input[type=text], input[type=search], input[type=password], textarea')) return;
+  typed = (typed + e.key.toUpperCase()).slice(-SECRET_LEN);
+  if (typed.length < SECRET_LEN || !crypto.subtle) return;
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(typed)));
+  if (Array.from(digest, b => b.toString(16).padStart(2, '0')).join('') !== SECRET_HASH) return;
+  typed = '';
+  if (!unlocked) { unlocked = true; store.set('zd-unlocked', true); toast('Hack menu unlocked · press Tab to open it'); setTimeout(() => grant('secret'), 3600); }
+  toggleHackMenu(true);
+});
+
+function renderIcons() {
+  $('shapes').innerHTML = SHAPES.map((s, i) => shapeOpen(i)
+    ? `<button data-shape="${i}" aria-pressed="${icon.shape === i && !icon.useCustom}"><canvas width="120" height="120"></canvas>${s.name}</button>`
+    : `<button disabled title="${lockMsg({ s: i })}"><canvas width="120" height="120"></canvas>Locked</button>`).join('');
+  $('shapes').querySelectorAll('canvas').forEach((c, i) => drawIcon(c.getContext('2d'), 56, 60, 0, 3.8,
+    shapeOpen(i) ? { ...icon, shape: i, useCustom: false } : { shape: i, c1: 10, c2: 11 }));
+  const has = !!customImg.naturalWidth, ct = $('customTile'), cg = ct.querySelector('canvas').getContext('2d');
+  ct.setAttribute('aria-pressed', String(!!icon.useCustom && has));
+  cg.clearRect(0, 0, 120, 120);
+  if (has) drawIcon(cg, 60, 60, 0, 3.8, { ...icon, useCustom: true });
+  else { cg.strokeStyle = 'rgba(233,237,247,.4)'; cg.lineWidth = 4; cg.setLineDash([10, 8]); cg.strokeRect(20, 20, 80, 80); cg.setLineDash([]); cg.fillStyle = 'rgba(233,237,247,.6)'; cg.fillRect(56, 40, 8, 40); cg.fillRect(40, 56, 40, 8); }
+  $('customRemove').hidden = !has;
+  for (const k of ['c1', 'c2']) $(k).innerHTML = COLORS.map((col, i) => colorOpen(i)
+    ? `<button data-${k}="${i}" aria-label="Colour ${i + 1}" aria-pressed="${icon[k] === i}" style="--sw:${col}"></button>`
+    : `<button disabled aria-label="Locked colour" title="${lockMsg({ c: i })}" style="--sw:${col}"></button>`).join('');
+  $('shapeName').textContent = SHAPES[icon.shape].name;
+  $('shapeNo').textContent = `Shape ${String(icon.shape + 1).padStart(2, '0')} / ${String(SHAPES.length).padStart(2, '0')}`;
+  if (icon.useCustom && has) { $('shapeName').textContent = 'Custom'; $('shapeNo').textContent = 'Your image'; }
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const d = b.dataset;
+  if (d.go) go(d.go);
+  else if (d.play) {
+    const l = LEVELS.find(l => l.id === d.play) || customs.find(l => l.id === d.play);
+    if (l && editMain && LEVELS.includes(l)) openEditor({ id: l.id, name: l.name, code: l.code, main: true });
+    else if (l) play(l, LEVELS.includes(l) ? 'levels' : 'create');
+  }
+  else if (d.edit) openEditor({ ...customs.find(l => l.id === d.edit) });
+  else if (d.del) {
+    if (d.armed) { customs = customs.filter(l => l.id !== d.del); store.set('zd-levels', customs); renderCustoms(); }
+    else { d.armed = '1'; b.textContent = 'Confirm delete'; }
+  }
+  else if (d.tool) { edTool = d.tool; clearArmed = false; renderPane(); }
+  else if (d.pal) { edPal = d.pal; renderPane(); }
+  else if (d.ed) edAction(d.ed);
+  else if (d.shape !== undefined) { icon.shape = +d.shape; icon.useCustom = false; store.set('zd-icon', icon); renderIcons(); }
+  else if (d.c1 !== undefined || d.c2 !== undefined) { const k = d.c1 !== undefined ? 'c1' : 'c2'; icon[k] = +d[k]; store.set('zd-icon', icon); renderIcons(); }
+  else if (d.bind !== undefined) { listening = d.bind; renderBinds(); }
+  else if (d.up) uploadLevel(d.up);
+  else if (d.sort) { onSort = d.sort; renderOnline(); }
+  else if (d.oplay) { const it = findOnline(d.oplay); if (it) play({ id: 'o:' + it.key, name: it.name, code: it.code, hue: 200 }, 'online'); }
+  else if (d.olike) toggleLike(d.olike);
+  else if (d.ocopy) {
+    const it = findOnline(d.ocopy);
+    if (it) { customs.push({ id: 'c' + Date.now(), name: it.name, code: it.code }); store.set('zd-levels', customs); toast(`"${it.name}" copied to Your levels`); }
+  }
+  else if (d.odel) { // two clicks, like deleting your own level
+    if (d.armed) removeOnline(d.odel); else { d.armed = '1'; b.textContent = 'Confirm'; }
+  }
+});
+// Hovering or focusing a level row swaps the course scrolling behind the menu.
+const onRow = e => { const r = e.target.closest?.('[data-idx]'); if (r && +r.dataset.idx !== lvIndex) previewLevel(+r.dataset.idx); };
+$('board').addEventListener('pointerover', onRow);
+$('board').addEventListener('focusin', onRow);
+// Custom icon: shrink the upload to at most 128 px so it fits in browser storage.
+const customMsg = t => { $('customMsg').textContent = t; };
+$('customUpload').onclick = () => $('iconFile').click();
+$('customTile').onclick = () => {
+  if (!customImg.naturalWidth) return $('iconFile').click();
+  icon.useCustom = true; store.set('zd-icon', icon); renderIcons();
+};
+$('customRemove').onclick = () => {
+  delete icon.custom; icon.useCustom = false; customImg.removeAttribute('src'); store.set('zd-icon', icon); customMsg(''); renderIcons();
+};
+$('iconFile').addEventListener('change', async () => {
+  const f = $('iconFile').files[0]; $('iconFile').value = '';
+  if (!f) return;
+  if (!f.type.startsWith('image/')) return customMsg('That file isn\'t an image. Pick a PNG, JPG, GIF or WebP.');
+  if (f.size > 5e6) return customMsg('That image is over 5 MB. Pick a smaller one.');
+  let url;
+  try {
+    const bmp = await createImageBitmap(f), k = Math.min(1, 128 / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    url = c.toDataURL('image/png');
+  } catch (e) { return customMsg('Couldn\'t read that image. Try saving it as a PNG first.'); }
+  icon.custom = url; icon.useCustom = true; customImg.src = url;
+  customMsg(store.set('zd-icon', icon) ? '' : 'Your browser wouldn\'t save the image, so it will be gone after a reload.');
+});
+// A new level starts with a floor and a ceiling so there's something to build between.
+$('newLevel').onclick = () => openEditor({ id: 'c' + Date.now(), name: 'Untitled level', code: 'ICA2;r,-12,0,42,1;r,-12,9,42,1' });
+$('edDone').onclick = () => { if (editing.main) { saveMain(); go('levels'); } else { saveEditing(); go('create'); } };
+$('edReset').onclick = () => {
+  const before = JSON.stringify(edObjs); edObjs = levelObjects(LEVELS.find(l => l.id === editing.id).orig);
+  commit(before); sel = new Set(); edChanged(); renderPane(); toast('Original level loaded · Undo to go back · Save & exit to keep it');
+};
+$('lvEditMode').onclick = () => { editMain = !editMain; renderBoard(); };
+$('lvCopyEdits').onclick = () => {
+  const text = LEVELS.filter(l => overrides[l.id] !== undefined).map(l => `${l.id} ${l.name}: ${overrides[l.id]}`).join('\n');
+  navigator.clipboard.writeText(text).then(() => { $('devMsg').textContent = 'Copied. Paste it to Claude to make these the official levels.'; },
+    () => { const o = $('editsOut'); o.value = text; o.hidden = false; o.select(); $('devMsg').textContent = 'Press Ctrl+C to copy the selected text.'; });
+};
+$('edTest').onclick = () => { testFrom = null; play({ id: 'test', name: $('lvName').value.trim() || 'Untitled level', hue: 200 }, 'editor'); };
+$('edTestHere').onclick = () => { testFrom = Math.max(0, editCam + 0.3 * W / (S * edZoom)); play({ id: 'test', name: $('lvName').value.trim() || 'Untitled level', hue: 200 }, 'editor'); };
+$('edUndo').onclick = undo;
+$('edRedo').onclick = redo;
+$('edZoomIn').onclick = () => zoomBy(1.25);
+$('edZoomOut').onclick = () => zoomBy(0.8);
+$('edSwipe').onclick = () => { edSwipe = !edSwipe; renderPane(); };
+$('edGrid').onclick = () => { const i = GRIDS.findIndex(([v]) => v === edGrid); edGrid = GRIDS[(i + 1) % GRIDS.length][0]; renderPane(); };
+$('edShare').onclick = () => { $('code').value = encodeLevel(edObjs); $('codeMsg').textContent = ''; $('sharePop').hidden = !$('sharePop').hidden; };
+$('edClose').onclick = () => { $('sharePop').hidden = true; };
+$('edCopy').onclick = () => {
+  grant('broadcast');
+  navigator.clipboard.writeText($('code').value).then(() => $('codeMsg').textContent = 'Copied.',
+    () => { $('code').select(); $('codeMsg').textContent = 'Press Ctrl+C to copy the selected code.'; });
+};
+$('edLoad').onclick = () => {
+  const text = $('code').value.trim();
+  const objs = text.startsWith('ICA2') ? decodeLevel(text) : /[udf]\s*\d/i.test(text) ? pathToObjects(parse(text)) : [];
+  if (!objs.length) { $('codeMsg').textContent = 'That doesn\'t look like an ICA Dash level code. Check that you copied all of it.'; return; }
+  commit(JSON.stringify(edObjs)); edObjs = objs; sel = new Set(); edChanged(); renderPane();
+  $('codeMsg').textContent = `Loaded ${objs.length} objects. Undo brings your previous version back.`;
+};
+$('exitBtn').onclick = pauseGame;
+$('pResume').onclick = resumeGame;
+$('pRestart').onclick = restartGame;
+$('pExit').onclick = () => { show(null); exitPlay(); };
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); }); // switching tabs mid-level pauses
+$('doneReplay').onclick = () => play(cur, from);
+$('doneBack').onclick = exitPlay;
+$('bindReset').onclick = () => { keys = structuredClone(DEFAULT_KEYS); store.set('zd-keys', keys); listening = null; renderBinds(); };
+
+// ---------- online: account, cloud save, level browser ----------
+// Identity is the player's claude.ai sign-in (the `user` capability), so the game never handles passwords. Shared data lives in
+// this game's `db`: players/<id> (public player name + icon), uploads/<id> (that player's uploaded levels) and likes/<id> (the
+// levels they like). The publish rules let everyone read those and only the player write their own (the owner can moderate).
+// The cloud save is data/users/<id>/save, private to the player; with a passphrase it is encrypted in the browser before upload
+// (AES-256-GCM, key from PBKDF2-SHA-256), and the passphrase never leaves the device. Everything read from db is other people's
+// input: names go through esc(), level codes through decodeLevel()'s checks.
+let cloudTimer = 0, profTimer = 0, cloudBusy = Promise.resolve(), onSort = 'new';
+const acctMsg = t => { $('acctMsg').textContent = t; };
+const b64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function deriveKey(pass, salt) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+}
+// The derived key (never the passphrase) is remembered on this device so it doesn't have to be typed every visit.
+async function rememberKey(key, salt) { NET.key = key; NET.salt = salt; store.set('zd-savekey', { k: b64(new Uint8Array(await crypto.subtle.exportKey('raw', key))), s: b64(salt) }); }
+async function loadRememberedKey() {
+  const r = store.get('zd-savekey', null); if (!r) return;
+  try { NET.key = await crypto.subtle.importKey('raw', unb64(r.k), 'AES-GCM', true, ['encrypt', 'decrypt']); NET.salt = unb64(r.s); } catch (e) { NET.key = NET.salt = null; }
+}
+async function decryptSave(body, key) {
+  try { return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(body.iv) }, key, unb64(body.ct))); } catch (e) { return null; }
+}
+function netWriteFailed(e) {
+  const code = e && e.code;
+  if (code === 'invalid_argument') { NET.write = false; acctMsg('Your access to this game is view-only, so saving, uploading and likes are off.'); }
+  else if (code === 'quota_exceeded') acctMsg('The game\'s online storage is full. Ask the owner to clear out old levels.');
+  else acctMsg('Couldn\'t reach the online save just now; it will try again on your next change.');
+  renderNetAll();
+}
+function cloudDirty(k) {
+  if (!NET.ready || !NET.write) return;
+  if (k === 'zd-icon') pushProfile();
+  if (!NET.sync || NET.locked) return;
+  clearTimeout(cloudTimer); cloudTimer = setTimeout(() => cloudSave(false), 4000);
+}
+function pushProfile(name) { // public profile: player name + icon colours, debounced so clicking through swatches is one write
+  clearTimeout(profTimer);
+  profTimer = setTimeout(async () => {
+    const cur = NET.players[NET.uid] || {};
+    const body = { name: String(name ?? cur.name ?? NET.defaultName).slice(0, 20), icon: { shape: icon.shape, c1: icon.c1, c2: icon.c2 }, updated: Date.now() };
+    try { await NET.db.doc('players/' + NET.uid).set(body); } catch (e) { netWriteFailed(e); }
+  }, name !== undefined ? 0 : 1500);
+}
+function savePayload() {
+  const p = { v: 1, bests, ach, stats, customs, icon: { ...icon } };
+  if (JSON.stringify(p).length > 180000) delete p.icon.custom; // the uploaded icon picture is the first thing dropped from a too-big save
+  return p;
+}
+function cloudSave(manual) {
+  if (!NET.ready || !NET.write || NET.locked) return Promise.resolve();
+  cloudBusy = cloudBusy.then(async () => { // one write at a time to the save document
+    try {
+      const json = JSON.stringify(savePayload());
+      let body;
+      if (NET.key) {
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, NET.key, new TextEncoder().encode(json)));
+        body = { v: 1, enc: true, salt: b64(NET.salt), iv: b64(iv), ct: b64(ct), saved: Date.now() };
+      } else body = { v: 1, enc: false, data: json, saved: Date.now() };
+      if (JSON.stringify(body).length > 250000) { acctMsg('Your save is too big for the cloud. Delete a few custom levels you don\'t need.'); return; }
+      await NET.db.doc(`data/users/${NET.uid}/save`).set(body);
+      if (manual) acctMsg('Saved to the cloud' + (NET.key ? ', encrypted.' : '.'));
+    } catch (e) { netWriteFailed(e); }
+  });
+  return cloudBusy;
+}
+// Merge a cloud save into this device: best scores keep the higher value, achievements and levels are combined.
+function mergeSave(s) {
+  if (!s || typeof s !== 'object') return;
+  for (const [k, v] of Object.entries(s.bests || {})) if (typeof v === 'number' && v > (bests[k] || 0)) bests[k] = Math.min(100, Math.max(0, Math.floor(v)));
+  for (const k of Object.keys(s.ach || {})) if (ACH.some(a => a.id === k)) ach[k] = true;
+  stats.attempts = Math.max(stats.attempts, Math.floor(+s.stats?.attempts || 0));
+  for (const l of Array.isArray(s.customs) ? s.customs : []) {
+    if (l && typeof l.id === 'string' && typeof l.code === 'string' && !customs.some(c => c.id === l.id))
+      customs.push({ id: l.id.slice(0, 40), name: String(l.name || 'Untitled level').slice(0, 40), code: l.code });
+  }
+  if (s.icon && !localStorage.getItem('zd-icon')) { // a device that never picked an icon takes the saved one
+    const i = s.icon; if (SHAPES[i.shape] && COLORS[i.c1] && COLORS[i.c2]) icon = { shape: i.shape, c1: i.c1, c2: i.c2, ...(typeof i.custom === 'string' && i.custom.startsWith('data:image/png') ? { custom: i.custom, useCustom: !!i.useCustom } : {}) };
+    if (icon.custom) customImg.src = icon.custom;
+  }
+  store.set('zd-best', bests); store.set('zd-ach', ach); store.set('zd-stats', stats); store.set('zd-levels', customs); store.set('zd-icon', icon);
+  renderHome();
+}
+async function cloudLoad() {
+  let snap; try { snap = await NET.db.doc(`data/users/${NET.uid}/save`).get(); } catch (e) { return; }
+  if (!snap.exists) { if (NET.sync) cloudSave(false); return; } // first visit with an account: upload what this device has
+  const body = snap.data(); let json = null;
+  if (body.enc) {
+    NET.cloudEnc = body;
+    if (NET.key && NET.salt && b64(NET.salt) === body.salt) json = await decryptSave(body, NET.key);
+    if (json === null) { NET.locked = true; acctMsg('Your cloud save is encrypted. Enter its passphrase and press Unlock cloud save.'); renderNetAll(); return; }
+  } else json = typeof body.data === 'string' ? body.data : null;
+  try { mergeSave(JSON.parse(json)); } catch (e) { /* unreadable save: keep this device's data */ }
+  NET.locked = false; renderNetAll();
+}
+async function netInit() {
+  if (!window.claude?.use) { NET.reason = 'host'; return renderNetAll(); }
+  let db = null, user = null;
+  try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) { /* treated as signed out */ }
+  NET.uid = user ? await user.id() : null;
+  if (!db || !NET.uid) { NET.reason = 'signin'; return renderNetAll(); }
+  NET.db = db; NET.owner = await user.isOwner();
+  NET.write = (await user.can('data.write')) !== false; // null = the platform didn't say: try, and let a refused write decide
+  NET.defaultName = ((await user.name()) || 'Player').slice(0, 20);
+  NET.sync = store.get('zd-sync', true);
+  await loadRememberedKey();
+  NET.ready = true;
+  const watch = (col) => db.collection(col).onSnapshot(snap => {
+    NET[col] = Object.fromEntries(snap.docs.map(d => [d.id, d.data()])); NET.loaded[col] = true;
+    if (col === 'players' && !NET.profileChecked && NET.write) { NET.profileChecked = true; if (!NET.players[NET.uid]) pushProfile(NET.defaultName); }
+    renderNetAll();
+  }, e => { NET.slow = true; renderNetAll(); });
+  watch('players'); watch('uploads'); watch('likes');
+  setTimeout(() => { if (!NET.loaded.uploads) { NET.slow = true; renderNetAll(); } }, 10000);
+  await cloudLoad();
+  renderNetAll();
+}
+function onlineItems() {
+  const items = [], counts = new Map();
+  for (const doc of Object.values(NET.likes)) for (const k of Array.isArray(doc?.ids) ? doc.ids : []) if (typeof k === 'string') counts.set(k, (counts.get(k) || 0) + 1);
+  for (const [author, doc] of Object.entries(NET.uploads)) for (const l of Array.isArray(doc?.levels) ? doc.levels : []) {
+    if (!l || typeof l.id !== 'string' || typeof l.code !== 'string' || l.code.length > 60000) continue;
+    const key = author + ':' + l.id;
+    items.push({ key, author, id: l.id, name: String(l.name || 'Untitled level').slice(0, 40), code: l.code, created: +l.created || 0, likes: counts.get(key) || 0 });
+  }
+  return items;
+}
+const playerName = id => String(NET.players[id]?.name || 'Player').slice(0, 20);
+function renderOnline() {
+  if ($('online').hidden) return;
+  document.querySelectorAll('[data-sort]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sort === onSort)));
+  if (!NET.ready) {
+    $('onMsg').textContent = NET.reason === 'host' ? 'Online levels work when this game is opened on claude.ai.' : NET.reason === 'signin'
+      ? 'Sign in to claude.ai to browse and upload online levels.' : 'Connecting…';
+    $('onList').innerHTML = ''; $('onCount').textContent = ''; return;
+  }
+  const q = $('onSearch').value.trim().toLowerCase(), mine = new Set(Array.isArray(NET.likes[NET.uid]?.ids) ? NET.likes[NET.uid].ids : []);
+  let items = onlineItems();
+  $('onCount').textContent = `${items.length} level${items.length === 1 ? '' : 's'} online`;
+  if (q) items = items.filter(it => it.name.toLowerCase().includes(q) || playerName(it.author).toLowerCase().includes(q));
+  if (onSort === 'mine') items = items.filter(it => it.author === NET.uid);
+  items.sort(onSort === 'liked' ? (a, b) => b.likes - a.likes || b.created - a.created : (a, b) => b.created - a.created);
+  $('onMsg').textContent = (NET.slow && !NET.loaded.uploads ? 'Online levels can\'t be reached yet. ' : '')
+    + (NET.write ? 'Upload your own from Create → Your levels.' : 'You can play online levels; uploading and likes need Contributor access to this game.');
+  $('onList').innerHTML = items.slice(0, 100).map(it => {
+    let facts;
+    try { const w = worldFor(it.code); facts = `<span>${Math.round(w.end / B)} blk</span><span>${Math.round(duration(w))} s</span>`; } catch (e) { facts = '<span>Unreadable level</span>'; }
+    const own = it.author === NET.uid, key = esc(it.key), liked = mine.has(it.key);
+    return `<div class="row"><div><div class="name">${esc(it.name)}</div><div class="facts"><span>by ${esc(playerName(it.author))}${own ? ' (you)' : ''}</span>${facts}<span>♥ ${it.likes}</span><span>Best ${bests['o:' + it.key] || 0}%</span></div></div>
+      <div class="acts"><button class="primary" data-oplay="${key}">▶ Play</button>${NET.write && !own ? `<button class="ghost" data-olike="${key}" aria-pressed="${liked}">${liked ? '♥ Liked' : '♡ Like'}</button>` : ''}<button class="ghost" data-ocopy="${key}">Copy to my levels</button>${NET.write && (own || NET.owner) ? `<button class="danger" data-odel="${key}">${own ? 'Unpublish' : 'Remove'}</button>` : ''}</div></div>`;
+  }).join('') || `<p class="note">${onSort === 'mine' ? 'You haven\'t uploaded any levels yet.' : q ? 'No levels match that search.' : 'No levels online yet. Be the first: Create → Your levels → Upload.'}</p>`;
+}
+function renderAccount() {
+  const st = $('acctStatus');
+  if (!NET.ready) {
+    st.textContent = NET.reason === 'host' ? 'Accounts work when this game is opened on claude.ai.' : NET.reason === 'signin'
+      ? 'Sign in to claude.ai to get an account here: cloud save and online levels.' : 'Checking your sign-in…';
+    $('acctBody').hidden = true; return;
+  }
+  $('acctBody').hidden = false;
+  st.textContent = NET.write ? `Signed in with your claude.ai account${NET.owner ? ' (you own this game)' : ''}. No game password needed.`
+    : 'Signed in, view-only: you can play online levels, but saving, uploading and likes are off.';
+  if (document.activeElement !== $('acctName')) $('acctName').value = NET.players[NET.uid]?.name || NET.defaultName;
+  $('acctName').disabled = !NET.write; $('acctSync').checked = NET.sync; $('acctSync').disabled = !NET.write;
+  $('acctEncState').textContent = NET.locked ? 'Your cloud save is encrypted: enter its passphrase to unlock it'
+    : NET.key ? 'Encrypted with your passphrase (AES-256); the passphrase never leaves your devices' : 'Not encrypted, but still private to you';
+  $('acctEncrypt').hidden = NET.locked || !NET.write; $('acctEncrypt').textContent = NET.key ? 'Change passphrase' : 'Encrypt with passphrase';
+  $('acctUnlock').hidden = !NET.locked; $('acctDecrypt').hidden = !NET.key || NET.locked || !NET.write;
+  $('acctSaveNow').hidden = NET.locked || !NET.write || !NET.sync;
+}
+function renderNetAll() {
+  renderAccount(); renderOnline(); renderHome();
+  if (!$('create').hidden) renderCustoms();
+}
+const findOnline = key => onlineItems().find(it => it.key === key);
+async function uploadLevel(id) {
+  const l = customs.find(c => c.id === id); if (!l || !NET.ready || !NET.write) return;
+  const objs = levelObjects(l.code), code = encodeLevel(objs);
+  if (objs.length < 3) return toast('Add a few objects before uploading.');
+  if (code.length > 60000) return toast('This level is too big to upload (its code is over 60 KB).');
+  const prev = NET.uploads[NET.uid], levels = (Array.isArray(prev?.levels) ? prev.levels : []).filter(x => x.id !== l.id);
+  if (levels.length >= 25) return toast('You can have 25 levels online. Unpublish one first.');
+  const old = (prev?.levels || []).find(x => x.id === l.id);
+  levels.push({ id: l.id, name: l.name.slice(0, 40), code, created: old?.created || Date.now() });
+  if (JSON.stringify({ levels }).length > 250000) return toast('Your online space is full. Unpublish a level first.');
+  try { await NET.db.doc('uploads/' + NET.uid).set({ levels, updated: Date.now() }); toast(`${old ? 'Updated' : 'Uploaded'} "${l.name}"`); } catch (e) { netWriteFailed(e); }
+}
+async function toggleLike(key) {
+  const ids = Array.isArray(NET.likes[NET.uid]?.ids) ? NET.likes[NET.uid].ids.filter(k => typeof k === 'string') : [], i = ids.indexOf(key);
+  if (i >= 0) ids.splice(i, 1); else ids.push(key);
+  try { await NET.db.doc('likes/' + NET.uid).set({ ids: ids.slice(-500) }); } catch (e) { netWriteFailed(e); }
+}
+async function removeOnline(key) {
+  const it = findOnline(key); if (!it) return;
+  const doc = NET.uploads[it.author] || {}, levels = (Array.isArray(doc.levels) ? doc.levels : []).filter(l => l.id !== it.id);
+  try { await NET.db.doc('uploads/' + it.author).set({ levels, updated: Date.now() }); toast(`Removed "${it.name}"`); } catch (e) { netWriteFailed(e); }
+}
+$('onSearch').addEventListener('input', renderOnline);
+$('acctName').addEventListener('change', () => {
+  const n = $('acctName').value.trim().slice(0, 20);
+  if (!n) { $('acctName').value = NET.players[NET.uid]?.name || NET.defaultName; return; }
+  pushProfile(n); acctMsg('Player name saved.');
+});
+$('acctSync').addEventListener('input', () => { NET.sync = $('acctSync').checked; store.set('zd-sync', NET.sync); if (NET.sync) cloudSave(true); renderAccount(); });
+$('acctSaveNow').onclick = () => cloudSave(true);
+$('acctEncrypt').onclick = async () => {
+  const pass = $('acctPass').value;
+  if (pass.length < 8) return acctMsg('Use a passphrase of at least 8 characters. Write it down: without it, an encrypted save can\'t be opened on a new device.');
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  await rememberKey(await deriveKey(pass, salt), salt);
+  $('acctPass').value = ''; renderAccount(); await cloudSave(true);
+};
+$('acctUnlock').onclick = async () => {
+  const pass = $('acctPass').value; if (!pass || !NET.cloudEnc) return;
+  const salt = unb64(NET.cloudEnc.salt), key = await deriveKey(pass, salt), json = await decryptSave(NET.cloudEnc, key);
+  if (json === null) return acctMsg('That passphrase doesn\'t open this save. Check it and try again.');
+  await rememberKey(key, salt); $('acctPass').value = ''; NET.locked = false;
+  try { mergeSave(JSON.parse(json)); } catch (e) { /* keep this device's data */ }
+  acctMsg('Cloud save unlocked and combined with this device.'); renderNetAll();
+};
+$('acctDecrypt').onclick = async () => {
+  NET.key = NET.salt = null; try { localStorage.removeItem('zd-savekey'); } catch (e) { /* nothing stored */ }
+  renderAccount(); await cloudSave(true);
+};
+
+// ---------- input ----------
+const inGame = () => mode === 'play' || mode === 'dead';
+addEventListener('keydown', e => {
+  if (listening !== null) {
+    e.preventDefault();
+    if (listening === 'exit') keys.exit = e.code;
+    else keys.climb[+listening] = e.code === 'Escape' ? '' : e.code;
+    store.set('zd-keys', keys); listening = null; renderBinds(); return;
+  }
+  if (unlocked && e.code === 'Tab' && !e.target.closest?.('input[type=text], input[type=search], input[type=password], textarea')) { e.preventDefault(); return toggleHackMenu(); }
+  if (e.code === 'Escape' && !$('hackMenu').hidden) { e.preventDefault(); return toggleHackMenu(false); }
+  if (mode === 'pause' && (e.code === keys.exit || e.code === 'Escape')) { e.preventDefault(); return resumeGame(); }
+  if (mode === 'edit' && !e.target.closest?.('input, textarea')) return editorKey(e);
+  if (e.code === 'Escape' && mode === 'menu') { // Esc backs out of any menu screen to home
+    const open = document.querySelector('.screen:not([hidden])');
+    if (open && open.id !== 'home' && open.id !== 'done') { e.preventDefault(); return go('home'); }
+  }
+  if (!$('levels').hidden && (e.code === 'ArrowDown' || e.code === 'ArrowUp')) {
+    e.preventDefault();
+    const rows = [...$('board').querySelectorAll('button:not(:disabled)')], k = rows.findIndex(r => +r.dataset.idx === lvIndex);
+    rows[(k + (e.code === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus(); return;
+  }
+  if (!inGame()) return;
+  if (e.code === keys.exit) { e.preventDefault(); return pauseGame(); }
+  if (keys.climb.includes(e.code)) { e.preventDefault(); if (!e.repeat) setHeld(true, e); return; }
+  if (hacks.practice && mode === 'play' && !e.repeat) { // practice keys: Z places a checkpoint here, X removes the newest
+    if (e.code === 'KeyZ') { checkpoints.push(stateOf(p)); toast(`Checkpoint ${checkpoints.length} placed`); }
+    else if (e.code === 'KeyX' && checkpoints.length) { checkpoints.pop(); toast(checkpoints.length ? `Back to checkpoint ${checkpoints.length}` : 'No checkpoints left'); }
+  }
+});
+addEventListener('keyup', e => { if (inGame() && keys.climb.includes(e.code)) setHeld(false, e); });
+function bindCanvas(c) {
+  c.addEventListener('pointerdown', e => {
+    if (inGame()) { e.preventDefault(); setHeld(true, e); return; }
+    if (mode !== 'edit') return;
+    try { c.setPointerCapture(e.pointerId); } catch (err) { /* drag still works without capture */ } clearArmed = false;
+    const [bx, by] = toBlocks(e), base = { sx: e.clientX, sy: e.clientY, cam: editCam, camY: edCamY, moved: false, bx, by };
+    if (e.button === 1 || e.button === 2) { pdrag = { ...base, kind: 'pan' }; return; } // middle or right drag always pans
+    if (edTool === 'edit') {
+      const o = objectAt(bx, by);
+      if (o && e.shiftKey) { if (sel.has(o)) sel.delete(o); else sel.add(o); renderPane(); return; }
+      if (o) { if (!sel.has(o)) { sel = new Set([o]); renderPane(); } pdrag = { ...base, kind: 'move', before: JSON.stringify(edObjs), items: [...sel].map(q => [q, q.x, q.y]) }; }
+      else { if (!e.shiftKey && sel.size) { sel = new Set(); renderPane(); } pdrag = { ...base, kind: 'pan' }; }
+      return;
+    }
+    if (edSwipe) { pdrag = { ...base, kind: 'paint', before: JSON.stringify(edObjs) }; pdrag.changed = edTool === 'build' ? placeAt(bx, by) : removeAt(bx, by); }
+    else pdrag = { ...base, kind: 'tap' };
+  });
+  c.addEventListener('pointermove', e => {
+    if (mode !== 'edit') return;
+    const [bx, by] = toBlocks(e); hoverCell = [bx, by];
+    if (!pdrag) return;
+    const dx = e.clientX - pdrag.sx, dy = e.clientY - pdrag.sy;
+    if (Math.hypot(dx, dy) > 6) pdrag.moved = true;
+    if (!pdrag.moved) return;
+    const k = S * edZoom;
+    if (pdrag.kind === 'pan' || pdrag.kind === 'tap') { editCam = pdrag.cam - dx / k; edCamY = pdrag.camY - dy / k; clampEd(); }
+    else if (pdrag.kind === 'paint') { if (edTool === 'build' ? placeAt(bx, by) : removeAt(bx, by)) pdrag.changed = true; }
+    else if (pdrag.kind === 'move') {
+      const q = v => edGrid ? Math.round(v / edGrid) * edGrid : +v.toFixed(2); // free grid: follow the pointer exactly
+      const mx = q(bx - pdrag.bx), my = q(by - pdrag.by);
+      for (const [o, x, y] of pdrag.items) { o.x = tidy(x + mx); o.y = tidy(y + my); }
+      edChanged();
+    }
+  });
+  c.addEventListener('pointerup', () => {
+    if (mode !== 'edit' || !pdrag) return;
+    const d = pdrag; pdrag = null;
+    if (d.kind === 'tap' && !d.moved) { const before = JSON.stringify(edObjs); if (edTool === 'build' ? placeAt(d.bx, d.by) : removeAt(d.bx, d.by)) commit(before); }
+    if ((d.kind === 'paint' && d.changed) || (d.kind === 'move' && d.moved)) commit(d.before);
+    renderPane();
+  });
+  c.addEventListener('pointerleave', () => { hoverCell = null; });
+  c.addEventListener('contextmenu', e => { if (mode === 'edit') e.preventDefault(); });
+  c.addEventListener('wheel', e => {
+    if (mode !== 'edit') return;
+    e.preventDefault();
+    const r = c.getBoundingClientRect(), k = S * edZoom;
+    if (e.ctrlKey) zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top);
+    else if (e.shiftKey) { edCamY += e.deltaY / k; clampEd(); }
+    else { editCam += (e.deltaX + e.deltaY) / k; clampEd(); }
+  }, { passive: false });
+}
+bindCanvas(cv);
+if (hacks.uncap) makeCanvas(true);
+addEventListener('pointerup', e => { if (inGame()) setHeld(false, e); });
+addEventListener('pointercancel', e => { if (inGame()) setHeld(false, e); });
+addEventListener('blur', () => { if (inGame()) setHeld(false); });
+
+renderBinds(); renderHacks(); renderHome();
+netInit(); // connects the account and online levels once the platform answers; the game works offline without it
+document.fonts?.ready.then(renderHome);
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
