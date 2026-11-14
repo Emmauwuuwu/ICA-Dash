@@ -18,8 +18,9 @@ Keybinds can be changed in Settings.
 
 - **15 levels** from Easy to Extreme, each unlocked by beating the one before
 - **Portals** for speed (0.5x–4x), mini, upside down and dual
+- **D blocks** you slide along instead of crashing, and **dash orbs** (green, and pink that flips gravity) that send you straight at their angle while you hold
 - **Achievements** that unlock 14 icon shapes and 12 colours, plus custom image icons
-- **Level editor** with build, edit and delete tools, slopes, saws and portals, a fine grid, undo/redo and playtesting from any point
+- **Level editor** with build, edit and delete tools, slopes, saws, portals, D blocks and dash orbs, a fine grid, undo/redo and playtesting from any point
 - **Share codes**: copy a level's code from the editor and paste someone else's to play it
 - **Practice tools** in a hidden menu: practice mode with checkpoints, show path, start position, hitboxes and more
 
