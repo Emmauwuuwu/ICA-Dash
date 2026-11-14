@@ -11,6 +11,7 @@ A one-button wave game that runs in your browser. Hold to climb at 45°, let go 
 | Climb (hold) | Space, ↑, W, mouse button or touch |
 | Dive | Let go |
 | Pause / resume | Esc (also the II button) |
+| Restart | R |
 
 Keybinds can be changed in Settings.
 
