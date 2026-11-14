@@ -589,11 +589,23 @@ const PORTALS = { m: ['#ff6bd6', 'MINI', 'BIG'], v: ['#4dff9a', 'FLIP', 'UPRIGHT
 // Share codes are "ICA2;" plus one comma-separated object per ";". Older path codes (u/d/f tokens) are converted on load.
 const SAW_R = 0.6, SAW_HIT = SAW_R * 0.9; // saws are drawn at SAW_R; their hitbox is 10% smaller
 const ORB_R = 0.45, ORB_HIT = 0.6, ORB_MAX = 75; // dash orbs: drawn radius, touch radius, steepest angle
+//   q  jump orb {x, y, c} (centre): press while touching it. c: y yellow, p pink, r red (launch), b blue (flip gravity),
+//      g green (flip gravity and launch), k black (slam toward the ground). Cube only; the wave ignores them, as in GD.
+//   j  jump pad {x, y, o, c}: in its cell, sitting on side o (0 floor, 1 left wall, 2 ceiling, 3 right wall); touching it
+//      launches you. c: y yellow, p pink, r red, b blue (flip gravity), s spider (flip and snap to the surface opposite).
+// v: launch speed in GD units per frame, the same scale as the cube's 11.180032 jump (blue: speed toward the new ground).
+// shortcut: these strengths are estimates of GD's values, not measured yet; calibrate them from GD recordings like the jump.
+const RING = { y: { v: 11.2, col: '#ffd84a', name: 'Yellow orb' }, p: { v: 8, col: '#ff5fe6', name: 'Pink orb' }, r: { v: 15.6, col: '#ff5a2e', name: 'Red orb' },
+  b: { v: 6, col: '#3fe6ff', name: 'Blue orb', flip: true }, g: { v: 11.2, col: '#56ff4a', name: 'Green orb', flip: true }, k: { v: 15, col: '#14141c', name: 'Black orb' } };
+const PAD = { y: { v: 16, col: '#ffd84a', name: 'Yellow pad' }, p: { v: 10.4, col: '#ff5fe6', name: 'Pink pad' }, r: { v: 20, col: '#ff5a2e', name: 'Red pad' },
+  b: { v: 6, col: '#3fe6ff', name: 'Blue pad', flip: true }, s: { col: '#b04dff', name: 'Spider pad', spider: true } };
+const padBox = o => [[o.x + 0.1, o.y + 0.8, o.x + 0.9, o.y + 1], [o.x, o.y + 0.1, o.x + 0.2, o.y + 0.9], [o.x + 0.1, o.y, o.x + 0.9, o.y + 0.2], [o.x + 0.8, o.y + 0.1, o.x + 1, o.y + 0.9]][o.o];
 function encodeLevel(objs) {
   const n = v => +v.toFixed(3), D = o => o.d ? ',1' : '';
   return 'ICA2;' + objs.map(o => o.t === 'r' ? `r,${n(o.x)},${n(o.y)},${n(o.w)},${n(o.h)}${D(o)}`
     : o.t === 't' ? `t,${n(o.x)},${n(o.y)},${n(o.w)},${n(o.h)},${o.o}${D(o)}`
     : o.t === 's' ? `s,${n(o.x)},${n(o.y)}` : o.t === 'd' ? `d,${n(o.x)},${n(o.y)},${o.a},${o.f}` : o.t === 'k' ? `k,${n(o.x)},${n(o.y)},${o.o}`
+    : o.t === 'q' ? `q,${n(o.x)},${n(o.y)},${o.c}` : o.t === 'j' ? `j,${n(o.x)},${n(o.y)},${o.o},${o.c}`
     : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`).join(';');
 }
 // Pasted codes are untrusted: every field is checked, sizes are capped, and anything malformed is skipped.
@@ -611,6 +623,8 @@ function decodeLevel(code) {
     } else if (t === 's' && okPos(a, b)) objs.push({ t, x: a, y: b });
     else if (t === 'd' && okPos(a, b)) objs.push({ t, x: a, y: b, a: Math.max(-ORB_MAX, Math.min(ORB_MAX, Math.round(c) || 0)), f: d ? 1 : 0 });
     else if (t === 'k' && okPos(a, b)) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4 });
+    else if (t === 'q' && okPos(a, b) && RING[f[3]]) objs.push({ t, x: a, y: b, c: f[3] });
+    else if (t === 'j' && okPos(a, b) && PAD[f[4]]) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4, c: f[4] });
     else if (t === 'p' && okPos(a, b) && c > 0 && c <= 40 && ['S', 'm', 'v', 'w', 'g'].includes(f[4])) {
       const v = Math.round(num(f[5])) || 0;
       objs.push({ t, x: a, y: b, h: c, k: f[4], v: f[4] === 'S' ? Math.min(4, Math.max(0, v)) : v ? 1 : 0 });
@@ -664,13 +678,14 @@ function buildWorld(objs) {
   let right = -Infinity;
   for (const o of objs) {
     if (o.t === 'p') continue;
-    if (o.t === 'd') { right = Math.max(right, o.x + ORB_R); continue; }
+    if (o.t === 'd' || o.t === 'q' || o.t === 'j') { right = Math.max(right, o.x + 1); continue; }
     const l = o.t === 's' ? o.x - SAW_R : o.x, r = o.t === 's' ? o.x + SAW_R : o.t === 'k' ? o.x + 1 : o.x + o.w;
     for (let c = Math.floor(l); c <= Math.floor(r); c++) { let a = cols.get(c); if (!a) cols.set(c, a = []); a.push(o); }
     right = Math.max(right, r);
   }
-  const portals = objs.filter(o => o.t === 'p').sort((a, b) => a.x - b.x), orbs = objs.filter(o => o.t === 'd').sort((a, b) => a.x - b.x);
-  return { objs, cols, portals, orbs, end: ((Number.isFinite(right) ? right : 7) + 3) * B };
+  const byX = t => objs.filter(o => t.includes(o.t)).sort((a, b) => a.x - b.x);
+  const portals = byX('p'), orbs = byX('dq'), pads = byX('j'); // orbs: dash orbs and jump orbs share one list (one press, one orb)
+  return { objs, cols, portals, orbs, pads, end: ((Number.isFinite(right) ? right : 7) + 3) * B };
 }
 // Is a point (in blocks) strictly inside a solid?
 function inside(o, px, py) {
@@ -710,17 +725,51 @@ function settle(wd, x, y, r, pushUp, push) {
   for (let i = 0; i < 14; i++) { const m = (free + hit) / 2; if (hitKind(wd, x, m, r)) hit = m; else free = m; }
   return free;
 }
-// Dash orbs: the index of an orb the wave (or its dual twin) touches, skipping the one it last used; -1 if none.
+// Orbs: the index of an orb the player (or its dual twin) touches, skipping the one it last used; -1 if none.
+// The wave only uses dash orbs.
 function orbAt(wd, s, r) {
   const bx = s.x / B, br = r / B;
   for (let i = 0; i < wd.orbs.length; i++) {
-    const o = wd.orbs[i]; if (o.x > bx + 2) break; if (o.x < bx - 2 || i === s.lastOrb) continue;
+    const o = wd.orbs[i]; if (o.x > bx + 2) break; if (o.x < bx - 2 || i === s.lastOrb || (o.t === 'q' && !s.cube)) continue;
     for (const y of s.dual ? [s.y, s.y2] : [s.y]) if (Math.hypot(Math.max(0, Math.abs(o.x - bx) - br), Math.max(0, Math.abs(o.y - y / B) - br)) < ORB_HIT) return i;
   }
   return -1;
 }
 // A hold uses at most one orb (letting go frees the next press); the dash holds its angle until release.
 function dashStart(wd, s, i) { const o = wd.orbs[i]; s.lastOrb = i; s.spent = true; s.dash = Math.tan(o.a * Math.PI / 180); if (o.f) s.flip = !s.flip; }
+// Cube launches from orbs and pads: v (GD units per frame) scaled like the jump (size, game speed, GD's step loss).
+// Positive v sends the cube away from its ground; the dual twin always gets the mirror image.
+function launch(s, v) {
+  const gs = s.flip ? -1 : 1, sp = (Math.abs(v) * GD * (s.mini ? 0.8 : 1) - GD_STEP_LOSS) * JUMP_AT_SPEED[s.speedI] * Math.sign(v);
+  s.vy = -gs * sp; s.vy2 = gs * sp; s.gnd = s.gnd2 = false; s.dash = null;
+}
+function ringUse(wd, s, i) { // a jump orb: uses up the press
+  const o = wd.orbs[i], k = RING[o.c]; s.lastOrb = i; s.spent = true;
+  if (k.flip) s.flip = !s.flip;
+  launch(s, o.c === 'b' ? -k.v : o.c === 'k' ? -k.v : k.v); // blue: toward the new ground; black: slammed toward the ground
+}
+// Pads: the index of a pad the cube's main box touches (not the one it just used), or -1.
+function padAt(wd, s, h) {
+  const bx = s.x / B, bh = h / B;
+  for (let i = 0; i < wd.pads.length; i++) {
+    const o = wd.pads[i]; if (o.x > bx + 2) break; if (o.x < bx - 2 || i === s.lastPad) continue;
+    const [l, t, r, b] = padBox(o);
+    for (const y of s.dual ? [s.y, s.y2] : [s.y]) { const by = y / B; if (bx + bh > l && bx - bh < r && by + bh > t && by - bh < b) return i; }
+  }
+  return -1;
+}
+function padUse(wd, s, i, h) {
+  const o = wd.pads[i], k = PAD[o.c]; s.lastPad = i;
+  if (k.spider) { // flip, and snap straight to the surface on the other side (or the screen edge)
+    s.flip = !s.flip; const gs = s.flip ? -1 : 1;
+    const sy = surfaceNear(wd, s.x, s.y + gs * h, h, gs, 0, Infinity);
+    s.y = (sy ?? (gs > 0 ? VH : 0)) - gs * h; s.vy = 0; s.gnd = true; s.dash = null;
+    if (s.dual) { s.y2 = VH - s.y; s.vy2 = 0; s.gnd2 = false; }
+    return;
+  }
+  if (k.flip) s.flip = !s.flip;
+  launch(s, k.flip ? -k.v : k.v);
+}
 // Seconds to finish, following the speed portals.
 function duration(wd) {
   let t = 0, i = 1, x = 0;
@@ -863,7 +912,7 @@ const inputs = []; // [timestamp, held] queued so each press lands on the exact 
 const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
 let checkpoints = [], spawnCache = null, plan = [];
 const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
-  lastOrb: q.lastOrb, cube: q.cube, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2 });
+  lastOrb: q.lastOrb, lastPad: q.lastPad, cube: q.cube, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2 });
 // ---------- cube ----------
 // Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), with GD's player step
 // scaled by 0.9 (so 54 "frames" per second). That makes a jump 2.17 blocks high and 0.432 s long, peaking 2.24 blocks
@@ -958,7 +1007,10 @@ function tick1(wd, s, hold, dt, fx) {
   };
   if (s.cube) {
     const gs = s.flip ? -1 : 1, h = cubeHalf(s);
-    if (hold && !s.spent) { const oi = orbAt(wd, s, h); if (oi >= 0) { dashStart(wd, s, oi); s.gnd = s.gnd2 = false; fx?.orb(); } } // an orb takes the press before a jump
+    if (hold && !s.spent) { // an orb takes the press before a jump
+      const oi = orbAt(wd, s, h);
+      if (oi >= 0) { if (wd.orbs[oi].t === 'd') { dashStart(wd, s, oi); s.gnd = s.gnd2 = false; } else ringUse(wd, s, oi); fx?.orb(); }
+    }
     if (hold && s.dash == null) { // holding on the ground jumps (a jump uses up the press, so it won't also take an orb)
       const jv = (s.mini ? CUBE_JUMP_MINI : CUBE_JUMP) * JUMP_AT_SPEED[s.speedI];
       if (s.gnd) { s.vy = -gs * jv; s.gnd = false; s.spent = true; }
@@ -970,7 +1022,9 @@ function tick1(wd, s, hold, dt, fx) {
     if (!s.cube) return; // switched to wave: it takes over next tick
     const h2 = cubeHalf(s), g2 = s.flip ? -1 : 1;
     const ok = cubeBody(wd, s, 1, g2, h2, dt, v) && (!s.dual || cubeBody(wd, s, 2, -g2, h2, dt, v));
-    return ok ? undefined : 'dead';
+    if (!ok) return 'dead';
+    const pi = padAt(wd, s, h2); if (pi >= 0) { padUse(wd, s, pi, h2); fx?.orb(); } // pads fire on touch, no press needed
+    return;
   }
   const dir = (hold ? -1 : 1) * (s.flip ? -1 : 1); // upside down: holding dives instead of climbs
   if (dir !== s.dir) { if (s.dash == null) fx?.corner(); s.dir = dir; } // trail keeps only the corners
@@ -1077,7 +1131,7 @@ const FX = {
 };
 function reset() {
   p = { x: 0, y: VH / 2, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
-    dash: null, spent: false, lastOrb: -1, tk: 0, cube: false, vy: 0, vy2: 0, gnd: false, gnd2: false, rot: 0 };
+    dash: null, spent: false, lastOrb: -1, lastPad: -1, tk: 0, cube: false, vy: 0, vy2: 0, gnd: false, gnd2: false, rot: 0 };
   trail = []; trail2 = []; parts = [];
   const cp = hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
@@ -1221,7 +1275,35 @@ function drawPortal(g, o, u, label = true) {
   if (label) { g.fillStyle = col; g.font = `700 ${Math.round(u * 0.22)}px "Space Mono", monospace`; g.textAlign = 'center'; g.fillText(text, x, y - u * 0.14); }
 }
 const D_COL = '#5dffc4', ORB_COL = ['#45ff6e', '#ff4fd8']; // D block edge; dash orb, pink dash orb
+// Jump orbs (original look): a coloured core in a white ring with a pulsing halo; flip orbs get a broken ring.
+function drawRing(g, o, u, t, used) {
+  const k = RING[o.c], x = o.x * u, y = o.y * u, r = ORB_R * u, pulse = 1 + 0.08 * Math.sin(t * 7);
+  g.globalAlpha = used ? 0.35 : 1;
+  g.beginPath(); g.arc(x, y, r * 1.45 * pulse, 0, 7); g.strokeStyle = o.c === 'k' ? '#9aa0b8' : k.col; g.lineWidth = Math.max(1, u / 24); g.stroke();
+  g.beginPath(); g.arc(x, y, r * 1.15, 0, 7); g.strokeStyle = '#fff'; g.lineWidth = Math.max(1.5, u / 14);
+  if (k.flip) g.setLineDash([u / 7, u / 11]); g.stroke(); g.setLineDash([]);
+  const grd = g.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+  grd.addColorStop(0, o.c === 'k' ? '#4a4a5a' : '#fff'); grd.addColorStop(0.35, k.col); grd.addColorStop(1, k.col);
+  g.beginPath(); g.arc(x, y, r * 0.85, 0, 7); g.fillStyle = grd; g.fill();
+  g.globalAlpha = 1;
+}
+// Jump pads (original look): a glowing slab on its side of the cell with a chevron pointing the way it launches.
+function drawPad(g, o, u, t, used) {
+  const k = PAD[o.c], [l, tp, r, b] = padBox(o), up = [[0, -1], [1, 0], [0, 1], [-1, 0]][o.o];
+  g.globalAlpha = used ? 0.45 : 1;
+  g.fillStyle = k.col; g.strokeStyle = '#fff'; g.lineWidth = Math.max(1, u / 26);
+  g.beginPath(); g.roundRect(l * u, tp * u, (r - l) * u, (b - tp) * u, u * 0.06); g.fill(); g.stroke();
+  const cx = (l + r) / 2 * u + up[0] * u * 0.32, cy = (tp + b) / 2 * u + up[1] * u * 0.32, s = u * 0.16, bob = Math.sin(t * 6) * u * 0.03;
+  for (const d of k.spider ? [0, 0.22] : [0]) {
+    const px = cx + up[0] * (bob + d * u), py = cy + up[1] * (bob + d * u);
+    g.beginPath(); g.moveTo(px - up[1] * s - up[0] * s * 0.6, py + up[0] * s - up[1] * s * 0.6); g.lineTo(px + up[0] * s * 0.6, py + up[1] * s * 0.6);
+    g.lineTo(px + up[1] * s - up[0] * s * 0.6, py - up[0] * s - up[1] * s * 0.6);
+    g.strokeStyle = k.col; g.lineWidth = Math.max(1.5, u / 12); g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke();
+  }
+  g.globalAlpha = 1;
+}
 function drawOrb(g, o, u, t, used) {
+  if (o.t === 'q') return drawRing(g, o, u, t, used);
   const x = o.x * u, y = o.y * u, r = ORB_R * u, a = -o.a * Math.PI / 180, col = ORB_COL[o.f], pulse = 1 + 0.08 * Math.sin(t * 7);
   g.globalAlpha = used ? 0.35 : 1;
   g.beginPath(); g.arc(x, y, r * 1.35 * pulse, 0, 7); g.strokeStyle = col; g.lineWidth = Math.max(1.5, u / 16); g.stroke();
@@ -1237,7 +1319,8 @@ function drawOrb(g, o, u, t, used) {
 function renderObj(g, o, u, t) { // one object in its editor colours (palette icons and the build ghost)
   if (o.t === 'r' || o.t === 't') { g.beginPath(); addSolid(g, o, u); g.fillStyle = o.d ? '#0f6b55' : '#2340ff'; g.fill(); g.strokeStyle = o.d ? D_COL : '#fff'; g.lineWidth = Math.max(1.5, u / 20); g.stroke(); }
   else if (o.t === 's') { sawPath(g, o.x * u, o.y * u, SAW_R * u, t); g.fillStyle = '#ffd23f'; g.fill(); g.strokeStyle = '#ff9f43'; g.lineWidth = Math.max(1, u / 20); g.stroke(); }
-  else if (o.t === 'd') drawOrb(g, o, u, t);
+  else if (o.t === 'd' || o.t === 'q') drawOrb(g, o, u, t);
+  else if (o.t === 'j') drawPad(g, o, u, t);
   else if (o.t === 'k') { g.beginPath(); spikePath(g, o, u); g.fillStyle = '#1a1d33'; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = Math.max(1.5, u / 20); g.lineJoin = 'round'; g.stroke(); }
   else drawPortal(g, o, u, u >= 30);
 }
@@ -1324,6 +1407,7 @@ function draw(t, dt) {
   }
   for (const o of world.portals) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawPortal(ctx, o, B);
   world.orbs.forEach((o, i) => { if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawOrb(ctx, o, B, t, inGame && i === p.lastOrb); });
+  world.pads.forEach((o, i) => { if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawPad(ctx, o, B, t, inGame && i === p.lastPad); });
   if (inGame && hacks.practice) for (const c of checkpoints) if (c.x > camX - 30 && c.x < camX + viewW + 30) { // practice checkpoints: green diamonds
     ctx.beginPath(); ctx.moveTo(c.x, c.y - 14); ctx.lineTo(c.x + 10, c.y); ctx.lineTo(c.x, c.y + 14); ctx.lineTo(c.x - 10, c.y); ctx.closePath();
     ctx.fillStyle = '#4dff9a'; ctx.fill(); ctx.strokeStyle = '#0c0e1c'; ctx.lineWidth = 2; ctx.stroke();
@@ -1344,7 +1428,7 @@ function draw(t, dt) {
     ctx.strokeStyle = '#ffcc1a'; ctx.lineWidth = 3 / z;
     for (const o of sel) {
       ctx.beginPath();
-      if (o.t === 's' || o.t === 'd') ctx.arc(o.x * B, o.y * B, (o.t === 's' ? SAW_R : ORB_R * 1.35) * B + 4, 0, 7); else if (o.t === 'k') ctx.rect(o.x * B, o.y * B, B, B); else if (o.t === 'p') ctx.rect(o.x * B - 10, o.y * B, 20, o.h * B); else addSolid(ctx, o, B);
+      if (o.t === 's' || o.t === 'd' || o.t === 'q') ctx.arc(o.x * B, o.y * B, (o.t === 's' ? SAW_R : ORB_R * 1.45) * B + 4, 0, 7); else if (o.t === 'k' || o.t === 'j') ctx.rect(o.x * B, o.y * B, B, B); else if (o.t === 'p') ctx.rect(o.x * B - 10, o.y * B, 20, o.h * B); else addSolid(ctx, o, B);
       ctx.stroke();
     }
     if (hoverCell && edTool === 'build' && !pdrag) {
@@ -1392,6 +1476,7 @@ function draw(t, dt) {
     ctx.beginPath(); for (const o of solids) addSolid(ctx, o, B); ctx.stroke();
     for (const s of saws) { ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_HIT * B - 2, 0, 7); ctx.stroke(); }
     ctx.strokeStyle = '#3fd8ff'; for (const o of world.orbs) { ctx.beginPath(); ctx.arc(o.x * B, o.y * B, ORB_HIT * B, 0, 7); ctx.stroke(); }
+    for (const o of world.pads) { const [l, tp, r, b] = padBox(o); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
     ctx.strokeStyle = '#ff3355'; for (const k of spikes) { const [l, tp, r, b] = spikeBox(k); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
     if (inGame && mode !== 'dead') {
       const r = p.cube ? cubeHalf(p) : p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
@@ -1565,6 +1650,8 @@ const PALETTE = [
   { id: 'g0', label: 'Wave', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 0 }) },
   { id: 'dblock', label: 'D block', make: (x, y) => ({ t: 'r', x, y, w: 1, h: 1, d: 1 }) },
   { id: 'dslope', label: 'D slope', make: (x, y) => ({ t: 't', x, y, w: 1, h: 1, o: edRot, d: 1 }) },
+  ...Object.entries(PAD).map(([c, k]) => ({ id: 'pad' + c, label: k.name, make: (x, y) => ({ t: 'j', x, y, o: edRot, c }) })),
+  ...Object.entries(RING).map(([c, k]) => ({ id: 'ring' + c, label: k.name, make: (x, y) => ({ t: 'q', x: x + 0.5, y: y + 0.5, c }) })),
   { id: 'dash0', label: 'Dash orb', make: (x, y) => ({ t: 'd', x: x + 0.5, y: y + 0.5, a: 0, f: 0 }) },
   { id: 'dash1', label: 'Pink dash', make: (x, y) => ({ t: 'd', x: x + 0.5, y: y + 0.5, a: 0, f: 1 }) },
   ...SPD_LABELS.map((n, v) => ({ id: 'spd' + v, label: n, make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'S', v }) })),
@@ -1599,7 +1686,7 @@ function undo() { if (!undoS.length) return; redoS.push(JSON.stringify(edObjs));
 function redo() { if (!redoS.length) return; undoS.push(JSON.stringify(edObjs)); restore(redoS.pop()); }
 function placeAt(bx, by) {
   const o = PALETTE.find(q => q.id === edPal).make(snap(bx), snap(by));
-  if (edObjs.some(q => q.t === o.t && Math.abs(q.x - o.x) < 1e-6 && Math.abs(q.y - o.y) < 1e-6 && q.k === o.k && q.o === o.o)) return false; // already there
+  if (edObjs.some(q => q.t === o.t && Math.abs(q.x - o.x) < 1e-6 && Math.abs(q.y - o.y) < 1e-6 && q.k === o.k && q.o === o.o && q.c === o.c)) return false; // already there
   edObjs.push(o); edChanged(); return true;
 }
 function objectAt(bx, by) { // portals over saws over solids; within a kind, the one drawn last
@@ -1607,6 +1694,7 @@ function objectAt(bx, by) { // portals over saws over solids; within a kind, the
   const consider = (o, r) => { if (r >= rank) { best = o; rank = r; } };
   for (const o of world.portals) if (Math.abs(o.x - bx) < 0.3 && by >= o.y && by <= o.y + o.h) consider(o, 3);
   for (const o of world.orbs) if (Math.hypot(o.x - bx, o.y - by) < ORB_R * 1.35) consider(o, 3);
+  for (const o of world.pads) if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 3);
   for (const o of world.cols.get(Math.floor(bx)) || []) {
     if (o.t === 's') { if (Math.hypot(o.x - bx, o.y - by) < SAW_R) consider(o, 2); }
     else if (o.t === 'k') { if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 2); }
@@ -1628,8 +1716,8 @@ function edAction(a, fine) {
   const mv = { left: [-g, 0], right: [g, 0], up: [0, -g], down: [0, g] }[a];
   if (mv) for (const o of objs) { o.x = tidy(o.x + mv[0]); o.y = tidy(o.y + mv[1]); }
   else if (a === 'rot') { // slopes turn a quarter; dash orbs tilt 15° up, wrapping round from the steepest up to the steepest down
-    if (!objs.some(o => o.t === 't' || o.t === 'd' || o.t === 'k')) return;
-    for (const o of objs) if (o.t === 't' || o.t === 'k') o.o = (o.o + 1) % 4; else if (o.t === 'd') o.a = o.a >= ORB_MAX ? -ORB_MAX : o.a + 15;
+    if (!objs.some(o => o.t === 't' || o.t === 'd' || o.t === 'k' || o.t === 'j')) return;
+    for (const o of objs) if (o.t === 't' || o.t === 'k' || o.t === 'j') o.o = (o.o + 1) % 4; else if (o.t === 'd') o.a = o.a >= ORB_MAX ? -ORB_MAX : o.a + 15;
   }
   else if (a === 'dtog') { if (!objs.some(solid)) return; const on = !objs.filter(solid).every(o => o.d); for (const o of objs) if (solid(o)) { if (on) o.d = 1; else delete o.d; } }
   else if (a === 'w-' || a === 'w+') { for (const o of objs) if (solid(o)) o.w = tidy(Math.max(g, o.w + (a === 'w+' ? g : -g))); }
@@ -1642,7 +1730,7 @@ function edAction(a, fine) {
 function drawPaletteIcon(c, item) {
   const g = c.getContext('2d'), o = item.make(0, 0);
   g.clearRect(0, 0, c.width, c.height); g.save();
-  const box = o.t === 's' || o.t === 'd' ? [o.x, o.y, 1.2, 1.2] : o.t === 'k' ? [o.x + 0.5, o.y + 0.5, 1, 1] : o.t === 'p' ? [o.x, o.y + o.h / 2, 0.6, o.h] : [o.x + o.w / 2, o.y + o.h / 2, o.w, o.h];
+  const box = o.t === 's' || o.t === 'd' || o.t === 'q' ? [o.x, o.y, 1.4, 1.4] : o.t === 'k' || o.t === 'j' ? [o.x + 0.5, o.y + 0.5, 1, 1] : o.t === 'p' ? [o.x, o.y + o.h / 2, 0.6, o.h] : [o.x + o.w / 2, o.y + o.h / 2, o.w, o.h];
   const u = Math.min(c.width / (box[2] + 0.6), c.height / (box[3] + 0.6));
   g.translate(c.width / 2 - box[0] * u, c.height / 2 - box[1] * u);
   renderObj(g, o, u, 0); g.restore();
