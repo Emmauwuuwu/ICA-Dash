@@ -919,7 +919,7 @@ const inputs = []; // [timestamp, held] queued so each press lands on the exact 
 const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
 let checkpoints = [], spawnCache = null, plan = [];
 const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
-  used: q.used, lastPad: q.lastPad, cube: q.cube, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2 });
+  used: q.used, lastPad: q.lastPad, cube: q.cube, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2 });
 // ---------- cube ----------
 // Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), with GD's player step
 // scaled by 0.9 (so 54 "frames" per second). That makes a jump 2.17 blocks high and 0.432 s long, peaking 2.24 blocks
@@ -942,34 +942,40 @@ const cubeHalf = s => s.mini ? CUBE_H * CUBE_MINI : CUBE_H;
 function surfaceNear(wd, x, foot, h, gs, into, below) {
   const xl = x - h, xr = x + h, H = y => -gs * y, Hf = H(foot);
   let best = null;
-  const take = sy => { const hs = H(sy); if (hs <= Hf + into && hs >= Hf - below && (best === null || hs > H(best))) best = sy; };
+  const take = (sy, k) => { const hs = H(sy); if (hs <= Hf + into && hs >= Hf - below && (best === null || hs > H(best))) { best = sy; SURF_K = k; } };
   for (let c = Math.floor(xl / B); c <= Math.floor(xr / B); c++) for (const o of wd.cols.get(c) || []) {
     if (o.t !== 'r' && o.t !== 't') continue;
     const x0 = o.x * B, x1 = (o.x + o.w) * B, y0 = o.y * B, y1 = (o.y + o.h) * B;
     if (xr <= x0 || xl >= x1) continue;
-    if (o.t === 'r') { take(gs > 0 ? y0 : y1); continue; }
-    const along = px => (Math.min(x1, Math.max(x0, px)) - x0) / (x1 - x0); // 0..1 across the triangle
+    if (o.t === 'r') { take(gs > 0 ? y0 : y1, 0); continue; }
+    const along = px => (Math.min(x1, Math.max(x0, px)) - x0) / (x1 - x0), k = (y1 - y0) / (x1 - x0); // 0..1 across; steepness
+    // the slope counts while the cube's contact corner is on it; past the tip it stands on a point (flat)
     if (gs > 0) { // standing on top: slopes 0 (falling to the right) and 1 (rising), flat tops of 2 and 3
-      take(o.o === 0 ? y0 + along(xl) * (y1 - y0) : o.o === 1 ? y1 - along(xr) * (y1 - y0) : y0);
+      if (o.o === 0) take(y0 + along(xl) * (y1 - y0), xl > x0 ? k : 0); else if (o.o === 1) take(y1 - along(xr) * (y1 - y0), xr < x1 ? -k : 0); else take(y0, 0);
     } else { // upside down, standing under: slopes 2 and 3 from below, flat undersides of 0 and 1
-      take(o.o === 2 ? y0 + along(xr) * (y1 - y0) : o.o === 3 ? y1 - along(xl) * (y1 - y0) : y1);
+      if (o.o === 2) take(y0 + along(xr) * (y1 - y0), xr < x1 ? k : 0); else if (o.o === 3) take(y1 - along(xl) * (y1 - y0), xl > x0 ? -k : 0); else take(y1, 0);
     }
   }
   return best;
 }
+let SURF_K = 0; // steepness (dy/dx, screen y down) of the surface surfaceNear last picked
 // One cube body (the dual twin has the opposite gravity). Returns false if it dies.
+// On the ground the cube moves with the surface: on a slope its vertical speed is the slope's (kept in sv). Running off the
+// top of a rising slope launches it at 0.9x that speed (less GD's step loss), measured from a recorded GD slope launch.
 function cubeBody(wd, s, k, gs, h, dt, v) {
-  const Y = k === 1 ? 'y' : 'y2', VY = k === 1 ? 'vy' : 'vy2', G = k === 1 ? 'gnd' : 'gnd2', was = s[G], y = s[Y];
+  const Y = k === 1 ? 'y' : 'y2', VY = k === 1 ? 'vy' : 'vy2', G = k === 1 ? 'gnd' : 'gnd2', SV = k === 1 ? 'sv' : 'sv2', was = s[G], y = s[Y];
+  const rise = was ? -gs * (s[SV] || 0) : 0; // how fast the surface it was standing on rises (against gravity)
   let ny, vy = s[VY] || 0;
   if (s.dash != null) { ny = y + (k === 1 ? -1 : 1) * s.dash * v * dt; vy = 0; }
   else { const v0 = vy; vy += gs * CUBE_G * dt; if (vy * gs > CUBE_TERM) vy = gs * CUBE_TERM; ny = y + (v0 + vy) / 2 * dt; } // averaged: the arc is exact at any step size
   let gnd = false;
-  if ((ny - y) * gs >= 0) { // moving with gravity (or level): land on what it reached, and stay on slopes it was riding
-    const sy = surfaceNear(wd, s.x, ny + gs * h, h, gs, Math.abs(ny - y) + 2.5 * v * dt + 1, was ? 2.5 * v * dt + 1 : 0);
-    if (sy !== null) { ny = sy - gs * h; if (s.dash == null) vy = 0; gnd = true; }
-  }
+  // Land on whatever its feet reached, even while rising (a slope rising faster than the cube catches it), and keep riding
+  // flat ground and downhill slopes it was on. Uphill it isn't held down, so at the top it flies off.
+  const sy = surfaceNear(wd, s.x, ny + gs * h, h, gs, Math.abs(ny - y) + 2.5 * v * dt + 1, was && rise <= 0 ? 2.5 * v * dt + 1 : 0);
+  if (sy !== null) { ny = sy - gs * h; if (s.dash == null) vy = SURF_K * v; s[SV] = SURF_K * v; gnd = true; }
+  else { s[SV] = 0; if (rise > 0 && s.dash == null) vy = -gs * (0.9 * rise - GD_STEP_LOSS); } // slope launch
   const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges: floor with gravity, a ceiling against it
-  if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null) vy = 0; gnd = true; }
+  if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null) vy = 0; s[SV] = 0; gnd = true; }
   if ((ny - ceil) * gs < 0) { ny = ceil; if (vy * gs < 0) vy = 0; }
   s[Y] = ny; s[VY] = vy; s[G] = gnd;
   // Death: the small inner box touching any solid (side or ceiling hits), or the main box touching a saw or spike.
@@ -1139,7 +1145,7 @@ const FX = {
 };
 function reset() {
   p = { x: 0, y: VH / 2, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
-    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, vy: 0, vy2: 0, gnd: false, gnd2: false, rot: 0 };
+    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, rot: 0 };
   trail = []; trail2 = []; parts = [];
   const cp = hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
@@ -1467,7 +1473,10 @@ function draw(t, dt) {
     if (alive && p.cube) { // GD's cube: turns 180° per full jump in the air (backwards upside down), squares up on the ground
       const air = 2 * (p.mini ? CUBE_JUMP_MINI : CUBE_JUMP) / CUBE_G;
       if (!p.gnd || p.dash != null) p.rot += (p.flip ? -1 : 1) * Math.PI / air * dt;
-      else { const q = Math.round(p.rot / (Math.PI / 2)) * (Math.PI / 2); p.rot += (q - p.rot) * Math.min(1, dt * 30); }
+      else { // on the ground: square to the surface (tilted along a slope)
+        const tilt = Math.atan((p.sv || 0) / (SPEEDS[p.speedI] * B)), q = Math.round((p.rot - tilt) / (Math.PI / 2)) * (Math.PI / 2) + tilt;
+        p.rot += (q - p.rot) * Math.min(1, dt * 30);
+      }
       const s = p.mini ? CUBE_MINI : 1;
       drawCube(ctx, p.x, p.y, p.rot, s, icon);
       if (p.dual) drawCube(ctx, p.x, p.y2, -p.rot, s, icon);
