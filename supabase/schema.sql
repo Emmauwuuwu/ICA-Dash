@@ -113,11 +113,3 @@ create policy "moderators approve or reject" on public.community_icons for updat
 create policy "remove your own or moderate" on public.community_icons for delete to authenticated
   using (author = auth.uid() or exists (select 1 from public.admins a where a.user_id = auth.uid()));
 
-create function public.check_icon_limit() returns trigger language plpgsql as $$
-begin
-  if (select count(*) from public.community_icons where author = new.author) >= 10 then
-    raise exception 'You can share 10 icons. Remove one first.';
-  end if;
-  return new;
-end $$;
-create trigger icon_limit before insert on public.community_icons for each row execute function public.check_icon_limit();
