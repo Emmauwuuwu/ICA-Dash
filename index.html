@@ -1205,9 +1205,12 @@ let editMain = false;
 if (!unlocked) hacks = { ...HACK_DEFAULTS }; // hacks only apply once the menu is found
 const cheating = () => hacks.noclip || hacks.speed !== 1 || hacks.start > 0 || hacks.path || hacks.practice || hacks.auto;
 
+// GD's wave sprite is 26 x 21 GD units (dart_01_001 in its standard-resolution icon sheet; the cube's is 30 x 30, one block),
+// so 52 x 42 here. The default shape is 22 x 18 with its outline, so the wave draws at 2.3x.
+const WAVE_S = 2.3;
 function drawIcon(g, x, y, a, s, ic) {
-  if (ic.useCustom && customImg.naturalWidth) { // same footprint as the built-in shapes (about 26 units across)
-    const k = 26 * s / Math.max(customImg.naturalWidth, customImg.naturalHeight), w = customImg.naturalWidth * k, h = customImg.naturalHeight * k;
+  if (ic.useCustom && customImg.naturalWidth) { // same footprint as the built-in shapes (about 22.6 units across)
+    const k = 22.6 * s / Math.max(customImg.naturalWidth, customImg.naturalHeight), w = customImg.naturalWidth * k, h = customImg.naturalHeight * k;
     g.save(); g.translate(x, y); g.rotate(a); g.drawImage(customImg, -w / 2, -h / 2, w, h); g.restore(); return;
   }
   const pts = SHAPES[ic.shape].pts;
@@ -2382,7 +2385,7 @@ function draw(t, dt) {
   if (ed) { // ruler, start marker, selection, and a ghost of what a click would place
     ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = '700 15px "Space Mono", monospace'; ctx.textAlign = 'center';
     for (let b = Math.ceil(camX / B / 5) * 5; b * B < camX + viewW; b += 5) ctx.fillText(b, b * B, camY + 22 / z);
-    ctx.globalAlpha = 0.6; drawIcon(ctx, 0, VH / 2, Math.PI / 4, 1.1, icon); ctx.globalAlpha = 1;
+    ctx.globalAlpha = 0.6; drawIcon(ctx, 0, VH / 2, Math.PI / 4, WAVE_S, icon); ctx.globalAlpha = 1;
     if (testPath.length > 1) { // the last playtest's route (green) and where you pressed (orange), as GD leaves them
       ctx.lineJoin = 'round'; ctx.strokeStyle = '#4dff5e'; ctx.lineWidth = 2.5 / z;
       for (const path of [testPath, testPath2]) if (path.length > 1) { ctx.beginPath(); path.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
@@ -2431,7 +2434,7 @@ function draw(t, dt) {
     } else if (seen) { // two-step turn: 70% of the way on the first frame, the rest ~20 ms later
       const full = p.mini ? Math.atan(2) : Math.PI / 4, tgt = p.slid ? 0 : p.dash != null ? -Math.atan(p.dash) : p.dir * full; p.turnT += dt;
       p.ang = p.turnT < 0.02 ? p.from + (tgt - p.from) * 0.7 : tgt;
-      const s = p.mini ? 0.66 : 1.1; // mini is 0.6x, as GD scales it (updatePlayerScale)
+      const s = WAVE_S * (p.mini ? 0.6 : 1); // mini is 0.6x, as GD scales it (updatePlayerScale)
       drawIcon(ctx, p.x, p.y, p.ang, s, icon);
       if (p.dual) drawIcon(ctx, p.x, p.y2, -p.ang, s, icon);
     }
