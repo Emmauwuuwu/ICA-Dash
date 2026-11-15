@@ -174,30 +174,64 @@ input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
 .ach:not(.done) .name { color: var(--muted); }
 
 
-/* editor: the level fills the screen; a slim top bar and a build bar sit over it */
-#editor { justify-content: space-between; background: none; pointer-events: none; padding-block: calc(10px + env(safe-area-inset-top, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)); }
+/* editor, laid out like Geometry Dash's: undo / redo / delete and the menu at the top, zoom and playtest down the left, edit
+   shortcuts down the right, and a bottom bar with the mode buttons, object tabs and pages of objects, and the swipe / free /
+   grid toggles */
+#editor { justify-content: space-between; background: none; pointer-events: none; padding-block: calc(8px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)); }
 #editor > * { pointer-events: auto; }
-.edtop { display: flex; gap: 8px; align-items: center; width: min(1080px, 100%); margin-inline: auto; flex-wrap: wrap; }
-.edtop input { flex: 1; min-width: 0; font-family: var(--display); font-weight: 900; font-size: 26px; text-transform: uppercase; background: var(--ink); border: 0;
-  border-bottom: 3px solid var(--sun); padding: 4px 10px; }
-.edtop input:focus-visible { outline: none; background: var(--ink-2); }
-.edtop input[readonly] { border-bottom-color: var(--hair); }
-.edbottom { display: flex; flex-direction: column; gap: 6px; width: min(1080px, 100%); margin-inline: auto; }
-.edbottom .controls { margin: 0; text-shadow: 0 1px 2px #000; }
-.edbar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 12px; }
+#editor .edmid { pointer-events: none; flex: 1; display: flex; justify-content: space-between; align-items: center; width: min(1180px, 100%); margin-inline: auto; }
+#editor .edmid > * { pointer-events: auto; }
+.edtop { display: flex; gap: 8px; align-items: center; justify-content: space-between; width: min(1180px, 100%); margin-inline: auto; }
+.edgroup { display: flex; gap: 6px; }
+.edcount { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 12px; text-shadow: 0 1px 2px #000; color: #fff; opacity: .85; }
+.eico { clip-path: none; width: 46px; height: 46px; padding: 0; display: grid; place-items: center; font-size: 20px; font-weight: 800; background: rgba(12,14,28,.82);
+  border: 2px solid var(--hair); border-radius: 10px; }
+.eico:disabled { opacity: .35; cursor: not-allowed; }
+.eico.play { background: var(--sun); color: var(--ink); border-color: var(--sun); }
+.edleft, .edright { display: flex; flex-direction: column; gap: 6px; }
+.edright button { clip-path: none; min-width: 92px; padding: 8px 10px; background: rgba(12,14,28,.82); border: 2px solid var(--hair); border-radius: 10px; font-size: 12px; }
+.edright button:disabled { opacity: .35; cursor: not-allowed; }
+.edbottom { display: flex; flex-direction: column; gap: 6px; width: min(1180px, 100%); margin-inline: auto; }
+.edbar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 10px; padding: 10px; }
 .edbar::before { flex: 0 0 calc(100% + 44px); }
-.edtabs { display: flex; flex-direction: column; gap: 4px; }
-.edtabs button, .edside button, .edpane .act { clip-path: none; background: var(--ink-2); padding: 9px 12px; text-align: left; }
-.edtabs [aria-pressed=true], .edside [aria-pressed=true], .edpane [aria-pressed=true] { background: var(--sun); color: var(--ink); }
-.edpane { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; align-items: flex-start; max-height: 150px; overflow: auto; }
-.edpane .act:disabled { opacity: .4; cursor: not-allowed; }
-.edpane .act.danger { background: transparent; }
-.edpane .prop { display: flex; flex-direction: column; gap: 2px; font-size: 10px; letter-spacing: .04em; color: var(--mute, #9aa0b8); }
-.edpane .prop input { width: 112px; padding: 6px 8px; }
-.pal { width: 62px; height: 64px; padding: 4px 2px; clip-path: none; background: var(--ink-2); display: flex; flex-direction: column; align-items: center; gap: 2px;
-  font-size: 9px; letter-spacing: .04em; }
-.pal canvas { width: 40px; height: 40px; }
-.edside { display: grid; grid-template-columns: repeat(2, minmax(0, auto)); gap: 4px; align-content: start; }
+.edtabs { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
+.edtabs button, .edside button { clip-path: none; background: var(--ink-2); padding: 9px 12px; text-align: center; min-width: 70px; border-radius: 8px; }
+.edtabs [aria-pressed=true], .edside [aria-pressed=true], .edcats [aria-selected=true], .edpane [aria-pressed=true] { background: var(--sun); color: var(--ink); }
+.edmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.edcats { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.edcats button { clip-path: none; flex: none; width: 40px; height: 32px; padding: 0; background: var(--ink-2); border-radius: 7px; display: grid; place-items: center; }
+.edcats canvas { width: 26px; height: 26px; pointer-events: none; }
+.edpage { display: flex; align-items: stretch; gap: 5px; }
+.edarrow { clip-path: none; width: 30px; padding: 0; background: var(--ink-2); border-radius: 8px; font-size: 14px; }
+.edarrow:disabled { opacity: .25; cursor: default; }
+.edpane { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, 60px); grid-auto-rows: 60px; gap: 5px; justify-content: center; height: 125px; overflow: hidden; }
+.edpane.acts { grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); grid-auto-rows: 38px; height: 125px; }
+.edpane .act { clip-path: none; background: var(--ink-2); padding: 4px 6px; border-radius: 8px; font-size: 12px; line-height: 1.1; }
+.edpane .act:disabled { opacity: .35; cursor: not-allowed; }
+.edpane .act.danger { background: transparent; border: 2px solid var(--hair); }
+.edpane .note { grid-column: 1 / -1; margin: 0; align-self: center; }
+.eddots { display: flex; gap: 5px; justify-content: center; min-height: 6px; }
+.eddots i { width: 6px; height: 6px; border-radius: 50%; background: var(--hair); }
+.eddots i.on { background: var(--sun); }
+.pal { width: 60px; height: 60px; padding: 3px 2px; clip-path: none; background: var(--ink-2); display: flex; flex-direction: column; align-items: center; gap: 1px;
+  font-size: 9px; letter-spacing: .02em; border-radius: 8px; overflow: hidden; }
+.pal canvas { width: 38px; height: 38px; }
+.edside { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
+.edpop { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(620px, calc(100% - 32px)); z-index: 5; max-height: calc(100% - 32px); overflow: auto; }
+#edMenu input#lvName { font-family: var(--display); font-weight: 900; font-size: 24px; text-transform: uppercase; background: var(--ink-2); border: 0; border-bottom: 3px solid var(--sun); padding: 6px 10px; }
+#edMenu input#lvName[readonly] { border-bottom-color: var(--hair); }
+.edpropbody { display: flex; flex-wrap: wrap; gap: 10px; }
+.edpropbody .prop { display: flex; flex-direction: column; gap: 3px; font-size: 11px; letter-spacing: .04em; color: var(--mute, #9aa0b8); }
+.edpropbody .prop input { width: 130px; padding: 7px 9px; }
+@media (max-width: 640px) { /* phones: the mode buttons and the toggles become rows above and below the objects */
+  .eico { width: 40px; height: 40px; font-size: 17px; }
+  .edcount { display: none; }
+  .edbar { gap: 6px; padding: 8px; }
+  .edtabs, .edside { flex: 1 1 100%; flex-direction: row; }
+  .edtabs button, .edside button { flex: 1; min-width: 0; padding: 7px 6px; font-size: 12px; }
+  .edtabs { order: 1; } .edmain { order: 2; flex: 1 1 100%; } .edside { order: 3; }
+  .edright button { min-width: 0; font-size: 11px; padding: 6px 8px; }
+}
 #sharePop { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(580px, calc(100% - 32px)); z-index: 5; }
 textarea { width: 100%; box-sizing: border-box; min-height: 110px; background: var(--ink-2); border: 0; border-left: 3px solid var(--sun); padding: 10px;
   font-family: var(--mono); font-size: 13px; resize: vertical; user-select: text; }
@@ -332,28 +366,70 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
 
 <section class="screen" id="editor" hidden>
   <div class="edtop">
-    <button class="primary" id="edDone">Save &amp; exit</button>
-    <input type="text" id="lvName" maxlength="40" aria-label="Level name">
-    <button class="ghost" id="edReset" hidden>Reset to original</button>
-    <button class="ghost" id="edShare">Share code</button>
-    <button class="ghost" id="edTestHere" title="Start the test about a third of the way across the current view">▶ From here</button>
-    <button class="primary" id="edTest">▶ Test</button>
+    <div class="edgroup">
+      <button class="eico" id="edUndo" title="Undo (Ctrl+Z)" aria-label="Undo">&#8630;</button>
+      <button class="eico" id="edRedo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">&#8631;</button>
+      <button class="eico" id="edTrash" title="Delete selected (Del)" aria-label="Delete selected">&#10005;</button>
+    </div>
+    <span class="edcount" id="edStats"></span>
+    <div class="edgroup">
+      <button class="eico" id="edPause" title="Menu (Esc)" aria-label="Editor menu">&#10074;&#10074;</button>
+    </div>
+  </div>
+  <div class="edmid">
+    <div class="edleft">
+      <button class="eico" id="edZoomIn" title="Zoom in (Ctrl+wheel, +)" aria-label="Zoom in">+</button>
+      <button class="eico" id="edZoomOut" title="Zoom out (Ctrl+wheel, -)" aria-label="Zoom out">&minus;</button>
+      <button class="eico play" id="edTest" title="Playtest (Enter)" aria-label="Playtest">&#9654;</button>
+      <button class="eico" id="edTestHere" title="Playtest from the middle of the view" aria-label="Playtest from here">&#9654;|</button>
+    </div>
+    <div class="edright" id="edQuick"></div>
   </div>
   <div class="edbottom">
-    <p class="controls"><span id="edHelp"></span> <span id="edStats"></span></p>
     <div class="panel edbar">
-      <div class="edtabs" role="group" aria-label="Editor tool">
-        <button data-tool="build" aria-pressed="true">Build · 1</button>
-        <button data-tool="edit" aria-pressed="false">Edit · 2</button>
-        <button data-tool="delete" aria-pressed="false">Delete · 3</button>
+      <div class="edtabs" role="group" aria-label="Editor mode">
+        <button data-tool="build" aria-pressed="true" title="Build (1)">Build</button>
+        <button data-tool="edit" aria-pressed="false" title="Edit (2)">Edit</button>
+        <button data-tool="delete" aria-pressed="false" title="Delete (3)">Delete</button>
       </div>
-      <div class="edpane" id="edPane"></div>
+      <div class="edmain">
+        <div class="edcats" id="edCats" role="tablist" aria-label="Object tabs"></div>
+        <div class="edpage">
+          <button class="edarrow" id="edPrev" aria-label="Previous page">&#9664;</button>
+          <div class="edpane" id="edPane"></div>
+          <button class="edarrow" id="edNext" aria-label="Next page">&#9654;</button>
+        </div>
+        <div class="eddots" id="edDots"></div>
+      </div>
       <div class="edside">
-        <button id="edUndo">Undo</button><button id="edRedo">Redo</button>
-        <button id="edZoomOut">Zoom −</button><button id="edZoomIn">Zoom +</button>
-        <button id="edSwipe" aria-pressed="false">Swipe</button><button id="edGrid">Grid 1</button>
+        <button id="edSwipe" aria-pressed="false" title="Swipe (T, or hold Shift)">Swipe</button>
+        <button id="edFree" aria-pressed="false" title="Free move (F)">Free</button>
+        <button id="edGrid" title="Grid size (G turns snapping on/off)">Grid 1</button>
       </div>
     </div>
+  </div>
+  <div class="panel edpop" id="edMenu" hidden>
+    <div class="head"><h2>Editor</h2><span class="label" id="edInfo2"></span></div>
+    <input type="text" id="lvName" maxlength="40" aria-label="Level name">
+    <div class="btnrow">
+      <button class="primary" id="edResume">Resume</button>
+      <button class="primary" id="edSavePlay">Save and play</button>
+      <button class="primary" id="edDone">Save and exit</button>
+      <button class="ghost" id="edSave">Save</button>
+      <button class="ghost" id="edShare">Share code</button>
+      <button class="ghost" id="edReset" hidden>Reset to original</button>
+    </div>
+    <div class="btnrow">
+      <button class="ghost" id="edSelAll">Select all</button>
+      <button class="ghost" id="edSelLeft">Select all left</button>
+      <button class="ghost" id="edSelRight">Select all right</button>
+    </div>
+    <p class="note" id="edHelp"></p>
+  </div>
+  <div class="panel edpop" id="edProps" hidden>
+    <div class="head"><h2 id="edPropsTitle">Edit</h2></div>
+    <div class="edpropbody" id="edPropBody"></div>
+    <div class="btnrow"><button class="primary" id="edPropsOk">OK</button></div>
   </div>
   <div class="panel" id="sharePop" hidden>
     <div class="head"><h2>Share code</h2><span class="label" id="edInfo"></span></div>
@@ -1523,6 +1599,7 @@ function show(id) { document.querySelectorAll('.screen').forEach(s => s.hidden =
 
 function play(level, origin) {
   cur = level; from = origin; world = level.id === 'test' ? buildWorld(edObjs) : worldFor(level.code); baseHue = level.hue ?? 200;
+  if (level.id === 'test') { testPath = []; testPath2 = []; testClicks = []; testPrevHeld = false; testTick = 0; }
   attempt = 1; usedHacks = cheating(); checkpoints = []; spawnCache = null; held = false;
   reset(); mode = 'play'; inputs.length = 0; show(null); $('hud').hidden = false;
   updateHackTag();
@@ -1556,7 +1633,13 @@ function die() {
     if (LEVELS.includes(cur) && p.x / world.end >= 0.9) grant('close');
   }
 }
+// A playtest ends on death or at the finish, like GD's: back to the editor, looking at where it ended, the route left drawn.
+function endTest() {
+  const x = p.x; exitPlay();
+  editCam = x - 0.5 * W / (S * edZoom); clampEd();
+}
 function win() {
+  if (cur.id === 'test' && from === 'editor') { saveBest(100); return endTest(); }
   mode = 'win'; saveBest(100); $('hud').hidden = true; show('done');
   // coins only count on a finished run without hacks; each one is kept once you've finished with it
   if (world.coins.length && !usedHacks && cur.id !== 'test' && p.coins?.length) {
@@ -1608,6 +1691,10 @@ function step(dt) {
     p.sub += dt / STEP;
     for (const t of [trail, trail2]) while (t.length > 1 && (!t[1] || t[1][0] < p.x - 2500)) t.shift(); // drop trail far behind
     const res = tick1(world, p, held, dt, FX, freshClick);
+    if (cur.id === 'test') { // keep the route for the editor (GD's playtest path)
+      if (++testTick % 4 === 0 || res) { testPath.push([p.x, p.y]); if (p.dual) testPath2.push([p.x, p.y2]); }
+      if (held && !testPrevHeld) testClicks.push([p.x, p.y]); testPrevHeld = held;
+    }
     speedI = p.speedI;
     if (res === 'win') return win();
     if (res === 'dead') { if (hacks.noclip) hitFlash = 0.3; else return die(); }
@@ -1627,7 +1714,7 @@ function step(dt) {
     if (hacks.practice && (p.cpT += dt) >= 1.5) { p.cpT = 0; const st = stateOf(p); if (survival(st, true) >= 96 && findPath(world, st, 30, 3000, true)) checkpoints.push(st); }
   } else if (mode === 'dead') {
     deadT -= dt;
-    if (deadT <= 0) { attempt++; reset(); mode = 'play'; }
+    if (deadT <= 0) { if (cur.id === 'test' && from === 'editor' && !hacks.practice) return endTest(); attempt++; reset(); mode = 'play'; }
   }
   for (const q of parts) {
     const k = q.dr ? Math.exp(-q.dr * dt) : 0.98; q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= k; q.vy *= k; q.life -= dt;
@@ -1946,7 +2033,13 @@ function draw(t, dt) {
     ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = '700 15px "Space Mono", monospace'; ctx.textAlign = 'center';
     for (let b = Math.ceil(camX / B / 5) * 5; b * B < camX + viewW; b += 5) ctx.fillText(b, b * B, camY + 22 / z);
     ctx.globalAlpha = 0.6; drawIcon(ctx, 0, VH / 2, Math.PI / 4, 1.1, icon); ctx.globalAlpha = 1;
-    ctx.strokeStyle = '#ffcc1a'; ctx.lineWidth = 3 / z;
+    if (testPath.length > 1) { // the last playtest's route (green) and where you pressed (orange), as GD leaves them
+      ctx.lineJoin = 'round'; ctx.strokeStyle = '#4dff5e'; ctx.lineWidth = 2.5 / z;
+      for (const path of [testPath, testPath2]) if (path.length > 1) { ctx.beginPath(); path.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
+      ctx.fillStyle = '#ff9a1a'; for (const [x, y] of testClicks) ctx.fillRect(x - 5 / z, y - 5 / z, 10 / z, 10 / z);
+    }
+    if (pdrag?.kind === 'box') { ctx.fillStyle = 'rgba(77,255,94,.12)'; ctx.strokeStyle = '#4dff5e'; ctx.lineWidth = 2 / z; const x0 = Math.min(pdrag.bx, pdrag.ex) * B, y0 = Math.min(pdrag.by, pdrag.ey) * B, w0 = Math.abs(pdrag.ex - pdrag.bx) * B, h0 = Math.abs(pdrag.ey - pdrag.by) * B; ctx.fillRect(x0, y0, w0, h0); ctx.strokeRect(x0, y0, w0, h0); }
+    ctx.strokeStyle = '#4dff5e'; ctx.lineWidth = 3 / z; // selected objects are green, as in GD
     for (const o of sel) {
       ctx.beginPath();
       if (o.t === 's' || o.t === 'd' || o.t === 'q' || o.t === 'c') ctx.arc(o.x * B, o.y * B, (o.t === 's' ? SAW_R : o.t === 'c' ? COIN_R : ORB_R * 1.45) * B + 4, 0, 7);
@@ -2189,7 +2282,8 @@ function renderCustoms() {
 // ---------- editor ----------
 // Works like a classic platformer editor: Build places objects on the grid, Edit selects and changes them, Delete removes them.
 let edObjs = [], sel = new Set(), edTool = 'build', edPal = 'block', edRot = 0, edSwipe = false, edGrid = 1, edZoom = 1, edCamY = 0;
-let undoS = [], redoS = [], pdrag = null, hoverCell = null, clearArmed = false;
+let undoS = [], redoS = [], pdrag = null, hoverCell = null, clearArmed = false, edCat = 0, edPage = 0, edClip = null, edLastGrid = 1;
+let testPath = [], testPath2 = [], testClicks = [], testPrevHeld = false, testTick = 0; // the last playtest's route and presses, shown in the editor
 const PALETTE = [
   { id: 'block', label: 'Block', make: (x, y) => ({ t: 'r', x, y, w: 1, h: 1 }) },
   { id: 'half', label: 'Half', make: (x, y) => ({ t: 'r', x, y, w: 1, h: 0.5 }) },
@@ -2221,10 +2315,23 @@ const PALETTE = [
     id: k + v, label: n + (v ? ' on' : ' off'), make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k, v }) }))),
 ];
 const HELP = {
-  build: 'Click to place · drag to look around (turn on Swipe to paint) · R rotates slopes',
-  edit: 'Click to select · Shift+click adds · drag to move · arrows nudge by the grid · Shift+arrows nudge a tiny step · R rotates slopes and tilts dash orbs 15° · Ctrl+D duplicate · Del deletes',
-  delete: 'Click an object to delete it · turn on Swipe to delete by dragging',
+  build: 'Click to place: it stays selected, so Q / E turn it and W A S D move it · drag to look around · hold Shift or turn on Swipe to paint · F1 / F2 change tab',
+  edit: 'Click to select · Shift+click adds · Shift+drag (or Swipe) on empty space selects a box · drag to move · W A S D move a block, with Shift a small step · arrows move by the grid · Q / E turn · Alt+Q / Alt+E flip · Ctrl+C / Ctrl+V copy and paste · Ctrl+D copy and paste in one go · Del deletes',
+  delete: 'Click an object to delete it · hold Shift or turn on Swipe to delete by dragging',
+  all: 'Mouse wheel scrolls up and down, Shift+wheel left and right, Ctrl+wheel zooms · 1 / 2 / 3 Build, Edit, Delete · Enter playtests · Ctrl+Z / Ctrl+Shift+Z undo and redo · Esc this menu',
 };
+// Build tabs, like GD's object tabs (anything not listed lands in the last one).
+const ED_CATS = [['Blocks', ['block', 'half']], ['Slopes', ['slope', 'steep']], ['Hazards', ['spike', 'spikeS', 'saw']],
+  ['Orbs', ['ringy', 'ringp', 'ringr', 'ringb', 'ringg', 'ringk', 'dash0', 'dash1']], ['Pads', ['pady', 'padp', 'padr', 'padb', 'pads']],
+  ['Portals', ['g1', 'g0', 'g2', 'v1', 'v0', 'v2', 'm1', 'm0', 'w1', 'w0', 'T0', 'T1', 'spd0', 'spd1', 'spd2', 'spd3', 'spd4']],
+  ['Collectibles', ['coin', 'cp']], ['Triggers', ['trm', 'trr', 'trf', 'trc']], ['Special', ['LD', 'LJ', 'LS', 'LH', 'LF', 'text']]];
+for (const q of PALETTE) if (!ED_CATS.some(([, ids]) => ids.includes(q.id))) ED_CATS[ED_CATS.length - 1][1].push(q.id);
+// Edit tab buttons, as in GD's edit pages: moves by a block, half a block, a small step (2 GD units) and 5 blocks, turns and flips.
+const ED_ACTS = [['up', 'Up'], ['down', 'Down'], ['left', 'Left'], ['right', 'Right'], ['upH', 'Up ½'], ['downH', 'Down ½'], ['leftH', 'Left ½'], ['rightH', 'Right ½'],
+  ['upS', 'Up small'], ['downS', 'Down small'], ['leftS', 'Left small'], ['rightS', 'Right small'], ['upB', 'Up big'], ['downB', 'Down big'], ['leftB', 'Left big'], ['rightB', 'Right big'],
+  ['ccw', 'Rotate ↺'], ['cw', 'Rotate ↻'], ['fx', 'Flip X'], ['fy', 'Flip Y'], ['w-', 'Width −'], ['w+', 'Width +'], ['h-', 'Height −'], ['h+', 'Height +'], ['multi', 'Multi activate']];
+const ED_STEP = { '': 1, H: 0.5, S: 1 / 15, B: 5 };
+
 // Grid steps the Grid button cycles through; 0 is free placement (no snapping).
 const GRIDS = [[1, '1'], [0.5, '½'], [0.25, '¼'], [0.1, '⅒'], [0, 'Free']], FINE = 1 / 30;
 const tidy = v => +v.toFixed(4); // keeps repeated small moves from piling up float noise in share codes
@@ -2249,7 +2356,7 @@ function redo() { if (!redoS.length) return; undoS.push(JSON.stringify(edObjs));
 function placeAt(bx, by) {
   const o = PALETTE.find(q => q.id === edPal).make(snap(bx), snap(by));
   if (edObjs.some(q => q.t === o.t && Math.abs(q.x - o.x) < 1e-6 && Math.abs(q.y - o.y) < 1e-6 && q.k === o.k && q.o === o.o && q.c === o.c && q.z === o.z && q.v === o.v)) return false; // already there
-  edObjs.push(o); edChanged(); return true;
+  edObjs.push(o); edChanged(); sel = new Set([o]); return o; // like GD, what you just placed is selected
 }
 function objectAt(bx, by) { // portals over saws over solids; within a kind, the one drawn last
   let best = null, rank = 0;
@@ -2268,6 +2375,31 @@ function objectAt(bx, by) { // portals over saws over solids; within a kind, the
   return best;
 }
 function removeAt(bx, by) { const o = objectAt(bx, by); if (!o) return false; edObjs = edObjs.filter(q => q !== o); sel.delete(o); edChanged(); return true; }
+// Centre of an object in blocks, and putting it back by its centre.
+function objCenter(o) {
+  return o.t === 'r' || o.t === 't' ? [o.x + o.w / 2, o.y + o.h / 2] : o.t === 'k' || o.t === 'j' || o.t === 'L' ? [o.x + 0.5, o.y + 0.5] : o.t === 'p' ? [o.x, o.y + o.h / 2] : [o.x, o.y];
+}
+function setCenter(o, cx, cy) {
+  if (o.t === 'r' || o.t === 't') { o.x = cx - o.w / 2; o.y = cy - o.h / 2; } else if (o.t === 'k' || o.t === 'j' || o.t === 'L') { o.x = cx - 0.5; o.y = cy - 0.5; }
+  else if (o.t === 'p') { o.x = cx; o.y = cy - o.h / 2; } else { o.x = cx; o.y = cy; }
+  o.x = tidy(o.x); o.y = tidy(o.y);
+}
+// Turn the selection a quarter clockwise / anticlockwise, or mirror it, around the middle of the selection (GD's rotate and
+// flip buttons). Slopes, spikes and pads turn with it; blocks swap width and height; dash orbs tilt 15° (they always dash right).
+function turnSel(objs, k) {
+  const cs = objs.map(objCenter), gx = (Math.min(...cs.map(c => c[0])) + Math.max(...cs.map(c => c[0]))) / 2, gy = (Math.min(...cs.map(c => c[1])) + Math.max(...cs.map(c => c[1]))) / 2;
+  objs.forEach((o, i) => {
+    const dx = cs[i][0] - gx, dy = cs[i][1] - gy;
+    const [nx, ny] = k === 'cw' ? [-dy, dx] : k === 'ccw' ? [dy, -dx] : k === 'fx' ? [-dx, dy] : [dx, -dy];
+    if (o.t === 'r' || o.t === 't') {
+      if (k === 'cw' || k === 'ccw') { [o.w, o.h] = [o.h, o.w]; if (o.t === 't') o.o = (o.o + (k === 'cw' ? 3 : 1)) % 4; }
+      else if (o.t === 't') o.o = k === 'fx' ? o.o ^ 1 : 3 - o.o;
+    } else if (o.t === 'k' || o.t === 'j') o.o = k === 'cw' ? (o.o + 1) % 4 : k === 'ccw' ? (o.o + 3) % 4 : k === 'fx' ? [0, 3, 2, 1][o.o] : [2, 1, 0, 3][o.o];
+    else if (o.t === 'd') o.a = k === 'fy' ? -o.a : k === 'cw' ? (o.a <= -ORB_MAX ? ORB_MAX : o.a - 15) : k === 'ccw' ? (o.a >= ORB_MAX ? -ORB_MAX : o.a + 15) : o.a;
+    setCenter(o, gx + nx, gy + ny);
+  });
+  if (edTool === 'build' && objs.length === 1 && objs[0].o !== undefined) edRot = objs[0].o; // what you place next faces the same way
+}
 function edAction(a, fine) {
   if (a === 'rotpal') { edRot = (edRot + 1) % 4; return renderPane(); }
   if (a === 'clear') {
@@ -2276,14 +2408,22 @@ function edAction(a, fine) {
     commit(JSON.stringify(edObjs)); edObjs = []; sel = new Set(); edChanged(); return renderPane();
   }
   if (a === 'none') { sel = new Set(); return renderPane(); }
-  const objs = [...sel]; if (!objs.length) return;
-  const before = JSON.stringify(edObjs), g = fine ? FINE : stepSize(), solid = o => o.t === 'r' || o.t === 't';
-  const mv = { left: [-g, 0], right: [g, 0], up: [0, -g], down: [0, g] }[a];
-  if (mv) for (const o of objs) { o.x = tidy(o.x + mv[0]); o.y = tidy(o.y + mv[1]); }
-  else if (a === 'rot') { // slopes turn a quarter; dash orbs tilt 15° up, wrapping round from the steepest up to the steepest down
-    if (!objs.some(o => o.t === 't' || o.t === 'd' || o.t === 'k' || o.t === 'j')) return;
-    for (const o of objs) if (o.t === 't' || o.t === 'k' || o.t === 'j') o.o = (o.o + 1) % 4; else if (o.t === 'd') o.a = o.a >= ORB_MAX ? -ORB_MAX : o.a + 15;
+  if (a === 'selall' || a === 'selleft' || a === 'selright') { // left / right of the middle of the view, like GD's pause menu
+    const mid = (editCam + W / (S * edZoom) / 2) / B;
+    sel = new Set(edObjs.filter(o => a === 'selall' || (a === 'selleft' ? objCenter(o)[0] <= mid : objCenter(o)[0] >= mid))); return renderPane();
   }
+  if (a === 'paste') { // GD pastes in place, selected, ready to move
+    if (!edClip) return; const before = JSON.stringify(edObjs), objs = JSON.parse(edClip);
+    edObjs.push(...objs); sel = new Set(objs); commit(before); edChanged(); return renderPane();
+  }
+  const objs = [...sel]; if (!objs.length) return;
+  if (a === 'copy') { edClip = JSON.stringify(objs); toast(`Copied ${objs.length} object${objs.length === 1 ? '' : 's'}`); return renderPane(); }
+  if (a === 'dupe') { edClip = JSON.stringify(objs); return edAction('paste'); } // copy + paste
+  const before = JSON.stringify(edObjs), g = fine ? (typeof fine === 'number' ? fine : FINE) : stepSize(), solid = o => o.t === 'r' || o.t === 't';
+  const m = /^(up|down|left|right)([HSB]?)$/.exec(a), d = m && (fine ? g : ED_STEP[m[2]]);
+  const mv = m && { left: [-d, 0], right: [d, 0], up: [0, -d], down: [0, d] }[m[1]];
+  if (mv) for (const o of objs) { o.x = tidy(o.x + mv[0]); o.y = tidy(o.y + mv[1]); }
+  else if (a === 'cw' || a === 'ccw' || a === 'fx' || a === 'fy' || a === 'rot') turnSel(objs, a === 'rot' ? 'cw' : a);
   else if (a === 'multi') { // multi activate, per orb: on for all selected orbs unless they all have it already
     const orbs = objs.filter(o => o.t === 'd' || o.t === 'q'); if (!orbs.length) return;
     const on = !orbs.every(o => o.m); for (const o of orbs) { if (on) o.m = 1; else delete o.m; }
@@ -2291,7 +2431,6 @@ function edAction(a, fine) {
   else if (a === 'dtog') { if (!objs.some(solid)) return; const on = !objs.filter(solid).every(o => o.d); for (const o of objs) if (solid(o)) { if (on) o.d = 1; else delete o.d; } }
   else if (a === 'w-' || a === 'w+') { for (const o of objs) if (solid(o)) o.w = tidy(Math.max(g, o.w + (a === 'w+' ? g : -g))); }
   else if (a === 'h-' || a === 'h+') { for (const o of objs) if (solid(o) || o.t === 'p') o.h = tidy(Math.max(g, o.h + (a === 'h+' ? g : -g))); }
-  else if (a === 'dup') { const copies = objs.map(o => ({ ...o, x: o.x + 1 })); edObjs.push(...copies); sel = new Set(copies); }
   else if (a === 'del') { edObjs = edObjs.filter(o => !sel.has(o)); sel = new Set(); }
   else return;
   commit(before); edChanged(); renderPane();
@@ -2306,40 +2445,62 @@ function drawPaletteIcon(c, item) {
 }
 function renderPane() {
   document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === edTool)));
-  $('edSwipe').setAttribute('aria-pressed', String(edSwipe)); $('edGrid').textContent = 'Grid ' + GRIDS.find(([v]) => v === edGrid)[1];
-  $('edUndo').disabled = !undoS.length; $('edRedo').disabled = !redoS.length;
-  const pane = $('edPane');
+  $('edSwipe').setAttribute('aria-pressed', String(edSwipe)); $('edFree').setAttribute('aria-pressed', String(!edGrid));
+  $('edGrid').textContent = edGrid ? 'Grid ' + GRIDS.find(([v]) => v === edGrid)[1] : 'Grid off';
+  $('edUndo').disabled = !undoS.length; $('edRedo').disabled = !redoS.length; $('edTrash').disabled = !sel.size;
+  const pane = $('edPane'), cats = $('edCats'), w = pane.clientWidth || 600, n = sel.size;
+  if (!pane.clientWidth && mode === 'edit') requestAnimationFrame(() => { if (pane.clientWidth) renderPane(); }); // laid out on the next frame
+  cats.hidden = edTool !== 'build';
+  let items = [], per = 1, html = '';
   if (edTool === 'build') {
-    pane.innerHTML = PALETTE.map(q => `<button class="pal" data-pal="${q.id}" aria-pressed="${q.id === edPal}"><canvas width="80" height="80"></canvas>${q.label}</button>`).join('')
-      + '<button class="act" data-ed="rotpal">Rotate · R</button>';
-    pane.querySelectorAll('canvas').forEach((c, i) => drawPaletteIcon(c, PALETTE[i]));
+    if (!cats.childElementCount) { // the tab icons: the first object of each tab
+      cats.innerHTML = ED_CATS.map(([name], i) => `<button role="tab" data-cat="${i}" title="${name} (F1 / F2)" aria-label="${name}"><canvas width="52" height="52"></canvas></button>`).join('');
+      cats.querySelectorAll('canvas').forEach((c, i) => drawPaletteIcon(c, PALETTE.find(q => q.id === ED_CATS[i][1][0])));
+    }
+    cats.querySelectorAll('[data-cat]').forEach(b => b.setAttribute('aria-selected', String(+b.dataset.cat === edCat)));
+    items = ED_CATS[edCat][1].map(id => PALETTE.find(q => q.id === id)).filter(Boolean);
+    per = Math.max(1, Math.floor((w + 5) / 65)) * 2;
   } else if (edTool === 'edit') {
-    const n = sel.size, dis = n ? '' : 'disabled';
-    pane.innerHTML = `<span class="label" style="width:100%">${n ? `${n} selected` : 'Nothing selected · click an object (Shift+click to add more)'}</span>`
-      + [['left', '←'], ['up', '↑'], ['down', '↓'], ['right', '→'], ['rot', 'Rotate'], ['multi', 'Multi activate'], ['w-', 'Width −'], ['w+', 'Width +'], ['h-', 'Height −'], ['h+', 'Height +'],
-        ['dup', 'Duplicate'], ['del', 'Delete'], ['none', 'Deselect']].map(([a, txt]) => `<button class="act" data-ed="${a}" ${dis}>${txt}</button>`).join('')
-      + propFields();
+    items = ED_ACTS; per = Math.max(1, Math.floor((w + 5) / 91)) * 3;
+  } else items = [];
+  const pages = Math.max(1, Math.ceil(items.length / per)); edPage = Math.min(Math.max(0, edPage), pages - 1);
+  const shown = items.slice(edPage * per, edPage * per + per);
+  if (edTool === 'build') {
+    pane.className = 'edpane';
+    pane.innerHTML = shown.map(q => `<button class="pal" data-pal="${q.id}" aria-pressed="${q.id === edPal}" title="${q.label}"><canvas width="76" height="76"></canvas>${q.label}</button>`).join('');
+    pane.querySelectorAll('canvas').forEach((c, i) => drawPaletteIcon(c, shown[i]));
+  } else if (edTool === 'edit') {
+    pane.className = 'edpane acts';
+    pane.innerHTML = shown.map(([a, txt]) => `<button class="act" data-ed="${a}" ${n ? '' : 'disabled'}>${txt}</button>`).join('');
   } else {
-    pane.innerHTML = `<span class="label" style="width:100%">${edSwipe ? 'Click or drag over objects to delete them' : 'Click an object to delete it'}</span>`
-      + `<button class="act danger" data-ed="clear">${clearArmed ? 'Confirm: clear everything' : 'Clear all'}</button>`;
+    pane.className = 'edpane acts';
+    pane.innerHTML = `<p class="note">${edSwipe ? 'Click or drag over objects to delete them' : 'Click an object to delete it'}</p>`
+      + `<button class="act danger" data-ed="clear">${clearArmed ? 'Confirm: delete all' : 'Delete all'}</button>`;
   }
-  $('edHelp').textContent = HELP[edTool];
+  $('edPrev').disabled = edPage <= 0; $('edNext').disabled = edPage >= pages - 1;
+  $('edDots').innerHTML = pages > 1 ? Array.from({ length: pages }, (_, i) => `<i class="${i === edPage ? 'on' : ''}"></i>`).join('') : '';
+  // GD's buttons down the right while something is selected (or something is copied)
+  const one = n === 1 ? [...sel][0] : null, special = one && (one.t === 'x' || one.t === 'a');
+  $('edQuick').innerHTML = n || edClip ? [['copy', 'Copy', !n], ['paste', 'Paste', !edClip], ['dupe', 'Copy + Paste', !n], ['group', 'Edit Group', !n],
+    ['special', 'Edit Special', !special], ['none', 'Deselect', !n]].map(([a, txt, dis]) => `<button data-q="${a}" ${dis ? 'disabled' : ''}>${txt}</button>`).join('') : '';
+  $('edHelp').textContent = HELP[edTool] + ' · ' + HELP.all;
+  if (!$('edProps').hidden) renderProps();
 }
 // Edit-mode settings: a group number for the selection, and for a single trigger its target group, time and amounts.
 const PROPS = { m: [['a', 'Right (blocks)'], ['b', 'Down (blocks)']], r: [['a', 'Degrees']], f: [['a', 'Opacity 0–1']], c: [['a', 'Hue 0–360']] };
-function propFields() {
+function propFields(kind = 'group') {
   const objs = [...sel]; if (!objs.length) return '';
   const field = (prop, label, val, step = 'any') => `<label class="prop"><span>${label}</span><input class="field" type="number" step="${step}" data-prop="${prop}" value="${val}"></label>`;
   const trig = objs.length === 1 && objs[0].t === 'x' ? objs[0] : null, plain = objs.filter(o => o.t !== 'x');
   let html = '';
-  if (plain.length) { const gs = new Set(plain.map(o => o.g || '')); html += field('g', 'Group (blank = none)', gs.size === 1 ? [...gs][0] : '', 1); }
+  if (kind === 'group') { if (!plain.length) return '<p class="note">Triggers act on a group; set it in Edit Special.</p>'; const gs = new Set(plain.map(o => o.g || '')); return field('g', 'Group ID (blank = none)', gs.size === 1 ? [...gs][0] : '', 1); }
   const tx = objs.length === 1 && objs[0].t === 'a' ? objs[0] : null;
   if (tx) html += `<label class="prop" style="flex:1 1 220px"><span>Text</span><input class="field" type="text" maxlength="${TEXT_MAX}" data-prop="txt" value="${esc(tx.txt)}"></label>` + field('ts', 'Size', tx.s);
   if (trig) html += `<span class="label" style="width:100%">${TRIG[trig.k].name} trigger · fires when you pass it</span>`
     + field('tg', 'Target group', trig.g, 1) + field('dur', 'Seconds', trig.dur) + PROPS[trig.k].map(([k, l]) => field(k, l, trig[k])).join('');
   return html;
 }
-$('edPane').addEventListener('change', e => {
+$('edPropBody').addEventListener('change', e => {
   const inp = e.target.closest('[data-prop]'); if (!inp) return;
   const prop = inp.dataset.prop, raw = inp.value.trim(), v = Number(raw), before = JSON.stringify(edObjs), objs = [...sel];
   if (prop === 'txt' || prop === 'ts') {
@@ -2355,6 +2516,18 @@ $('edPane').addEventListener('change', e => {
   }
   commit(before); edChanged(); renderPane();
 });
+let propKind = 'group';
+function renderProps() {
+  const objs = [...sel]; if (!objs.length) { $('edProps').hidden = true; return; }
+  $('edPropsTitle').textContent = propKind === 'special' ? (objs[0].t === 'x' ? TRIG[objs[0].k].name + ' trigger' : 'Text') : `Edit Group · ${objs.length} object${objs.length === 1 ? '' : 's'}`;
+  $('edPropBody').innerHTML = propFields(propKind);
+}
+function openProps(kind) { propKind = kind; $('edMenu').hidden = true; $('sharePop').hidden = true; $('edProps').hidden = false; renderProps(); }
+function openMenu() {
+  $('edProps').hidden = true; $('sharePop').hidden = true; $('edMenu').hidden = false;
+  $('edInfo2').textContent = $('edStats').textContent.replace(/^· /, '');
+}
+function closePops() { $('edMenu').hidden = true; $('edProps').hidden = true; $('sharePop').hidden = true; }
 function updateEdInfo() {
   const n = edObjs.length, txt = `${n} object${n === 1 ? '' : 's'} · ${Math.round(world.end / B)} blocks · ${Math.round(duration(world))} s`;
   $('edStats').textContent = '· ' + txt; $('edInfo').textContent = txt;
@@ -2367,7 +2540,7 @@ function openEditor(l) {
   resumeEditor();
 }
 function resumeEditor() {
-  mode = 'edit'; $('hud').hidden = true; show('editor'); $('sharePop').hidden = true;
+  mode = 'edit'; $('hud').hidden = true; show('editor'); closePops();
   world = buildWorld(edObjs); baseHue = 200; clampEd(); renderPane(); updateEdInfo();
 }
 // Save a main level's edits as a local override (or drop the override when it matches the shipped level again).
@@ -2383,24 +2556,37 @@ function saveEditing() {
   grant('architect');
 }
 function editorKey(e) {
-  const k = e.key, ctrl = e.ctrlKey || e.metaKey;
-  if (ctrl && (k === 'z' || k === 'Z')) { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
-  if (ctrl && (k === 'y' || k === 'Y')) { e.preventDefault(); return redo(); }
-  if (ctrl && (k === 'd' || k === 'D')) { e.preventDefault(); return edAction('dup'); }
-  if (ctrl || !$('sharePop').hidden) return;
-  if (k === '1' || k === '2' || k === '3') { edTool = ['build', 'edit', 'delete'][+k - 1]; clearArmed = false; return renderPane(); }
-  if (k === 'r' || k === 'R') return edAction(edTool === 'edit' && sel.size ? 'rot' : 'rotpal');
+  const k = e.key, c = e.code, ctrl = e.ctrlKey || e.metaKey;
+  if (!$('edMenu').hidden || !$('edProps').hidden) { if (k === 'Escape') { e.preventDefault(); closePops(); } return; }
+  if (!$('sharePop').hidden) { if (k === 'Escape') { e.preventDefault(); closePops(); } return; }
+  if (ctrl) { // GD: Ctrl+Z / Ctrl+Shift+Z, Ctrl+C / V / D; plus Ctrl+Y and Ctrl+A
+    const act = { KeyZ: e.shiftKey ? redo : undo, KeyY: redo, KeyC: () => edAction('copy'), KeyV: () => edAction('paste'), KeyD: () => edAction('dupe'), KeyA: () => edAction('selall') }[c];
+    if (act) { e.preventDefault(); act(); }
+    return;
+  }
+  if (k === 'Escape') { e.preventDefault(); return openMenu(); }
+  if (k === 'Enter') { e.preventDefault(); return $('edTest').click(); }
+  if (c === 'Digit1' || c === 'Digit2' || c === 'Digit3') { edTool = ['build', 'edit', 'delete'][+c.slice(5) - 1]; clearArmed = false; edPage = 0; return renderPane(); }
+  if (k === 'F1' || k === 'F2') { e.preventDefault(); edTool = 'build'; edCat = (edCat + (k === 'F2' ? 1 : ED_CATS.length - 1)) % ED_CATS.length; edPage = 0; return renderPane(); }
+  if (c === 'KeyQ') { e.preventDefault(); return edAction(e.altKey ? 'fx' : 'ccw'); }
+  if (c === 'KeyE') { e.preventDefault(); return edAction(e.altKey ? 'fy' : 'cw'); }
+  if (c === 'KeyR') return edAction('cw'); // (GD's R shows a free-rotate handle; objects here only turn in quarters)
+  if (c === 'KeyT') { edSwipe = !edSwipe; return renderPane(); }
+  if (c === 'KeyF') return toggleFree();
+  if (c === 'KeyG') return toggleFree();
   if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); return edAction('del'); }
-  if (k === 'Escape') { e.preventDefault(); return edAction('none'); }
   if (k === '+' || k === '=') return zoomBy(1.25);
   if (k === '-' || k === '_') return zoomBy(0.8);
+  const wasd = { KeyW: 'up', KeyA: 'left', KeyS: 'down', KeyD: 'right' }[c];
+  if (wasd) { if (sel.size) { e.preventDefault(); edAction(wasd, e.shiftKey ? 1 / 15 : 1); } return; }
   const arrow = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[k];
   if (!arrow) return;
   e.preventDefault();
-  if (sel.size) return edAction(arrow, e.shiftKey);
+  if (sel.size) return edAction(arrow, e.shiftKey ? FINE : stepSize());
   const [dx, dy] = { left: [-3, 0], right: [3, 0], up: [0, -1], down: [0, 1] }[arrow]; // nothing selected: arrows look around
   editCam += dx * B; edCamY += dy * B; clampEd();
 }
+function toggleFree() { if (edGrid) { edLastGrid = edGrid; edGrid = 0; } else edGrid = edLastGrid || 1; renderPane(); }
 
 // ---------- settings ----------
 const keyName = c => !c ? 'Empty' : c === 'Space' ? 'Space' : c.replace(/^Key|^Digit/, '').replace(/^Arrow(.*)/, '$1 arrow');
@@ -2670,7 +2856,26 @@ $('edZoomIn').onclick = () => zoomBy(1.25);
 $('edZoomOut').onclick = () => zoomBy(0.8);
 $('edSwipe').onclick = () => { edSwipe = !edSwipe; renderPane(); };
 $('edGrid').onclick = () => { const i = GRIDS.findIndex(([v]) => v === edGrid); edGrid = GRIDS[(i + 1) % GRIDS.length][0]; renderPane(); };
-$('edShare').onclick = () => { $('code').value = encodeLevel(edObjs); $('codeMsg').textContent = ''; $('sharePop').hidden = !$('sharePop').hidden; };
+$('edTrash').onclick = () => edAction('del');
+$('edPause').onclick = openMenu;
+$('edResume').onclick = closePops;
+$('edPropsOk').onclick = () => { $('edProps').hidden = true; };
+$('edSave').onclick = () => { if (editing.main) saveMain(); else saveEditing(); toast('Saved'); };
+$('edSavePlay').onclick = () => {
+  if (editing.main) { saveMain(); play(LEVELS.find(l => l.id === editing.id), 'levels'); }
+  else { saveEditing(); play(customs.find(l => l.id === editing.id), 'create'); }
+};
+for (const [id, a] of [['edSelAll', 'selall'], ['edSelLeft', 'selleft'], ['edSelRight', 'selright']]) $(id).onclick = () => { edAction(a); closePops(); };
+$('edPrev').onclick = () => { edPage--; renderPane(); };
+$('edNext').onclick = () => { edPage++; renderPane(); };
+$('edFree').onclick = toggleFree;
+$('edCats').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; edCat = +b.dataset.cat; edPage = 0; renderPane(); });
+$('edQuick').addEventListener('click', e => {
+  const b = e.target.closest('[data-q]'); if (!b || b.disabled) return; const q = b.dataset.q;
+  if (q === 'group' || q === 'special') openProps(q); else edAction(q);
+});
+addEventListener('resize', () => { if (mode === 'edit') renderPane(); });
+$('edShare').onclick = () => { $('code').value = encodeLevel(edObjs); $('codeMsg').textContent = ''; $('edMenu').hidden = true; $('sharePop').hidden = false; };
 $('edClose').onclick = () => { $('sharePop').hidden = true; };
 $('edCopy').onclick = () => {
   grant('broadcast');
@@ -3062,10 +3267,11 @@ function bindCanvas(c) {
       const o = objectAt(bx, by);
       if (o && e.shiftKey) { if (sel.has(o)) sel.delete(o); else sel.add(o); renderPane(); return; }
       if (o) { if (!sel.has(o)) { sel = new Set([o]); renderPane(); } pdrag = { ...base, kind: 'move', before: JSON.stringify(edObjs), items: [...sel].map(q => [q, q.x, q.y]) }; }
-      else { if (!e.shiftKey && sel.size) { sel = new Set(); renderPane(); } pdrag = { ...base, kind: 'pan' }; }
+      else if (edSwipe || e.shiftKey) pdrag = { ...base, kind: 'box', add: e.shiftKey, ex: bx, ey: by }; // swipe: drag a box to select
+      else { if (sel.size) { sel = new Set(); renderPane(); } pdrag = { ...base, kind: 'pan' }; }
       return;
     }
-    if (edSwipe) { pdrag = { ...base, kind: 'paint', before: JSON.stringify(edObjs) }; pdrag.changed = edTool === 'build' ? placeAt(bx, by) : removeAt(bx, by); }
+    if (edSwipe || e.shiftKey) { pdrag = { ...base, kind: 'paint', before: JSON.stringify(edObjs) }; pdrag.changed = edTool === 'build' ? placeAt(bx, by) : removeAt(bx, by); }
     else pdrag = { ...base, kind: 'tap' };
   });
   c.addEventListener('pointermove', e => {
@@ -3077,6 +3283,7 @@ function bindCanvas(c) {
     if (!pdrag.moved) return;
     const k = S * edZoom;
     if (pdrag.kind === 'pan' || pdrag.kind === 'tap') { editCam = pdrag.cam - dx / k; edCamY = pdrag.camY - dy / k; clampEd(); }
+    else if (pdrag.kind === 'box') { pdrag.ex = bx; pdrag.ey = by; }
     else if (pdrag.kind === 'paint') { if (edTool === 'build' ? placeAt(bx, by) : removeAt(bx, by)) pdrag.changed = true; }
     else if (pdrag.kind === 'move') {
       const q = v => edGrid ? Math.round(v / edGrid) * edGrid : +v.toFixed(2); // free grid: follow the pointer exactly
@@ -3090,6 +3297,11 @@ function bindCanvas(c) {
     const d = pdrag; pdrag = null;
     if (d.kind === 'tap' && !d.moved) { const before = JSON.stringify(edObjs); if (edTool === 'build' ? placeAt(d.bx, d.by) : removeAt(d.bx, d.by)) commit(before); }
     if ((d.kind === 'paint' && d.changed) || (d.kind === 'move' && d.moved)) commit(d.before);
+    if (d.kind === 'box') {
+      const x0 = Math.min(d.bx, d.ex), x1 = Math.max(d.bx, d.ex), y0 = Math.min(d.by, d.ey), y1 = Math.max(d.by, d.ey);
+      const hit = edObjs.filter(o => { const [cx, cy] = objCenter(o); return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1; });
+      sel = new Set([...(d.add ? sel : []), ...hit]);
+    }
     renderPane();
   });
   c.addEventListener('pointerleave', () => { hoverCell = null; });
@@ -3098,9 +3310,10 @@ function bindCanvas(c) {
     if (mode !== 'edit') return;
     e.preventDefault();
     const r = c.getBoundingClientRect(), k = S * edZoom;
+    // GD: the wheel scrolls up and down, Shift+wheel left and right, Ctrl+wheel zooms (a trackpad's sideways swipe still scrolls sideways)
     if (e.ctrlKey) zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top);
-    else if (e.shiftKey) { edCamY += e.deltaY / k; clampEd(); }
-    else { editCam += (e.deltaX + e.deltaY) / k; clampEd(); }
+    else if (e.shiftKey) { editCam += (e.deltaY || e.deltaX) / k; clampEd(); }
+    else { edCamY += e.deltaY / k; editCam += e.deltaX / k; clampEd(); }
   }, { passive: false });
 }
 bindCanvas(cv);
