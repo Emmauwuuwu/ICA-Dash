@@ -233,6 +233,8 @@ input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
   .edright button { min-width: 0; font-size: 11px; padding: 6px 8px; }
 }
 .btnlink { display: inline-flex; align-items: center; padding: 9px 14px; border: 2px solid var(--hair); color: inherit; text-decoration: none; font-family: var(--mono); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+.facts button.mini { padding: 2px 8px; font-size: 11px; }
+#songGate { z-index: 7; }
 .songlist { display: flex; flex-direction: column; gap: 6px; }
 .songlist .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .vols { display: flex; flex-wrap: wrap; gap: 14px 28px; }
@@ -570,6 +572,19 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
   </div>
 </section>
 
+<div class="panel edpop" id="songGate" hidden role="dialog" aria-labelledby="sgTitle">
+  <div class="head"><h2 id="sgTitle">Song needed</h2></div>
+  <p id="sgText"></p>
+  <div class="btnrow">
+    <a class="ghost btnlink" id="sgOpen" target="_blank" rel="noopener">Open on Newgrounds</a>
+    <button class="primary" id="sgLoad">Load song file</button>
+    <button class="ghost" id="sgSkip">Play without it</button>
+    <button class="ghost" id="sgCancel">Cancel</button>
+  </div>
+  <input type="file" id="sgFile" accept="audio/*,.mp3,.ogg,.wav,.m4a" class="sr" tabindex="-1" aria-hidden="true">
+  <p class="warn" id="sgMsg"></p>
+  <p class="note">Download the song from its Newgrounds page, then load the file here. It's kept in this browser, so every level with this song can use it.</p>
+</div>
 <section class="screen" id="pause" hidden>
   <div class="panel">
     <div class="head"><h2>Paused</h2><span class="label" id="pauseInfo"></span></div>
@@ -1686,7 +1701,21 @@ function startPosState(o) {
 }
 function show(id) { document.querySelectorAll('.screen').forEach(s => s.hidden = s.id !== id); }
 
-function play(level, origin) {
+// The Newgrounds song a level needs that isn't on this device yet (its ID), or 0.
+function missingSong(level) {
+  if (level.id === 'test') return 0;
+  const m = /;M,1,(\d+)/.exec(';' + String(level.code || '').split(';').slice(1).join(';'));
+  const id = m ? +m[1] : 0; return id && !SONGS.has(id) ? id : 0;
+}
+let gate = null;
+function songGate(level, origin, id) {
+  gate = { level, origin, id };
+  $('sgText').textContent = `${level.name} uses Newgrounds song #${id}, which isn't on this device yet.`;
+  $('sgOpen').href = ngPage(id); $('sgMsg').textContent = ''; $('songGate').hidden = false; $('sgLoad').focus();
+}
+function closeGate(go) { $('songGate').hidden = true; const g = gate; gate = null; if (go && g) play(g.level, g.origin, true); }
+function play(level, origin, songOk) {
+  if (!songOk) { const id = missingSong(level); if (id) return songGate(level, origin, id); }
   cur = level; from = origin; world = level.id === 'test' ? buildWorld(edObjs) : worldFor(level.code); baseHue = level.hue ?? 200;
   if (level.id === 'test') { testPath = []; testPath2 = []; testClicks = []; testPrevHeld = false; testTick = 0; }
   attempt = 1; usedHacks = cheating(); checkpoints = []; spawnCache = null; held = false;
@@ -1776,7 +1805,7 @@ async function addSong(id, file) { // returns an error message, or ''
   const old = SONGS.get(id); if (old) URL.revokeObjectURL(old.url);
   SONGS.set(id, { url: URL.createObjectURL(file), name: file.name, size: file.size });
   try { await songDB.run('readwrite', st => st.put({ blob: file, name: file.name }, id)); } catch (e) { renderSongs(); return 'Loaded for now, but this browser wouldn\u2019t store it, so it\u2019ll be gone after a reload.'; }
-  renderSongs(); return '';
+  renderSongs(); if (!$('online')?.hidden) renderOnline(); return '';
 }
 async function removeSong(id) { const old = SONGS.get(id); if (old) URL.revokeObjectURL(old.url); SONGS.delete(id); try { await songDB.run('readwrite', st => st.delete(id)); } catch (e) {} renderSongs(); }
 const ngPage = id => `https://www.newgrounds.com/audio/listen/${id}`;
@@ -3034,6 +3063,7 @@ document.addEventListener('click', e => {
   else if (d.bind !== undefined) { listening = d.bind; renderBinds(); }
   else if (d.up) uploadLevel(d.up);
   else if (d.sort) { onSort = d.sort; renderOnline(); }
+  else if (d.oget) { const it = findOnline(d.oget); if (it) { const id = missingSong({ id: 'o', code: it.code }); if (id) songGate({ id: 'o:' + it.key, name: it.name, code: it.code, hue: 200 }, 'online', id); } }
   else if (d.oplay) { const it = findOnline(d.oplay); if (it) play({ id: 'o:' + it.key, name: it.name, code: it.code, hue: 200 }, 'online'); }
   else if (d.olike) toggleLike(d.olike);
   else if (d.ocopy) {
@@ -3151,6 +3181,11 @@ $('edZoomOut').onclick = () => zoomBy(0.8);
 $('edSwipe').onclick = () => { edSwipe = !edSwipe; renderPane(); };
 $('edGrid').onclick = () => { const i = GRIDS.findIndex(([v]) => v === edGrid); edGrid = GRIDS[(i + 1) % GRIDS.length][0]; renderPane(); };
 $('edTrash').onclick = () => edAction('del');
+$('sgLoad').onclick = () => $('sgFile').click();
+$('sgFile').onchange = async () => { const f = $('sgFile').files[0]; $('sgFile').value = ''; if (!f || !gate) return; const err = await addSong(gate.id, f); if (err && !SONGS.has(gate.id)) { $('sgMsg').textContent = err; return; } if (err) toast(err); closeGate(true); };
+$('sgSkip').onclick = () => closeGate(true);
+$('sgCancel').onclick = () => closeGate(false);
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('songGate').hidden) { e.stopPropagation(); closeGate(false); } }, true);
 // volume sliders (saved; synced with the rest of the settings)
 for (const [id, k] of [['volMusic', 'music'], ['volSfx', 'sfx']]) {
   $(id).value = SND.vol[k];
@@ -3470,7 +3505,10 @@ function renderOnline() {
       : 'You can play online levels; uploading and likes need Contributor access to this game.');
   $('onList').innerHTML = items.slice(0, 100).map(it => {
     let facts;
-    try { const w = worldFor(it.code); facts = `<span>${Math.round(w.end / B)} blk</span><span>${Math.round(duration(w))} s</span>`; } catch (e) { facts = '<span>Unreadable level</span>'; }
+    try { const w = worldFor(it.code); facts = `<span>${Math.round(w.end / B)} blk</span><span>${Math.round(duration(w))} s</span>`;
+      const sg = w.song; // its song: a built-in track, or a Newgrounds one (on this device or not)
+      facts += sg?.k === 1 ? `<span>♪ <a href="${ngPage(sg.n)}" target="_blank" rel="noopener">Newgrounds #${sg.n}</a> ${SONGS.has(sg.n) ? '✓ on this device' : `<button class="ghost mini" data-oget="${esc(it.key)}">Get song</button>`}</span>` : `<span>♪ Track ${sg?.n || 1}</span>`;
+    } catch (e) { facts = '<span>Unreadable level</span>'; }
     const own = it.author === NET.uid, key = esc(it.key), liked = mine.has(it.key);
     return `<div class="row"><div><div class="name">${esc(it.name)}</div><div class="facts"><span>by ${esc(playerName(it.author))}${own ? ' (you)' : ''}</span>${facts}<span>♥ ${it.likes}</span><span>Best ${bests['o:' + it.key] || 0}%</span></div></div>
       <div class="acts"><button class="primary" data-oplay="${key}">▶ Play</button>${NET.write && !own ? `<button class="ghost" data-olike="${key}" aria-pressed="${liked}">${liked ? '♥ Liked' : '♡ Like'}</button>` : ''}<button class="ghost" data-ocopy="${key}">Copy to my levels</button>${NET.write && (own || NET.owner) ? `<button class="danger" data-odel="${key}">${own ? 'Unpublish' : 'Remove'}</button>` : ''}</div></div>`;
