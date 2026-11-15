@@ -403,8 +403,8 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
       </div>
       <div class="edside">
         <button id="edSwipe" aria-pressed="false" title="Swipe (T, or hold Shift)">Swipe</button>
-        <button id="edFree" aria-pressed="false" title="Free move (F)">Free</button>
-        <button id="edGrid" title="Grid size (G turns snapping on/off)">Grid 1</button>
+        <button id="edFree" aria-pressed="false" title="Free Move (F): drag selected objects to move them">Free move</button>
+        <button id="edGrid" title="Grid size (G turns snapping on and off)">Grid 1</button>
       </div>
     </div>
   </div>
@@ -610,7 +610,7 @@ const LEVELS = [
   { id: 'l4', name: 'Copper Coil', diff: 'Normal', hue: 25, code: compose(4, [{ s: 1, g: 3.5, n: 12, zig: 0.3, saw: 0.15 }, { s: 1, g: 3.5, n: 8, flip: true }, { s: 2, g: 3.5, n: 12, zig: 0.2, saw: 0.2 }]) },
   { id: 'n2', name: 'Pinwheel', diff: 'Normal', hue: 60, code: compose(12, [{ s: 2, g: 4, n: 12, pool: 'easy' }, { s: 2, g: 3.5, n: 14, zig: 0.25, saw: 0.15 }]) },
   // Glass Teeth: hand-built in the object editor (ICA2 code), replacing the generated version.
-  { id: 'l5', name: 'Glass Teeth', diff: 'Hard', hue: 160, code: 'ICA2;r,-12,-1,27,4;r,-12,7,27,4;t,12,3,3,0.5,2;t,12,6.5,3,0.5,1;r,15,-1,2,4.5;t,15,3.5,2,2,2;t,15,6.5,2,2,0;r,15,8.5,6,2.5;r,17,-1,2,6.5;r,19,-1,19,4.5;t,19,3.5,2,2,3;t,19,6.5,2,2,1;r,21,6.5,23,4.5;r,38,-1,4,3.5;t,38,2.5,1,1,3;t,38,5.5,1,1,1;t,39,2.5,1,1,2;t,39,5.5,1,1,0;t,40,2.5,1,1,3;t,40,5.5,1,1,1;t,41,2.5,1,1,2;t,41,5.5,1,1,0;r,42,-1,8,4.5;t,44,3.5,1,1,2;t,44,6.5,1,1,0;r,44,7.5,4,3.5;t,45,3.5,1,1,3;t,45,6.5,1,1,1;t,46,3.5,1,1,2;t,46,6.5,1,1,0;t,47,3.5,1,1,3;t,47,6.5,1,1,1;r,48,6.5,4,4.5;r,50,-1,6,2.5;t,50,1.5,2,2,3;t,50,4.5,2,2,1;r,52,4.5,2,6.5;t,54,1.5,2,2,2;t,54,4.5,2,2,0;r,54,6.5,27,4.5;r,56,-1,12,4.5;r,68,-1,4,3.5;t,68,2.5,1,1,3;t,68,5.5,1,1,1;t,69,2.5,1,1,2;t,69,5.5,1,1,0;t,70,2.5,1,1,3;t,70,5.5,1,1,1;t,71,2.5,1,1,2;t,71,5.5,1,1,0;r,72,-1,7,4.5;r,79,-1,3,2.5;t,79,1.5,2,2,3;t,79,4.5,2,2,1;r,81,4.5,2,6.5;r,82,-1,5,1.5;t,82,0.5,1,1,3;t,82,3.5,1,1,1;r,83,3.5,1,7.5;t,84,0.5,3,3,2;t,84,3.5,3,3,0;r,84,6.5,23,4.5;r,87,-1,2,4.5;r,89,-1,6,3.5;t,89,2.5,1,1,3;t,89,5.5,1,1,1;t,90,2.5,1,1,2;t,90,5.5,1,1,0;t,91,2.5,1,1,3;t,91,5.5,1,1,1;t,92,2.5,1,1,2;t,92,5.5,1,1,0;t,93,2.5,1,1,3;t,93,5.5,1,1,1;t,94,2.5,1,1,2;t,94,5.5,1,1,0;r,95,-1,15,4.5;t,107,3.5,3,3,2;t,107,6.5,3,3,0;r,107,9.5,8,1.5;r,110,-1,2,6.5;t,110,5.5,1,1,3;t,110,8.5,1,1,1;t,111,5.5,1,1,2;t,111,8.5,1,1,0;r,112,-1,12,4.5;t,112,3.5,3,3,3;t,112,6.5,3,3,1;r,115,6.5,7,4.5;t,122,3.5,2,2,2;t,122,6.5,2,2,0;r,122,8.5,6,2.5;r,124,-1,2,6.5;r,126,-1,11,4.5;t,126,3.5,2,2,3;t,126,6.5,2,2,1;r,128,6.5,7,4.5;t,135,3.5,2,2,2;t,135,6.5,2,2,0;r,135,8.5,7,2.5;r,137,-1,1,6.5;r,138,-1,7,2.5;t,138,1.5,4,4,3;t,138,4.5,4,4,1;r,142,4.5,1,6.5;t,143,1.5,2,2,2;t,143,4.5,2,2,0;r,143,6.5,4,4.5;r,145,-1,8,4.5;t,147,3.5,1,1,2;t,147,6.5,1,1,0;r,147,7.5,4,3.5;t,148,3.5,1,1,3;t,148,6.5,1,1,1;t,149,3.5,1,1,2;t,149,6.5,1,1,0;t,150,3.5,1,1,3;t,150,6.5,1,1,1;r,151,6.5,4,4.5;r,153,-1,8,2.5;t,153,1.5,2,2,3;t,153,4.5,2,2,1;t,155,1.5,1,1,2;t,155,4.5,1,1,0;r,155,5.5,4,5.5;t,156,1.5,1,1,3;t,156,4.5,1,1,1;t,157,1.5,1,1,2;t,157,4.5,1,1,0;t,158,1.5,1,1,3;t,158,4.5,1,1,1;t,159,1.5,2,2,2;t,159,4.5,2,2,0;r,159,6.5,12,4.5;r,161,-1,7,4.5;r,168,-1,3,1.5;t,168,0.5,1.5,3,3;t,168,3.5,1.5,3,1;t,169.5,0.5,1.5,3,2;t,169.5,3.5,1.5,3,0;r,171,-1,5,4.5;t,171,3.5,1.5,3,2;t,171,6.5,1.5,3,0;r,171,9.5,3,1.5;t,172.5,3.5,1.5,3,3;t,172.5,6.5,1.5,3,1;r,174,6.5,19,4.5;r,176,-1,4,2.5;t,176,1.5,1,2,3;t,176,4.5,1,2,1;t,177,1.5,1,2,2;t,177,4.5,1,2,0;t,178,1.5,1,2,3;t,178,4.5,1,2,1;t,179,1.5,1,2,2;t,179,4.5,1,2,0;r,180,-1,12,4.5;r,192,-1,4,2.5;t,192,1.5,1,2,3;t,192,4.5,1,2,1;r,193,4.5,2,6.5;t,195,1.5,1,2,2;t,195,4.5,1,2,0;r,195,6.5,19,4.5;r,196,-1,2,4.5;r,198,-1,4,2.5;t,198,1.5,1,2,3;t,198,4.5,1,2,1;t,199,1.5,1,2,2;t,199,4.5,1,2,0;t,200,1.5,1,2,3;t,200,4.5,1,2,1;t,201,1.5,1,2,2;t,201,4.5,1,2,0;r,202,-1,13.5,4.5;t,214,3.5,1.5,3,2;t,214,6.5,1.5,3,0;r,214,9.5,5,1.5;r,215.5,-1,2,7.5;r,217.5,-1,5,4.5;t,217.5,3.5,1.5,3,3;t,217.5,6.5,1.5,3,1;r,219,6.5,2,4.5;t,221,3.5,1.5,3,2;t,221,6.5,1.5,3,0;r,221,9.5,5,1.5;r,222.5,-1,2,7.5;r,224.5,-1,10.5,4.5;t,224.5,3.5,1.5,3,3;t,224.5,6.5,1.5,3,1;r,226,6.5,9,4.5;s,25,4.25;s,30,4.25;s,35,5.75;s,60,4.25;s,65,4.25;s,76,5.75;s,99,5.75;s,104,5.75;s,119,4.25;s,132,4.25;p,12,3,4,S,2;p,163,3.5,3,S,2;p,166,3.5,3,m,1;p,230,3.5,3,m,0' },
+  { id: 'l5', name: 'Glass Teeth', diff: 'Hard', hue: 160, code: 'ICA2;r,-12,-1,27,4;r,-12,7,27,4;t,12,3,3,0.5,2;t,12,6.5,3,0.5,1;r,15,-1,2,4.5;t,15,3.5,2,2,2;t,15,6.5,2,2,0;r,15,8.5,6,2.5;r,17,-1,2,6.5;r,19,-1,19,4.5;t,19,3.5,2,2,3;t,19,6.5,2,2,1;r,21,6.5,23,4.5;r,38,-1,4,3.5;t,38,2.5,1,1,3;t,38,5.5,1,1,1;t,39,2.5,1,1,2;t,39,5.5,1,1,0;t,40,2.5,1,1,3;t,40,5.5,1,1,1;t,41,2.5,1,1,2;t,41,5.5,1,1,0;r,42,-1,8,4.5;t,44,3.5,1,1,2;t,44,6.5,1,1,0;r,44,7.5,4,3.5;t,45,3.5,1,1,3;t,45,6.5,1,1,1;t,46,3.5,1,1,2;t,46,6.5,1,1,0;t,47,3.5,1,1,3;t,47,6.5,1,1,1;r,48,6.5,4,4.5;r,50,-1,6,2.5;t,50,1.5,2,2,3;t,50,4.5,2,2,1;r,52,4.5,2,6.5;t,54,1.5,2,2,2;t,54,4.5,2,2,0;r,54,6.5,27,4.5;r,56,-1,12,4.5;r,68,-1,4,3.5;t,68,2.5,1,1,3;t,68,5.5,1,1,1;t,69,2.5,1,1,2;t,69,5.5,1,1,0;t,70,2.5,1,1,3;t,70,5.5,1,1,1;t,71,2.5,1,1,2;t,71,5.5,1,1,0;r,72,-1,7,4.5;r,79,-1,3,2.5;t,79,1.5,2,2,3;t,79,4.5,2,2,1;r,81,4.5,2,6.5;r,82,-1,5,1.5;t,82,0.5,1,1,3;t,82,3.5,1,1,1;r,83,3.5,1,7.5;t,84,0.5,3,3,2;t,84,3.5,3,3,0;r,84,6.5,23,4.5;r,87,-1,2,4.5;r,89,-1,6,3.5;t,89,2.5,1,1,3;t,89,5.5,1,1,1;t,90,2.5,1,1,2;t,90,5.5,1,1,0;t,91,2.5,1,1,3;t,91,5.5,1,1,1;t,92,2.5,1,1,2;t,92,5.5,1,1,0;t,93,2.5,1,1,3;t,93,5.5,1,1,1;t,94,2.5,1,1,2;t,94,5.5,1,1,0;r,95,-1,15,4.5;t,107,3.5,3,3,2;t,107,6.5,3,3,0;r,107,9.5,8,1.5;r,110,-1,2,6.5;t,110,5.5,1,1,3;t,110,8.5,1,1,1;t,111,5.5,1,1,2;t,111,8.5,1,1,0;r,112,-1,12,4.5;t,112,3.5,3,3,3;t,112,6.5,3,3,1;r,115,6.5,7,4.5;t,122,3.5,2,2,2;t,122,6.5,2,2,0;r,122,8.5,6,2.5;r,124,-1,2,6.5;r,126,-1,11,4.5;t,126,3.5,2,2,3;t,126,6.5,2,2,1;r,128,6.5,7,4.5;t,135,3.5,2,2,2;t,135,6.5,2,2,0;r,135,8.5,7,2.5;r,137,-1,1,6.5;r,138,-1,7,2.5;t,138,1.5,4,4,3;t,138,4.5,4,4,1;r,142,4.5,1,6.5;t,143,1.5,2,2,2;t,143,4.5,2,2,0;r,143,6.5,4,4.5;r,145,-1,8,4.5;t,147,3.5,1,1,2;t,147,6.5,1,1,0;r,147,7.5,4,3.5;t,148,3.5,1,1,3;t,148,6.5,1,1,1;t,149,3.5,1,1,2;t,149,6.5,1,1,0;t,150,3.5,1,1,3;t,150,6.5,1,1,1;r,151,6.5,4,4.5;r,153,-1,8,2.5;t,153,1.5,2,2,3;t,153,4.5,2,2,1;t,155,1.5,1,1,2;t,155,4.5,1,1,0;r,155,5.5,4,5.5;t,156,1.5,1,1,3;t,156,4.5,1,1,1;t,157,1.5,1,1,2;t,157,4.5,1,1,0;t,158,1.5,1,1,3;t,158,4.5,1,1,1;t,159,1.5,2,2,2;t,159,4.5,2,2,0;r,159,6.5,12,4.5;r,161,-1,7,4.5;r,168,-1,3,1.5;t,168,0.5,1.5,3,3;t,168,3.5,1.5,3,1;t,169.5,0.5,1.5,3,2;t,169.5,3.5,1.5,3,0;r,171,-1,5,4.5;t,171,3.5,1.5,3,2;t,171,6.5,1.5,3,0;r,171,9.5,3,1.5;t,172.5,3.5,1.5,3,3;t,172.5,6.5,1.5,3,1;r,174,6.5,19,4.5;r,176,-1,4,2.5;t,176,1.5,1,2,3;t,176,4.5,1,2,1;t,177,1.5,1,2,2;t,177,4.5,1,2,0;t,178,1.5,1,2,3;t,178,4.5,1,2,1;t,179,1.5,1,2,2;t,179,4.5,1,2,0;r,180,-1,12,4.5;r,192,-1,4,2.5;t,192,1.5,1,2,3;t,192,4.5,1,2,1;r,193,4.5,2,6.5;t,195,1.5,1,2,2;t,195,4.5,1,2,0;r,195,6.5,19,4.5;r,196,-1,2,4.5;r,198,-1,4,2.5;t,198,1.5,1,2,3;t,198,4.5,1,2,1;t,199,1.5,1,2,2;t,199,4.5,1,2,0;t,200,1.5,1,2,3;t,200,4.5,1,2,1;t,201,1.5,1,2,2;t,201,4.5,1,2,0;r,202,-1,13.5,4.5;t,214,3.5,1.5,3,2;t,214,6.5,1.5,3,0;r,214,9.5,5,1.5;r,215.5,-1,2,7.5;r,217.5,-1,5,4.5;t,217.5,3.5,1.5,3,3;t,217.5,6.5,1.5,3,1;r,219,6.5,2,4.5;t,221,3.5,1.5,3,2;t,221,6.5,1.5,3,0;r,221,9.5,5,1.5;r,222.5,-1,2,7.5;r,224.5,-1,10.5,4.5;t,224.5,3.5,1.5,3,3;t,224.5,6.5,1.5,3,1;r,226,6.5,9,4.5;s,25,4.25;s,30,4.25;s,35,5.75;s,60,4.25;s,65,4.25;s,76,5.75;s,99,5.75;s,104,5.75;s,119,4.25;s,132,4.25;p,13.067,3,4,S,2;p,164.067,3.5,3,S,2;p,167.067,3.5,3,m,1;p,230.867,3.5,3,m,0' },
   { id: 'm3', name: 'Needle Run', diff: 'Hard', hue: 335, code: [
     's2 f4', 'g3 u3 d3 u3 d3 f2', 'u1 d1 u1 d1 u1 d1 f2', 'f2 o-0.8 f3', 'd2 u4 d2 f2', 'f2 o0.8 f3',
     'g2.5 u2 d2 u2 d2 f2', 'u3 d3 d3 u3 f2', 'u1 d1 u1 d1 u1 d1 u1 d1 f2', 'd2 f1 u4 f1 d2 f2', 'u2 d1 u1 d2 f2',
@@ -620,7 +620,7 @@ const LEVELS = [
     'g2.5 d2 u2 d2 u2 f2', 'u3 d3 d3 u3 f2', 'd2 f2 u4 f2 d2 f2', 'u2 d2 f2',
     'g3 u2 d2 u2 d2 f2', 'd3 u3 f2', 'f2 o-0.8 f3', 'u3 f2 d3 f2', 'g2.5 u2 d2 u2 d2 f2', 'd2 f2 u2 f2', 'f6'].join(' ') },
   // Quarry: hand-built in the object editor (ICA2 code), replacing the generated version.
-  { id: 'n3', name: 'Quarry', diff: 'Hard', hue: 250, code: 'ICA2;r,-12,-1,27,4;r,-12,7,27,4;t,12,3,3,0.25,2;t,12,6.75,3,0.25,1;r,15,-1,2,4.25;r,15,6.75,5,4.25;r,17,-1,3,1.25;t,17,0.25,1.5,3,3;t,17,3.75,1.5,3,1;t,18.5,0.25,1.5,3,2;t,18.5,3.75,1.5,3,0;r,20,-1,6.5,4.25;t,20,3.25,1.5,3,2;t,20,6.75,1.5,3,0;r,20,9.75,3,1.25;t,21.5,3.25,1.5,3,3;t,21.5,6.75,1.5,3,1;r,23,6.75,2,4.25;t,25,3.25,1.5,3,2;t,25,6.75,1.5,3,0;r,25,9.75,5,1.25;r,26.5,-1,2,7.25;r,28.5,-1,4.5,4.25;t,28.5,3.25,1.5,3,3;t,28.5,6.75,1.5,3,1;r,30,6.75,2,4.25;t,32,3.25,1,2,2;t,32,6.75,1,2,0;r,32,8.75,4,2.25;r,33,-1,1,6.25;r,34,-1,4,2.25;t,34,1.25,2,4,3;t,34,4.75,2,4,1;r,36,4.75,1,6.25;t,37,1.25,1,2,2;t,37,4.75,1,2,0;r,37,6.75,6,4.25;r,38,-1,2,4.25;r,40,-1,3,1.25;t,40,0.25,1.5,3,3;t,40,3.75,1.5,3,1;t,41.5,0.25,1.5,3,2;t,41.5,3.75,1.5,3,0;r,43,-1,6.5,4.25;t,43,3.25,1.5,3,2;t,43,6.75,1.5,3,0;r,43,9.75,3,1.25;t,44.5,3.25,1.5,3,3;t,44.5,6.75,1.5,3,1;r,46,6.75,2,4.25;t,48,3.25,1.5,3,2;t,48,6.75,1.5,3,0;r,48,9.75,5,1.25;r,49.5,-1,2,7.25;r,51.5,-1,3.5,4.25;t,51.5,3.25,1.5,3,3;t,51.5,6.75,1.5,3,1;r,53,6.75,5,4.25;r,55,-1,3,1.25;t,55,0.25,1.5,3,3;t,55,3.75,1.5,3,1;t,56.5,0.25,1.5,3,2;t,56.5,3.75,1.5,3,0;r,58,-1,6.5,4.25;t,58,3.25,1.5,3,2;t,58,6.75,1.5,3,0;r,58,9.75,3,1.25;t,59.5,3.25,1.5,3,3;t,59.5,6.75,1.5,3,1;r,61,6.75,2,4.25;t,63,3.25,1.5,3,2;t,63,6.75,1.5,3,0;r,63,9.75,5,1.25;r,64.5,-1,2,7.25;r,66.5,-1,3.5,4.25;t,66.5,3.25,1.5,3,3;t,66.5,6.75,1.5,3,1;r,68,6.75,8,4.25;r,70,-1,3,1.25;t,70,0.25,1.5,3,3;t,70,3.75,1.5,3,1;t,71.5,0.25,1.5,3,2;t,71.5,3.75,1.5,3,0;r,73,-1,2,4.25;r,75,-1,4,2.25;t,75,1.25,1,2,3;t,75,4.75,1,2,1;r,76,4.75,2,6.25;t,78,1.25,1,2,2;t,78,4.75,1,2,0;r,78,6.75,3,4.25;r,79,-1,3,4.25;t,81,3.25,1,2,2;t,81,6.75,1,2,0;r,81,8.75,4,2.25;r,82,-1,1,6.25;r,83,-1,4,2.25;t,83,1.25,2,4,3;t,83,4.75,2,4,1;r,85,4.75,1,6.25;t,86,1.25,1,2,2;t,86,4.75,1,2,0;r,86,6.75,10,4.25;r,87,-1,9,4.25;t,93,3.25,3,0.25,2;t,93,6.5,3,0.25,1;r,96,-1,7,4.5;r,96,6.5,17,4.5;r,103,-1,8,2.5;t,103,1.5,2,2,3;t,103,4.5,2,2,1;t,105,1.5,2,2,2;t,105,4.5,2,2,0;t,107,1.5,2,2,3;t,107,4.5,2,2,1;t,109,1.5,2,2,2;t,109,4.5,2,2,0;r,111,-1,5,4.5;t,113,3.5,3,3,2;t,113,6.5,3,3,0;r,113,9.5,8,1.5;r,116,-1,2,7.5;r,118,-1,5,4.5;t,118,3.5,3,3,3;t,118,6.5,3,3,1;r,121,6.5,4,4.5;r,123,-1,6,2.5;t,123,1.5,2,2,3;t,123,4.5,2,2,1;t,125,1.5,1,1,2;t,125,4.5,1,1,0;r,125,5.5,2,5.5;t,126,1.5,1,1,3;t,126,4.5,1,1,1;t,127,1.5,2,2,2;t,127,4.5,2,2,0;r,127,6.5,4,4.5;r,129,-1,5,4.5;t,131,3.5,3,3,2;t,131,6.5,3,3,0;r,131,9.5,8,1.5;r,134,-1,2,7.5;r,136,-1,8,4.5;t,136,3.5,3,3,3;t,136,6.5,3,3,1;r,139,6.5,2,4.5;t,141,3.5,3,3,2;t,141,6.5,3,3,0;r,141,9.5,8,1.5;r,144,-1,2,6.5;t,144,5.5,1,1,3;t,144,8.5,1,1,1;t,145,5.5,1,1,2;t,145,8.5,1,1,0;r,146,-1,5,4.5;t,146,3.5,3,3,3;t,146,6.5,3,3,1;r,149,6.5,8,4.5;r,151,-1,6,1.5;t,151,0.5,3,3,3;t,151,3.5,3,3,1;t,154,0.5,3,3,2;t,154,3.5,3,3,0;r,157,-1,11,4.5;t,157,3.5,3,3,2;t,157,6.5,3,3,0;r,157,9.5,6,1.5;t,160,3.5,3,3,3;t,160,6.5,3,3,1;r,163,6.5,2,4.5;t,165,3.5,3,3,2;t,165,6.5,3,3,0;r,165,9.5,8,1.5;r,168,-1,2,6.5;t,168,5.5,1,1,3;t,168,8.5,1,1,1;t,169,5.5,1,1,2;t,169,8.5,1,1,0;r,170,-1,5,4.5;t,170,3.5,3,3,3;t,170,6.5,3,3,1;r,173,6.5,14,4.5;r,175,-1,8,2.5;t,175,1.5,2,2,3;t,175,4.5,2,2,1;t,177,1.5,2,2,2;t,177,4.5,2,2,0;t,179,1.5,2,2,3;t,179,4.5,2,2,1;t,181,1.5,2,2,2;t,181,4.5,2,2,0;r,183,-1,2,4.5;r,185,-1,6,2.5;t,185,1.5,2,2,3;t,185,4.5,2,2,1;t,187,1.5,1,1,2;t,187,4.5,1,1,0;r,187,5.5,2,5.5;t,188,1.5,1,1,3;t,188,4.5,1,1,1;t,189,1.5,2,2,2;t,189,4.5,2,2,0;r,189,6.5,6,4.5;r,191,-1,2,4.5;r,193,-1,3,2.5;t,193,1.5,2,2,3;t,193,4.5,2,2,1;r,195,4.5,2,6.5;r,196,-1,5,1.5;t,196,0.5,1,1,3;t,196,3.5,1,1,1;r,197,3.5,1,7.5;t,198,0.5,3,3,2;t,198,3.5,3,3,0;r,198,6.5,20,4.5;r,201,-1,2,4.5;r,203,-1,6,1.5;t,203,0.5,3,3,3;t,203,3.5,3,3,1;t,206,0.5,3,3,2;t,206,3.5,3,3,0;r,209,-1,12,4.5;t,218,3.5,3,3,2;t,218,6.5,3,3,0;r,218,9.5,8,1.5;r,221,-1,2,7.5;r,223,-1,5,4.5;t,223,3.5,3,3,3;t,223,6.5,3,3,1;r,226,6.5,4,4.5;r,228,-1,6,2.5;t,228,1.5,2,2,3;t,228,4.5,2,2,1;r,230,4.5,2,6.5;t,232,1.5,2,2,2;t,232,4.5,2,2,0;r,232,6.5,16,4.5;r,234,-1,2,4.5;r,236,-1,8,2.5;t,236,1.5,2,2,3;t,236,4.5,2,2,1;t,238,1.5,2,2,2;t,238,4.5,2,2,0;t,240,1.5,2,2,3;t,240,4.5,2,2,1;t,242,1.5,2,2,2;t,242,4.5,2,2,0;r,244,-1,2,4.5;r,246,-1,6,2.5;t,246,1.5,2,2,3;t,246,4.5,2,2,1;r,248,4.5,2,6.5;t,250,1.5,2,2,2;t,250,4.5,2,2,0;r,250,6.5,6,4.5;r,252,-1,2,4.5;r,254,-1,6,2.5;t,254,1.5,2,2,3;t,254,4.5,2,2,1;r,256,4.5,2,6.5;t,258,1.5,2,2,2;t,258,4.5,2,2,0;r,258,6.5,10,4.5;r,260,-1,2,4.5;r,262,-1,6,1.5;t,262,0.5,3,3,3;t,262,3.5,3,3,1;t,265,0.5,3,3,2;t,265,3.5,3,3,0;r,268,-1,10,4.5;t,268,3.5,3,3,2;t,268,6.5,3,3,0;r,268,9.5,6,1.5;t,271,3.5,3,3,3;t,271,6.5,3,3,1;r,274,6.5,2,4.5;t,276,3.5,2,2,2;t,276,6.5,2,2,0;r,276,8.5,7,2.5;r,278,-1,1,6.5;r,279,-1,7,2.5;t,279,1.5,4,4,3;t,279,4.5,4,4,1;r,283,4.5,1,6.5;t,284,1.5,2,2,2;t,284,4.5,2,2,0;r,284,6.5,18,4.5;r,286,-1,2,4.5;r,288,-1,6,1.5;t,288,0.5,3,3,3;t,288,3.5,3,3,1;t,291,0.5,3,3,2;t,291,3.5,3,3,0;r,294,-1,2,4.5;r,296,-1,6,1.5;t,296,0.5,3,3,3;t,296,3.5,3,3,1;t,299,0.5,3,3,2;t,299,3.5,3,3,0;r,302,-1,10,4.5;t,302,3.5,3,3,2;t,302,6.5,3,3,0;r,302,9.5,6,1.5;t,305,3.5,3,3,3;t,305,6.5,3,3,1;r,308,6.5,2,4.5;t,310,3.5,2,2,2;t,310,6.5,2,2,0;r,310,8.5,7,2.5;r,312,-1,1,6.5;r,313,-1,7,2.5;t,313,1.5,4,4,3;t,313,4.5,4,4,1;r,317,4.5,1,6.5;t,318,1.5,2,2,2;t,318,4.5,2,2,0;r,318,6.5,10,4.5;r,320,-1,2,4.5;r,322,-1,6,1.5;t,322,0.5,3,3,3;t,322,3.5,3,3,1;t,325,0.5,3,3,2;t,325,3.5,3,3,0;r,328,-1,8,4.5;t,328,3.5,3,3,2;t,328,6.5,3,3,0;r,328,9.5,6,1.5;t,331,3.5,3,3,3;t,331,6.5,3,3,1;r,334,6.5,15,4.5;r,336,-1,8,2.5;t,336,1.5,2,2,3;t,336,4.5,2,2,1;t,338,1.5,2,2,2;t,338,4.5,2,2,0;t,340,1.5,2,2,3;t,340,4.5,2,2,1;t,342,1.5,2,2,2;t,342,4.5,2,2,0;r,344,-1,5,4.5;s,100,5.75;p,12,3,4,S,2;p,93,3.25,3.5,S,2;p,215,3.5,3,S,3;p,15,3.25,3.5,m,1;p,91,3.25,3.5,m,0' },
+  { id: 'n3', name: 'Quarry', diff: 'Hard', hue: 250, code: 'ICA2;r,-12,-1,27,4;r,-12,7,27,4;t,12,3,3,0.25,2;t,12,6.75,3,0.25,1;r,15,-1,2,4.25;r,15,6.75,5,4.25;r,17,-1,3,1.25;t,17,0.25,1.5,3,3;t,17,3.75,1.5,3,1;t,18.5,0.25,1.5,3,2;t,18.5,3.75,1.5,3,0;r,20,-1,6.5,4.25;t,20,3.25,1.5,3,2;t,20,6.75,1.5,3,0;r,20,9.75,3,1.25;t,21.5,3.25,1.5,3,3;t,21.5,6.75,1.5,3,1;r,23,6.75,2,4.25;t,25,3.25,1.5,3,2;t,25,6.75,1.5,3,0;r,25,9.75,5,1.25;r,26.5,-1,2,7.25;r,28.5,-1,4.5,4.25;t,28.5,3.25,1.5,3,3;t,28.5,6.75,1.5,3,1;r,30,6.75,2,4.25;t,32,3.25,1,2,2;t,32,6.75,1,2,0;r,32,8.75,4,2.25;r,33,-1,1,6.25;r,34,-1,4,2.25;t,34,1.25,2,4,3;t,34,4.75,2,4,1;r,36,4.75,1,6.25;t,37,1.25,1,2,2;t,37,4.75,1,2,0;r,37,6.75,6,4.25;r,38,-1,2,4.25;r,40,-1,3,1.25;t,40,0.25,1.5,3,3;t,40,3.75,1.5,3,1;t,41.5,0.25,1.5,3,2;t,41.5,3.75,1.5,3,0;r,43,-1,6.5,4.25;t,43,3.25,1.5,3,2;t,43,6.75,1.5,3,0;r,43,9.75,3,1.25;t,44.5,3.25,1.5,3,3;t,44.5,6.75,1.5,3,1;r,46,6.75,2,4.25;t,48,3.25,1.5,3,2;t,48,6.75,1.5,3,0;r,48,9.75,5,1.25;r,49.5,-1,2,7.25;r,51.5,-1,3.5,4.25;t,51.5,3.25,1.5,3,3;t,51.5,6.75,1.5,3,1;r,53,6.75,5,4.25;r,55,-1,3,1.25;t,55,0.25,1.5,3,3;t,55,3.75,1.5,3,1;t,56.5,0.25,1.5,3,2;t,56.5,3.75,1.5,3,0;r,58,-1,6.5,4.25;t,58,3.25,1.5,3,2;t,58,6.75,1.5,3,0;r,58,9.75,3,1.25;t,59.5,3.25,1.5,3,3;t,59.5,6.75,1.5,3,1;r,61,6.75,2,4.25;t,63,3.25,1.5,3,2;t,63,6.75,1.5,3,0;r,63,9.75,5,1.25;r,64.5,-1,2,7.25;r,66.5,-1,3.5,4.25;t,66.5,3.25,1.5,3,3;t,66.5,6.75,1.5,3,1;r,68,6.75,8,4.25;r,70,-1,3,1.25;t,70,0.25,1.5,3,3;t,70,3.75,1.5,3,1;t,71.5,0.25,1.5,3,2;t,71.5,3.75,1.5,3,0;r,73,-1,2,4.25;r,75,-1,4,2.25;t,75,1.25,1,2,3;t,75,4.75,1,2,1;r,76,4.75,2,6.25;t,78,1.25,1,2,2;t,78,4.75,1,2,0;r,78,6.75,3,4.25;r,79,-1,3,4.25;t,81,3.25,1,2,2;t,81,6.75,1,2,0;r,81,8.75,4,2.25;r,82,-1,1,6.25;r,83,-1,4,2.25;t,83,1.25,2,4,3;t,83,4.75,2,4,1;r,85,4.75,1,6.25;t,86,1.25,1,2,2;t,86,4.75,1,2,0;r,86,6.75,10,4.25;r,87,-1,9,4.25;t,93,3.25,3,0.25,2;t,93,6.5,3,0.25,1;r,96,-1,7,4.5;r,96,6.5,17,4.5;r,103,-1,8,2.5;t,103,1.5,2,2,3;t,103,4.5,2,2,1;t,105,1.5,2,2,2;t,105,4.5,2,2,0;t,107,1.5,2,2,3;t,107,4.5,2,2,1;t,109,1.5,2,2,2;t,109,4.5,2,2,0;r,111,-1,5,4.5;t,113,3.5,3,3,2;t,113,6.5,3,3,0;r,113,9.5,8,1.5;r,116,-1,2,7.5;r,118,-1,5,4.5;t,118,3.5,3,3,3;t,118,6.5,3,3,1;r,121,6.5,4,4.5;r,123,-1,6,2.5;t,123,1.5,2,2,3;t,123,4.5,2,2,1;t,125,1.5,1,1,2;t,125,4.5,1,1,0;r,125,5.5,2,5.5;t,126,1.5,1,1,3;t,126,4.5,1,1,1;t,127,1.5,2,2,2;t,127,4.5,2,2,0;r,127,6.5,4,4.5;r,129,-1,5,4.5;t,131,3.5,3,3,2;t,131,6.5,3,3,0;r,131,9.5,8,1.5;r,134,-1,2,7.5;r,136,-1,8,4.5;t,136,3.5,3,3,3;t,136,6.5,3,3,1;r,139,6.5,2,4.5;t,141,3.5,3,3,2;t,141,6.5,3,3,0;r,141,9.5,8,1.5;r,144,-1,2,6.5;t,144,5.5,1,1,3;t,144,8.5,1,1,1;t,145,5.5,1,1,2;t,145,8.5,1,1,0;r,146,-1,5,4.5;t,146,3.5,3,3,3;t,146,6.5,3,3,1;r,149,6.5,8,4.5;r,151,-1,6,1.5;t,151,0.5,3,3,3;t,151,3.5,3,3,1;t,154,0.5,3,3,2;t,154,3.5,3,3,0;r,157,-1,11,4.5;t,157,3.5,3,3,2;t,157,6.5,3,3,0;r,157,9.5,6,1.5;t,160,3.5,3,3,3;t,160,6.5,3,3,1;r,163,6.5,2,4.5;t,165,3.5,3,3,2;t,165,6.5,3,3,0;r,165,9.5,8,1.5;r,168,-1,2,6.5;t,168,5.5,1,1,3;t,168,8.5,1,1,1;t,169,5.5,1,1,2;t,169,8.5,1,1,0;r,170,-1,5,4.5;t,170,3.5,3,3,3;t,170,6.5,3,3,1;r,173,6.5,14,4.5;r,175,-1,8,2.5;t,175,1.5,2,2,3;t,175,4.5,2,2,1;t,177,1.5,2,2,2;t,177,4.5,2,2,0;t,179,1.5,2,2,3;t,179,4.5,2,2,1;t,181,1.5,2,2,2;t,181,4.5,2,2,0;r,183,-1,2,4.5;r,185,-1,6,2.5;t,185,1.5,2,2,3;t,185,4.5,2,2,1;t,187,1.5,1,1,2;t,187,4.5,1,1,0;r,187,5.5,2,5.5;t,188,1.5,1,1,3;t,188,4.5,1,1,1;t,189,1.5,2,2,2;t,189,4.5,2,2,0;r,189,6.5,6,4.5;r,191,-1,2,4.5;r,193,-1,3,2.5;t,193,1.5,2,2,3;t,193,4.5,2,2,1;r,195,4.5,2,6.5;r,196,-1,5,1.5;t,196,0.5,1,1,3;t,196,3.5,1,1,1;r,197,3.5,1,7.5;t,198,0.5,3,3,2;t,198,3.5,3,3,0;r,198,6.5,20,4.5;r,201,-1,2,4.5;r,203,-1,6,1.5;t,203,0.5,3,3,3;t,203,3.5,3,3,1;t,206,0.5,3,3,2;t,206,3.5,3,3,0;r,209,-1,12,4.5;t,218,3.5,3,3,2;t,218,6.5,3,3,0;r,218,9.5,8,1.5;r,221,-1,2,7.5;r,223,-1,5,4.5;t,223,3.5,3,3,3;t,223,6.5,3,3,1;r,226,6.5,4,4.5;r,228,-1,6,2.5;t,228,1.5,2,2,3;t,228,4.5,2,2,1;r,230,4.5,2,6.5;t,232,1.5,2,2,2;t,232,4.5,2,2,0;r,232,6.5,16,4.5;r,234,-1,2,4.5;r,236,-1,8,2.5;t,236,1.5,2,2,3;t,236,4.5,2,2,1;t,238,1.5,2,2,2;t,238,4.5,2,2,0;t,240,1.5,2,2,3;t,240,4.5,2,2,1;t,242,1.5,2,2,2;t,242,4.5,2,2,0;r,244,-1,2,4.5;r,246,-1,6,2.5;t,246,1.5,2,2,3;t,246,4.5,2,2,1;r,248,4.5,2,6.5;t,250,1.5,2,2,2;t,250,4.5,2,2,0;r,250,6.5,6,4.5;r,252,-1,2,4.5;r,254,-1,6,2.5;t,254,1.5,2,2,3;t,254,4.5,2,2,1;r,256,4.5,2,6.5;t,258,1.5,2,2,2;t,258,4.5,2,2,0;r,258,6.5,10,4.5;r,260,-1,2,4.5;r,262,-1,6,1.5;t,262,0.5,3,3,3;t,262,3.5,3,3,1;t,265,0.5,3,3,2;t,265,3.5,3,3,0;r,268,-1,10,4.5;t,268,3.5,3,3,2;t,268,6.5,3,3,0;r,268,9.5,6,1.5;t,271,3.5,3,3,3;t,271,6.5,3,3,1;r,274,6.5,2,4.5;t,276,3.5,2,2,2;t,276,6.5,2,2,0;r,276,8.5,7,2.5;r,278,-1,1,6.5;r,279,-1,7,2.5;t,279,1.5,4,4,3;t,279,4.5,4,4,1;r,283,4.5,1,6.5;t,284,1.5,2,2,2;t,284,4.5,2,2,0;r,284,6.5,18,4.5;r,286,-1,2,4.5;r,288,-1,6,1.5;t,288,0.5,3,3,3;t,288,3.5,3,3,1;t,291,0.5,3,3,2;t,291,3.5,3,3,0;r,294,-1,2,4.5;r,296,-1,6,1.5;t,296,0.5,3,3,3;t,296,3.5,3,3,1;t,299,0.5,3,3,2;t,299,3.5,3,3,0;r,302,-1,10,4.5;t,302,3.5,3,3,2;t,302,6.5,3,3,0;r,302,9.5,6,1.5;t,305,3.5,3,3,3;t,305,6.5,3,3,1;r,308,6.5,2,4.5;t,310,3.5,2,2,2;t,310,6.5,2,2,0;r,310,8.5,7,2.5;r,312,-1,1,6.5;r,313,-1,7,2.5;t,313,1.5,4,4,3;t,313,4.5,4,4,1;r,317,4.5,1,6.5;t,318,1.5,2,2,2;t,318,4.5,2,2,0;r,318,6.5,10,4.5;r,320,-1,2,4.5;r,322,-1,6,1.5;t,322,0.5,3,3,3;t,322,3.5,3,3,1;t,325,0.5,3,3,2;t,325,3.5,3,3,0;r,328,-1,8,4.5;t,328,3.5,3,3,2;t,328,6.5,3,3,0;r,328,9.5,6,1.5;t,331,3.5,3,3,3;t,331,6.5,3,3,1;r,334,6.5,15,4.5;r,336,-1,8,2.5;t,336,1.5,2,2,3;t,336,4.5,2,2,1;t,338,1.5,2,2,2;t,338,4.5,2,2,0;t,340,1.5,2,2,3;t,340,4.5,2,2,1;t,342,1.5,2,2,2;t,342,4.5,2,2,0;r,344,-1,5,4.5;s,100,5.75;p,13.067,3,4,S,2;p,94.067,3.25,3.5,S,2;p,216.067,3.5,3,S,3;p,16.067,3.25,3.5,m,1;p,91.867,3.25,3.5,m,0' },
   { id: 'l7', name: 'Ember Gate', diff: 'Harder', hue: 12, code: compose(7, [{ s: 2, g: 2.5, n: 10, zig: 0.5 }, { s: 2, n: 10, dual: true, saw: 0.25 }, { s: 3, g: 3, n: 14, saw: 0.2 }]) },
   { id: 'l8', name: 'Static Bloom', diff: 'Harder', hue: 300, code: compose(8, [{ s: 3, g: 2.5, n: 20, saw: 0.2 }, { s: 3, g: 3, n: 12, flip: true, saw: 0.15 }]) },
   { id: 'n4', name: 'Mirror Lake', diff: 'Harder', hue: 175, code: compose(14, [{ s: 2, g: 3, n: 10, zig: 0.3 }, { s: 2, n: 14, dual: true, saw: 0.25 }, { s: 3, g: 3, n: 10, saw: 0.15 }]) },
@@ -662,6 +662,7 @@ function offscreen(k) {
   const i = k.pts.findIndex((p, j) => p.c - p.g / 2 < 0 || p.c + p.g / 2 > VH || ((p.w || k.pts[j - 1]?.w) && p.c + p.g / 2 > VH / 2));
   return i < 0 ? -1 : Math.round(k.pts[i].x / B);
 }
+const PORTAL_W = 34 / 30; // a portal's hitbox: 34 GD units wide (GD's), as tall as the portal
 const PORTALS = { m: ['#ff6bd6', 'MINI', 'BIG'], v: ['#4dff9a', 'FLIP', 'UPRIGHT'], w: ['#ff9f43', 'DUAL', 'SINGLE'], g: ['#8dff3a', 'CUBE', 'WAVE'], T: ['#3f8cff', 'OUT', 'IN'] }; // colour, on label, off label
 
 // ---------- object levels ----------
@@ -811,7 +812,14 @@ function pathToObjects(k) {
   // Dual portals sit half a block inside the second corridor (and the off portal half a block before it closes), so the
   // second icon's square hitbox never starts or ends overlapping that corridor's end wall. Those spots are always flat.
   for (const e of k.modes) objs.push({ t: 'p', x: e.x / B + (e.k === 'w' ? (e.on ? 0.5 : -0.5) : 0), y: (e.c - e.g / 2) / B, h: e.g / B, k: e.k, v: e.on ? 1 : 0 });
+  shiftPortalsForTouch(objs);
   return objs;
+}
+// Portals fire when the icon's box touches their GD-sized hitbox; these levels were made when they fired at their centre line,
+// so each portal moves on by half its width plus the icon's half size at that point: it fires at exactly the same moment.
+function shiftPortalsForTouch(objs) {
+  let mini = false;
+  for (const o of objs.filter(o => o.t === 'p').sort((a, b) => a.x - b.x)) { o.x = +(o.x + PORTAL_W / 2 + (mini ? CUBE_MINI : 1) * 0.5).toFixed(4); if (o.k === 'm') mini = !!o.v; }
 }
 const levelObjects = code => String(code).trim().startsWith('ICA2') ? decodeLevel(code) : pathToObjects(parse(code));
 // Index solids and saws by block column for collision and drawing; the level ends 3 blocks after its last solid or saw.
@@ -1165,7 +1173,7 @@ const inputs = []; // [timestamp, held] queued so each press lands on the exact 
 const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
 let checkpoints = [], spawnCache = null, plan = [];
 const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, bt: q.bt, bb: q.bb, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
-  used: q.used, lastPad: q.lastPad, cube: q.cube, ship: q.ship, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2, acc: q.acc, acc2: q.acc2, ph: q.ph, ss: q.ss, ss2: q.ss2,
+  used: q.used, lastPad: q.lastPad, cube: q.cube, ship: q.ship, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2, pt: q.pt, acc: q.acc, acc2: q.acc2, ph: q.ph, ss: q.ss, ss2: q.ss2,
   t: q.t, tf: q.tf, coins: q.coins, ci: q.ci });
 // ---------- cube ----------
 // Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), with GD's player step
@@ -1458,10 +1466,14 @@ function tick1(wd, s, hold, dt, fx, fresh) {
       if (s.cube || s.ship) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner();
     }
   }
-  const portals = () => {
-    while (s.pi < wd.portals.length && wd.portals[s.pi].x * B <= s.x) {
-      const o = wd.portals[s.pi++], by = s.y / B;
-      if (by >= o.y - 0.5 && by <= o.y + o.h + 0.5) { fx?.portal(o); portalState(s, o); }
+  const portals = () => { // like GD: a portal works when your hitbox touches its hitbox (PORTAL_W wide, its full height)
+    const ph = cubeHalf(s), P = wd.portals, hw = PORTAL_W / 2 * B; // the icon's 1-block box (the wave's tiny one is only for walls)
+    let moved = false;
+    while (s.pi < P.length && P[s.pi].x * B + hw < s.x - ph) { s.pi++; moved = true; } // passed it
+    if (moved && s.pt) s.pt = s.pt.filter(i => i >= s.pi);
+    for (let i = s.pi; i < P.length && P[i].x * B - hw <= s.x + ph; i++) {
+      const o = P[i]; if (s.pt?.includes(i) || s.y + ph < o.y * B || s.y - ph > (o.y + o.h) * B) continue;
+      s.pt = (s.pt || []).concat(i); fx?.portal(o); portalState(s, o); // (the list is copied, never changed in place)
     }
     fireTriggers(wd, s); placeMoving(wd, s); // moving groups are placed before this tick's collisions
   };
@@ -1828,13 +1840,39 @@ function drawCube(g, x, y, a, s, ic) {
   g.fillStyle = COLORS[ic.c1]; g.fillRect(-h * 0.18, -h * 0.18, h * 0.36, h * 0.36);
   g.restore();
 }
+// Portals, drawn after GD's look (not its art): a tall oval ring seen side-on in the portal's colour, with a dark rim and a glow;
+// speed portals are rows of chevrons (one pointing back for 0.5x, then 1 to 4 forward). Colours follow GD's: cube green, ship
+// pink, wave cyan; gravity blue (normal) / yellow (flipped) / green (swap); mini pink / big green; dual orange / single blue;
+// teleport blue in / orange out; speed orange, blue, green, pink, red. The label shows only in the editor.
+const PORTAL_COL = { g: ['#3fd8ff', '#4dff4a', '#ff5ce6'], v: ['#3f8cff', '#ffe23a', '#4dff9a'], m: ['#4dff4a', '#ff5ce6'], w: ['#3f8cff', '#ff9f2e'], T: ['#3f8cff', '#ff9f2e'],
+  S: ['#ff9f2e', '#3fb6ff', '#4dff4a', '#ff5ce6', '#ff3b3b'] };
 function drawPortal(g, o, u, label = true) {
-  const x = o.x * u, y = o.y * u, h = o.h * u, on = o.k === 'S' || o.k === 'g' || o.k === 'T' || !!o.v;
-  const col = o.k === 'S' ? `hsl(${50 + o.v * 70},100%,65%)` : o.k === 'g' ? ['#3fb6ff', '#8dff3a', '#ff6bd6'][o.v] : o.k === 'T' ? (o.v ? '#ff9f43' : '#3f8cff') : PORTALS[o.k][0];
-  const text = o.k === 'S' ? SPD_LABELS[o.v] : o.k === 'v' && o.v === 2 ? 'SWAP' : o.k === 'g' && o.v === 2 ? 'SHIP' : PORTALS[o.k][o.v ? 1 : 2], bw = u / 5;
-  g.globalAlpha = on ? 0.35 : 0.12; g.fillStyle = col; g.fillRect(x - bw / 2, y, bw, h); g.globalAlpha = 1;
-  g.strokeStyle = col; g.lineWidth = u / 20; g.setLineDash(on ? [] : [u / 10, u / 10]); g.strokeRect(x - bw / 2, y, bw, h); g.setLineDash([]);
-  if (label) { g.fillStyle = col; g.font = `700 ${Math.round(u * 0.22)}px "Space Mono", monospace`; g.textAlign = 'center'; g.fillText(text, x, y - u * 0.14); }
+  const col = PORTAL_COL[o.k][o.v] || '#fff', cx = o.x * u, top = o.y * u, hh = o.h * u, cy = top + hh / 2;
+  g.save(); g.lineJoin = 'round'; g.lineCap = 'round';
+  if (o.k === 'S') { // chevrons
+    const n = o.v === 0 ? 1 : o.v, ch = Math.min(hh, u * 2.2) / 2, cw = Math.min(ch * 0.55, PORTAL_W * u * 0.85 / (1 + 0.8 * (n - 1))), gap = cw * 0.8, dir = o.v === 0 ? -1 : 1, lw = n > 2 ? 0.7 : 1; // they fit in the hitbox
+    const x0 = cx - ((n - 1) * gap) / 2;
+    for (const [w, c] of [[u * 0.34, 'rgba(12,14,28,.9)'], [u * 0.2, col], [u * 0.06, 'rgba(255,255,255,.8)']]) {
+      g.strokeStyle = c; g.lineWidth = w * lw; g.beginPath();
+      for (let i = 0; i < n; i++) { const x = x0 + i * gap; g.moveTo(x - dir * cw / 2, cy - ch); g.lineTo(x + dir * cw / 2, cy); g.lineTo(x - dir * cw / 2, cy + ch); }
+      g.stroke();
+    }
+  } else { // a ring seen side-on, like a ")": its far half thin and dim, its near half thick and bright, lights on the near side
+    const ry = hh / 2, rx = Math.min(u * 0.45, ry * 0.34);
+    const arc = (a0, a1, sx = 1) => { g.beginPath(); g.ellipse(cx, cy, rx * sx, ry, 0, a0, a1); };
+    g.globalAlpha = 0.22; g.strokeStyle = col; g.lineWidth = u * 0.55; arc(-Math.PI / 2, Math.PI / 2); g.stroke(); g.globalAlpha = 1; // glow
+    g.globalAlpha = 0.55; g.strokeStyle = 'rgba(12,14,28,.95)'; g.lineWidth = u * 0.16; arc(Math.PI / 2, Math.PI * 1.5); g.stroke();
+    g.strokeStyle = col; g.lineWidth = u * 0.07; arc(Math.PI / 2, Math.PI * 1.5); g.stroke(); g.globalAlpha = 1; // far half
+    g.strokeStyle = 'rgba(12,14,28,.95)'; g.lineWidth = u * 0.34; arc(-Math.PI / 2, Math.PI / 2); g.stroke();
+    g.strokeStyle = col; g.lineWidth = u * 0.2; arc(-Math.PI / 2, Math.PI / 2); g.stroke(); // near half
+    g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = u * 0.05; arc(-Math.PI * 0.4, Math.PI * 0.4, 0.86); g.stroke();
+    g.fillStyle = col; for (const f of [-0.62, 0, 0.62]) { g.beginPath(); g.arc(cx + rx * 1.45, cy + f * ry, u * 0.06, 0, 7); g.fill(); }
+  }
+  if (label) {
+    const text = o.k === 'S' ? SPD_LABELS[o.v] : o.k === 'v' && o.v === 2 ? 'SWAP' : o.k === 'g' ? ['WAVE', 'CUBE', 'SHIP'][o.v] : PORTALS[o.k][o.v ? 1 : 2];
+    g.fillStyle = col; g.font = `700 ${Math.round(u * 0.22)}px "Space Mono", monospace`; g.textAlign = 'center'; g.fillText(text, cx, top - u * 0.14);
+  }
+  g.restore();
 }
 const D_COL = '#5dffc4', ORB_COL = ['#45ff6e', '#ff4fd8']; // D block edge; dash orb, pink dash orb
 // Jump orbs: a big glossy ball in its colour (bright middle, deeper edge) inside a thick white ring with a dark outline, a
@@ -2056,7 +2094,7 @@ function draw(t, dt) {
     }
     ctx.globalAlpha = 1;
   }
-  for (const o of world.portals) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawPortal(ctx, o, B);
+  for (const o of world.portals) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawPortal(ctx, o, B, ed);
   world.coins.forEach((o, i) => { // coins: gone once taken this attempt; ones you've already saved show as faded silver
     if (o.x * B < camX - 60 || o.x * B > camX + viewW + 60 || (inGame && p.coins?.includes(i))) return;
     drawCoin(ctx, o, B, t, (savedCoins[cur.id] || []).includes(i) && !ed);
@@ -2103,7 +2141,7 @@ function draw(t, dt) {
     for (const o of sel) {
       ctx.beginPath();
       if (o.t === 's' || o.t === 'd' || o.t === 'q' || o.t === 'c') ctx.arc(o.x * B, o.y * B, (o.t === 's' ? SAW_R : o.t === 'c' ? COIN_R : ORB_R * 1.45) * B + 4, 0, 7);
-      else if (o.t === 'h' || o.t === 'x') ctx.rect(o.x * B - B * 0.45, o.y * B - B * 0.5, B * 0.9, B); else if (o.t === 'k' || o.t === 'j' || o.t === 'L' || o.t === 'P') ctx.rect(o.x * B, o.y * B, B, B); else if (o.t === 'a') { const [cx, cy, hw, hh] = textBox(o); ctx.rect((cx - hw) * B, (cy - hh) * B, hw * 2 * B, hh * 2 * B); } else if (o.t === 'p') ctx.rect(o.x * B - 10, o.y * B, 20, o.h * B); else addSolid(ctx, o, B);
+      else if (o.t === 'h' || o.t === 'x') ctx.rect(o.x * B - B * 0.45, o.y * B - B * 0.5, B * 0.9, B); else if (o.t === 'k' || o.t === 'j' || o.t === 'L' || o.t === 'P') ctx.rect(o.x * B, o.y * B, B, B); else if (o.t === 'a') { const [cx, cy, hw, hh] = textBox(o); ctx.rect((cx - hw) * B, (cy - hh) * B, hw * 2 * B, hh * 2 * B); } else if (o.t === 'p') ctx.rect((o.x - PORTAL_W / 2) * B, o.y * B, PORTAL_W * B, o.h * B); else addSolid(ctx, o, B);
       ctx.stroke();
     }
     if (hoverCell && edTool === 'build' && !pdrag) {
@@ -2170,6 +2208,8 @@ function draw(t, dt) {
     ctx.beginPath(); for (const o of solids) addSolid(ctx, o, B); ctx.stroke();
     for (const s of saws) { ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_HIT * B - 2, 0, 7); ctx.stroke(); }
     ctx.strokeStyle = '#3fd8ff'; for (const o of world.orbs) ctx.strokeRect((o.x - ORB_HIT) * B, (o.y - ORB_HIT) * B, ORB_HIT * 2 * B, ORB_HIT * 2 * B);
+    ctx.strokeStyle = '#33ff88'; for (const o of world.portals) ctx.strokeRect((o.x - PORTAL_W / 2) * B, o.y * B, PORTAL_W * B, o.h * B);
+    ctx.strokeStyle = '#3fd8ff';
     for (const o of world.pads) { const [l, tp, r, b] = padBox(o); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
     if (!ed) { ctx.globalAlpha = 0.6; for (const o of world.letters) drawLetter(ctx, o, B); ctx.globalAlpha = 1; } // letter blocks (the editor draws them anyway)
     ctx.strokeStyle = '#ff3355'; for (const k of spikes) { const [l, tp, r, b] = spikeBox(k); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
@@ -2342,7 +2382,7 @@ function renderCustoms() {
 // ---------- editor ----------
 // Works like a classic platformer editor: Build places objects on the grid, Edit selects and changes them, Delete removes them.
 let edObjs = [], sel = new Set(), edTool = 'build', edPal = 'block', edRot = 0, edSwipe = false, edGrid = 1, edZoom = 1, edCamY = 0;
-let undoS = [], redoS = [], pdrag = null, hoverCell = null, clearArmed = false, edCat = 0, edPage = 0, edClip = null, edLastGrid = 1;
+let edFreeMove = false, undoS = [], redoS = [], pdrag = null, hoverCell = null, clearArmed = false, edCat = 0, edPage = 0, edClip = null, edLastGrid = 1;
 let testPath = [], testPath2 = [], testClicks = [], testPrevHeld = false, testTick = 0; // the last playtest's route and presses, shown in the editor
 const PALETTE = [
   { id: 'block', label: 'Block', make: (x, y) => ({ t: 'r', x, y, w: 1, h: 1 }) },
@@ -2377,7 +2417,7 @@ const PALETTE = [
 ];
 const HELP = {
   build: 'Click to place: it stays selected, so Q / E turn it and W A S D move it · drag to look around · hold Shift or turn on Swipe to paint · F1 / F2 change tab',
-  edit: 'Click to select · Shift+click adds · Shift+drag (or Swipe) on empty space selects a box · drag to move · W A S D move a block, with Shift a small step · arrows move by the grid · Q / E turn · Alt+Q / Alt+E flip · Ctrl+C / Ctrl+V copy and paste · Ctrl+D copy and paste in one go · Del deletes',
+  edit: 'Click to select · Shift+click adds · Shift+drag (or Swipe) on empty space selects a box · turn on Free Move (F) to drag objects · W A S D move a block, with Shift a small step · arrows move by the grid · Q / E turn · Alt+Q / Alt+E flip · Ctrl+C / Ctrl+V copy and paste · Ctrl+D copy and paste in one go · Del deletes',
   delete: 'Click an object to delete it · hold Shift or turn on Swipe to delete by dragging',
   all: 'Mouse wheel scrolls up and down, Shift+wheel left and right, Ctrl+wheel zooms · 1 / 2 / 3 Build, Edit, Delete · Enter playtests · Ctrl+Z / Ctrl+Shift+Z undo and redo · Esc this menu',
 };
@@ -2422,7 +2462,7 @@ function placeAt(bx, by) {
 function objectAt(bx, by) { // portals over saws over solids; within a kind, the one drawn last
   let best = null, rank = 0;
   const consider = (o, r) => { if (r >= rank) { best = o; rank = r; } };
-  for (const o of world.portals) if (Math.abs(o.x - bx) < 0.3 && by >= o.y && by <= o.y + o.h) consider(o, 3);
+  for (const o of world.portals) if (Math.abs(o.x - bx) < PORTAL_W / 2 && by >= o.y && by <= o.y + o.h) consider(o, 3);
   for (const o of world.orbs) if (Math.hypot(o.x - bx, o.y - by) < ORB_R * 1.35) consider(o, 3);
   for (const o of world.pads) if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 3);
   for (const o of [...world.letters, ...world.starts]) if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 2);
@@ -2506,7 +2546,7 @@ function drawPaletteIcon(c, item) {
 }
 function renderPane() {
   document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === edTool)));
-  $('edSwipe').setAttribute('aria-pressed', String(edSwipe)); $('edFree').setAttribute('aria-pressed', String(!edGrid));
+  $('edSwipe').setAttribute('aria-pressed', String(edSwipe)); $('edFree').setAttribute('aria-pressed', String(edFreeMove));
   $('edGrid').textContent = edGrid ? 'Grid ' + GRIDS.find(([v]) => v === edGrid)[1] : 'Grid off';
   $('edUndo').disabled = !undoS.length; $('edRedo').disabled = !redoS.length; $('edTrash').disabled = !sel.size;
   const pane = $('edPane'), cats = $('edCats'), w = pane.clientWidth || 600, n = sel.size;
@@ -2648,7 +2688,7 @@ function editorKey(e) {
   if (c === 'KeyR') return edAction('cw'); // (GD's R shows a free-rotate handle; objects here only turn in quarters)
   if (c === 'KeyT') { edSwipe = !edSwipe; return renderPane(); }
   if (c === 'KeyF') return toggleFree();
-  if (c === 'KeyG') return toggleFree();
+  if (c === 'KeyG') return toggleSnap();
   if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); return edAction('del'); }
   if (k === '+' || k === '=') return zoomBy(1.25);
   if (k === '-' || k === '_') return zoomBy(0.8);
@@ -2661,7 +2701,8 @@ function editorKey(e) {
   const [dx, dy] = { left: [-3, 0], right: [3, 0], up: [0, -1], down: [0, 1] }[arrow]; // nothing selected: arrows look around
   editCam += dx * B; edCamY += dy * B; clampEd();
 }
-function toggleFree() { if (edGrid) { edLastGrid = edGrid; edGrid = 0; } else edGrid = edLastGrid || 1; renderPane(); }
+function toggleSnap() { if (edGrid) { edLastGrid = edGrid; edGrid = 0; } else edGrid = edLastGrid || 1; renderPane(); }
+function toggleFree() { edFreeMove = !edFreeMove; renderPane(); toast(edFreeMove ? 'Free Move on: drag selected objects to move them' : 'Free Move off'); }
 
 // ---------- settings ----------
 const keyName = c => !c ? 'Empty' : c === 'Space' ? 'Space' : c.replace(/^Key|^Digit/, '').replace(/^Arrow(.*)/, '$1 arrow');
@@ -3341,7 +3382,8 @@ function bindCanvas(c) {
     if (edTool === 'edit') {
       const o = objectAt(bx, by);
       if (o && e.shiftKey) { if (sel.has(o)) sel.delete(o); else sel.add(o); renderPane(); return; }
-      if (o) { if (!sel.has(o)) { sel = new Set([o]); renderPane(); } pdrag = { ...base, kind: 'move', before: JSON.stringify(edObjs), items: [...sel].map(q => [q, q.x, q.y]) }; }
+      if (o && edFreeMove) { if (!sel.has(o)) { sel = new Set([o]); renderPane(); } pdrag = { ...base, kind: 'move', before: JSON.stringify(edObjs), items: [...sel].map(q => [q, q.x, q.y]) }; }
+      else if (o) { if (!sel.has(o)) { sel = new Set([o]); renderPane(); } pdrag = { ...base, kind: 'pan' }; } // GD: a click selects; dragging only moves with Free Move on
       else if (edSwipe || e.shiftKey) pdrag = { ...base, kind: 'box', add: e.shiftKey, ex: bx, ey: by }; // swipe: drag a box to select
       else { if (sel.size) { sel = new Set(); renderPane(); } pdrag = { ...base, kind: 'pan' }; }
       return;
