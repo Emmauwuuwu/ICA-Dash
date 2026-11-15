@@ -882,7 +882,7 @@ function decodeLevel(code) {
     if (objs.length > before && xs && XF_T.includes(objs[objs.length - 1].t)) { // turned / sized: "@angle,size"
       const o = objs[objs.length - 1], [ra, sc] = xs.split(',').map(num);
       if (Number.isFinite(ra) && ra) o.ra = ((ra % 360) + 540) % 360 - 180 || undefined;
-      if (Number.isFinite(sc) && Math.abs(sc - 1) > 0.005) o.sc = Math.max(0.25, Math.min(4, sc));
+      if (Number.isFinite(sc) && Math.abs(sc - 1) > 0.005 && o.t !== 'r' && o.t !== 't') o.sc = Math.max(0.25, Math.min(4, sc));
       if (o.ra === undefined) delete o.ra;
     }
   }
@@ -945,6 +945,14 @@ function buildWorld(objs) {
   for (const o of objs) {
     if (o.t === 'p' || o.t === 'x' || o.t === 'M') continue;
     if ('dqjchLaP'.includes(o.t)) { right = Math.max(right, o.x + 1); continue; }
+    if ((o.t === 'r' || o.t === 't') && o.ra) { // a turned solid goes in as its pieces
+      for (const q of solidPieces(o)) {
+        right = Math.max(right, q.x + q.w);
+        if (o.g && movingG.has(o.g)) { moving.push(q); continue; }
+        for (let c = Math.floor(q.x); c <= Math.floor(q.x + q.w); c++) { let a = cols.get(c); if (!a) cols.set(c, a = []); a.push(q); }
+      }
+      continue;
+    }
     let l = o.t === 's' ? o.x - SAW_R : o.x, r = o.t === 's' ? o.x + SAW_R : o.t === 'k' ? o.x + 1 : o.x + o.w;
     if ((o.t === 's' || o.t === 'k') && xfd(o)) { const [cx] = xCentre(o), e = (o.t === 's' ? SAW_R : 0.75) * (o.sc || 1); l = cx - e; r = cx + e; }
     right = Math.max(right, r);
@@ -961,6 +969,37 @@ function buildWorld(objs) {
   const portals = byX('p'), orbs = byX('dq'), pads = byX('j'); // orbs: dash orbs and jump orbs share one list (one press, one orb)
   return { objs, cols, portals, orbs, pads, letters: byX('L'), texts: byX('a'), starts: byX('P'), song: objs.find(o => o.t === 'M') || null, coins: byX('c'), cps: byX('h'), trig, moving, pivots, fadeG: new Set(trig.filter(o => o.k === 'f').map(o => o.g)),
     end: ((Number.isFinite(right) ? right : 7) + 3) * B };
+}
+// A turned block or slope: its corners where they are, and the same shape as pieces the physics already handles (upright
+// blocks and right-angle slopes). It's cut into vertical strips at its corners; a strip whose top and bottom edges don't
+// overlap in height becomes a block with a slope on its top and/or bottom edge, otherwise it's halved until they don't. The
+// pieces remember the block they came from (src), which is what's drawn and selected.
+function solidPoly(o) {
+  const P = [[o.x, o.y], [o.x + o.w, o.y], [o.x + o.w, o.y + o.h], [o.x, o.y + o.h]], skip = o.t === 't' ? [1, 0, 3, 2][o.o] : -1;
+  return P.filter((_, i) => i !== skip).map(([x, y]) => xPt(o, x, y));
+}
+function solidPieces(o) {
+  const P = solidPoly(o), n = P.length, out = [], extra = { src: o, ...(o.d ? { d: 1 } : {}), ...(o.g ? { g: o.g } : {}) };
+  const span = x => { // top and bottom of the shape at x
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const [x1, y1] = P[i], [x2, y2] = P[(i + 1) % n]; if (x1 === x2 || (x - x1) * (x - x2) > 0) continue;
+      const y = y1 + (y2 - y1) * (x - x1) / (x2 - x1); lo = Math.min(lo, y); hi = Math.max(hi, y);
+    }
+    return [lo, hi];
+  };
+  const strip = (a, b, depth) => {
+    const e = (b - a) * 1e-7, [ta0, ba0] = span(a + e), [tb0, bb0] = span(b - e);
+    const k = (b - a) / (b - a - 2 * e), ta = tb0 + (ta0 - tb0) * k, tb = ta0 + (tb0 - ta0) * k, ba = bb0 + (ba0 - bb0) * k, bb = ba0 + (bb0 - ba0) * k; // out to the strip's ends
+    const top = Math.max(ta, tb), bot = Math.min(ba, bb), w = b - a;
+    if (top > bot + 1e-7 && depth < 9) { const m = (a + b) / 2; strip(a, m, depth + 1); strip(m, b, depth + 1); return; }
+    if (bot - top > 1e-4) out.push({ t: 'r', x: a, y: top, w, h: bot - top, ...extra });
+    if (Math.abs(ta - tb) > 1e-4) out.push({ t: 't', x: a, y: Math.min(ta, tb), w, h: Math.abs(ta - tb), o: ta > tb ? 1 : 0, ...extra }); // its top edge
+    if (Math.abs(ba - bb) > 1e-4) out.push({ t: 't', x: a, y: Math.min(ba, bb), w, h: Math.abs(ba - bb), o: ba > bb ? 3 : 2, ...extra }); // its bottom edge
+  };
+  const xs = [...new Set(P.map(q => q[0]))].sort((a, b) => a - b);
+  for (let i = 0; i + 1 < xs.length; i++) if (xs[i + 1] - xs[i] > 1e-4) strip(xs[i], xs[i + 1], 0);
+  return out;
 }
 // Centre and half-size of an object, in blocks.
 function centreOf(o) {
@@ -1026,9 +1065,9 @@ const spikeBox = o => {
 // GD's free rotate and scale: an object may carry ra (degrees, clockwise) and sc (size, 0.25-4), applied about its centre.
 // Spikes, saws, orbs, pads, coins, portals, checkpoints and text take them, and their hitboxes turn and size with them
 // (tested as turned boxes, like GD's rotated hitboxes). Blocks and slopes size by their width and height and turn in quarters.
-const XF_T = 'kjpqcsdah';
+const XF_T = 'kjpqcsdahrt'; // (blocks and slopes take a turn; they size by width and height)
 const xfd = o => !!(o.ra || (o.sc && o.sc !== 1));
-function xCentre(o) { return 'kjLP'.includes(o.t) ? [o.x + 0.5, o.y + 0.5] : o.t === 'p' ? [o.x, o.y + o.h / 2] : [o.x, o.y]; }
+function xCentre(o) { return 'kjLP'.includes(o.t) ? [o.x + 0.5, o.y + 0.5] : o.t === 'p' ? [o.x, o.y + o.h / 2] : o.t === 'r' || o.t === 't' ? [o.x + o.w / 2, o.y + o.h / 2] : [o.x, o.y]; }
 function xPt(o, x, y) { // a point of the unturned object (blocks), where it is once turned and sized
   if (!xfd(o)) return [x, y];
   const [cx, cy] = xCentre(o), k = o.sc || 1, a = (o.ra || 0) * Math.PI / 180, c = Math.cos(a), n = Math.sin(a), dx = (x - cx) * k, dy = (y - cy) * k;
@@ -2203,7 +2242,10 @@ function triPath(g, o, u) { // the box corner opposite the right angle is left o
   for (let i = 0; i < 4; i++) if (i !== skip) { if (first) g.moveTo(P[i][0], P[i][1]); else g.lineTo(P[i][0], P[i][1]); first = false; }
   g.closePath();
 }
-function addSolid(g, o, u) { if (o.t === 'r') g.rect(o.x * u, o.y * u, o.w * u, o.h * u); else triPath(g, o, u); }
+function addSolid(g, o, u) {
+  if (o.ra) { const P = solidPoly(o); g.moveTo(P[0][0] * u, P[0][1] * u); for (const q of P.slice(1)) g.lineTo(q[0] * u, q[1] * u); g.closePath(); return; } // turned
+  if (o.t === 'r') g.rect(o.x * u, o.y * u, o.w * u, o.h * u); else triPath(g, o, u);
+}
 function spikePath(g, o, u) { // a spike filling its cell (a small one 0.45 tall), base on the side opposite its point
   const x = o.x * u, y = o.y * u, k = o.z ? 0.45 : 1; let P = [[[x, y + u], [x + u / 2, y + u * (1 - k)], [x + u, y + u]], [[x, y], [x + u * k, y + u / 2], [x, y + u]],
     [[x, y], [x + u / 2, y + u * k], [x + u, y]], [[x + u, y], [x + u * (1 - k), y + u / 2], [x + u, y + u]]][o.o];
@@ -2482,7 +2524,7 @@ function glowStroke(g, color, glow, w) {
   g.strokeStyle = glow; g.globalAlpha = 0.35; g.lineWidth = w * 3.5; g.stroke();
   g.globalAlpha = 1; g.strokeStyle = color; g.lineWidth = w; g.stroke();
 }
-function visibleObjs(wd, a, b) { const set = new Set(); for (let c = Math.floor(a) - 1; c <= Math.ceil(b) + 1; c++) for (const o of wd.cols.get(c) || []) set.add(o); return set; }
+function visibleObjs(wd, a, b) { const set = new Set(); for (let c = Math.floor(a) - 1; c <= Math.ceil(b) + 1; c++) for (const o of wd.cols.get(c) || []) set.add(o.src || o); return set; } // a turned solid's pieces draw as the solid
 
 function draw(t, dt) {
   const ed = mode === 'edit', z = ed ? edZoom : 1, k = S * z, viewW = W / k, viewH = H / k;
@@ -2983,7 +3025,7 @@ function objectAt(bx, by) { // portals over saws over solids; within a kind, the
   for (const o of [...(world.cols.get(Math.floor(bx)) || []), ...world.moving]) { // moving objects sit where they start in the editor
     if (o.t === 's') { if (Math.hypot(o.x - bx, o.y - by) < SAW_R * (o.sc || 1)) consider(o, 2); }
     else if (o.t === 'k') { const [x, y] = at(o); if (x >= o.x && x <= o.x + 1 && y >= o.y && y <= o.y + 1) consider(o, 2); }
-    else if (bx >= o.x && bx <= o.x + o.w && by >= o.y && by <= o.y + o.h) consider(o, 1);
+    else if (bx >= o.x && bx <= o.x + o.w && by >= o.y && by <= o.y + o.h ) consider(o.src || o, 1);
   }
   return best;
 }
@@ -3050,7 +3092,7 @@ function edAction(a, fine) {
       if (o.t === 'd') { o.a = Math.max(-ORB_MAX, Math.min(ORB_MAX, o.a - d)); n++; }
       else if (XF_T.includes(o.t)) { o.ra = (((o.ra || 0) + d) % 360 + 540) % 360 - 180; if (!o.ra) delete o.ra; n++; }
     }
-    if (!n) return toast('Blocks and slopes turn in quarter turns (Rotate ↺ / ↻).');
+    if (!n) return;
   }
   else if (a === 's-' || a === 's+') { // GD's scale: x1.25 a press; blocks and slopes grow their width and height about their middle
     const f = a === 's+' ? 1.25 : 0.8;
