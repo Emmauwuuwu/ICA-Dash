@@ -27,7 +27,8 @@ Keybinds can be changed in Settings.
 - **Level editor** laid out like Geometry Dash's: build, edit and delete modes, object tabs and pages, GD's edit buttons and shortcuts (W A S D to move, Q / E to turn, Alt+Q / Alt+E to flip, Ctrl+C / V / D, F1 / F2 for tabs, Enter to playtest), copy and paste, box select, swipe, start positions (speed, gamemode, mini, gravity, dual) to playtest from, and a playtest that leaves your route drawn in the editor. Slopes, saws, spikes, pads, orbs, portals (including cube, ship and wave), letter blocks, text and dash orbs, a fine grid and undo/redo
 - **Share codes**: copy a level's code from the editor and paste someone else's to play it
 - **Music and sound**: 20 original built-in tracks (made in the browser), sound effects, volume sliders, and Newgrounds songs by ID for your own levels. Newgrounds doesn't allow other sites to stream its songs, so, like GD, you download a song from Newgrounds once and load the file; it stays in your browser. When you open someone's level that uses a Newgrounds song you don't have, the game asks first: open it on Newgrounds, load the file, or play without it, and the online list shows each level's song. Levels can also use a **SoundCloud** track: paste its link in the editor's Song menu and it plays for everyone through SoundCloud's own player, with nothing to download (GitHub Pages version)
-- **Practice tools** in a hidden menu: practice mode with checkpoints, show path, start position, hitboxes and more
+- **Practice mode** from the pause menu, like Geometry Dash's: place checkpoints (Z / X or the on-screen buttons, plus optional auto checkpoints), respawn at the newest one and keep going, with its own practice best
+- **Hacks** in a hidden menu: show path, start position, hitboxes, speedhack, wave pulse and trail size and more
 
 Progress, icons and your levels are saved in your browser.
 

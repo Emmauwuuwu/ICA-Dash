@@ -119,6 +119,9 @@ button.danger { background: transparent; color: var(--rose); box-shadow: inset 0
 .track { flex: 1; height: 10px; background: rgba(12, 14, 28, .6); box-shadow: inset 0 0 0 1px var(--hair); position: relative; }
 .track i { display: block; height: 100%; background: var(--sun); }
 .track::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(12, 14, 28, .8) calc(10% - 2px) 10%); }
+#pcBtns { pointer-events: auto; position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 10px; }
+#pcBtns[hidden] { display: none; }
+#hud.practice .track i { background: #4dff9a; }
 .hudr { justify-self: end; text-align: right; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
 #hackTag { display: block; color: var(--rose); }
 
@@ -294,6 +297,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
   <button class="ghost" id="exitBtn" aria-label="Pause">II</button>
   <div class="prog"><div class="track"><i id="pbar"></i></div><span id="pct">0%</span></div>
   <div class="hudr"><span id="att">Att 1</span><span id="hackTag"></span></div>
+  <div id="pcBtns" hidden><button class="ghost" id="pcPlace" title="Place a checkpoint (Z)">◆ Place</button><button class="ghost" id="pcDel" title="Remove the newest checkpoint (X)">✕ Remove</button></div>
 </div>
 
 <div id="hackMenu" hidden>
@@ -312,10 +316,8 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
   <div class="hwin" data-win="level">
     <div class="hbar"><span>Level</span></div>
     <label class="hrow hcol"><span>Start at <b class="hval" id="hStartOut">0%</b></span><input type="range" id="hStart" min="0" max="0.9" step="0.05" value="0"></label>
-    <label class="hrow"><input type="checkbox" class="sr" id="hPractice"><span class="hchk"></span>Practice mode</label>
-    <p class="hrow hfoot">Checkpoints drop every 1.5 s where it's safe. Z places one, X removes the last. You respawn at the newest.</p>
     <label class="hrow"><input type="checkbox" class="sr" id="hAuto"><span class="hchk"></span>Autoplay</label>
-    <p class="hrow hfoot">Bests and achievements aren't saved while noclip, speedhack, a start position, show path, practice or autoplay is on.</p>
+    <p class="hrow hfoot">Bests and achievements aren't saved while noclip, speedhack, a start position, show path or autoplay is on. Practice mode is in the pause menu.</p>
   </div>
   <div class="hwin" data-win="display">
     <div class="hbar"><span>Display</span></div>
@@ -593,14 +595,15 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
     <div class="head"><h2>Paused</h2><span class="label" id="pauseInfo"></span></div>
     <p class="note" id="pauseName"></p>
     <p class="note" id="pauseSong"></p>
-    <div class="btnrow"><button class="primary" id="pResume">Resume</button><button class="ghost" id="pRestart">Restart</button><button class="ghost" id="pExit">Exit level</button></div>
+    <div class="btnrow"><button class="primary" id="pResume">Resume</button><button class="ghost" id="pRestart">Restart</button><button class="ghost" id="pPractice">Practice mode</button><button class="ghost" id="pExit">Exit level</button></div>
+    <label class="hrow" id="pAutoRow"><input type="checkbox" class="sr" id="pAuto"><span class="hchk"></span>Auto checkpoints</label>
     <p class="note" id="pauseHint"></p>
   </div>
 </section>
 
 <section class="screen" id="done" hidden>
   <div class="panel">
-    <div class="head"><h2>Complete</h2><span class="label">100%</span></div>
+    <div class="head"><h2 id="doneTitle">Complete</h2><span class="label">100%</span></div>
     <dl class="stat" id="doneStats"></dl>
     <p class="note" id="doneMsg"></p>
     <div class="btnrow"><button class="primary" id="doneReplay">Replay</button><button class="ghost" id="doneBack">Back</button></div>
@@ -1192,7 +1195,7 @@ let keys = store.get('zd-keys', DEFAULT_KEYS);
 if (!Array.isArray(keys.climb) || typeof keys.exit !== 'string') keys = structuredClone(DEFAULT_KEYS);
 if (typeof keys.restart !== 'string') keys.restart = DEFAULT_KEYS.restart; // saved before the restart key existed
 const HACK_DEFAULTS = { noclip: false, hitbox: false, speed: 1, start: 0, fps: false, cbf: true, uncap: false, cap: 1,
-  path: false, practice: false, auto: false, acc: false, noAtt: false, layout: false, respawn: 0.75, noPulse: false, trail: 1 };
+  path: false, auto: false, acc: false, noAtt: false, layout: false, respawn: 0.75, noPulse: false, trail: 1 };
 let hacks = { ...HACK_DEFAULTS, ...store.get('zd-hacks', {}) };
 let unlocked = store.get('zd-unlocked', false);
 // Balance edits to main levels (made with "Edit levels" once the hack menu is unlocked). They're kept in this browser and
@@ -1203,7 +1206,9 @@ store.set('zd-overrides', overrides);
 for (const l of LEVELS) { l.orig = l.code; if (typeof overrides[l.id] === 'string') l.code = overrides[l.id]; }
 let editMain = false;
 if (!unlocked) hacks = { ...HACK_DEFAULTS }; // hacks only apply once the menu is found
-const cheating = () => hacks.noclip || hacks.speed !== 1 || hacks.start > 0 || hacks.path || hacks.practice || hacks.auto;
+const cheating = () => hacks.noclip || hacks.speed !== 1 || hacks.start > 0 || hacks.path || hacks.auto;
+// Practice mode (GD's, from the pause menu): checkpoints you respawn at, its own saved best, and no normal best or unlocks.
+let practice = false, autoCp = store.get('zd-autocp', true), pbests = store.get('zd-pbest', {});
 
 // GD's wave sprite is 26 x 21 GD units (dart_01_001 in its standard-resolution icon sheet; the cube's is 30 x 30, one block),
 // so 52 x 42 here. The default shape is 22 x 18 with its outline, so the wave draws at 2.3x.
@@ -1686,7 +1691,7 @@ function reset() {
   p = { x: 0, y: VH / 2, bt: 0, bb: VH, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
     dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 };
   trail = []; trail2 = []; parts = []; booms = []; camSnap = true;
-  const cp =hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
+  const cp =practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
   // an editor playtest starts at the rightmost start position that's on (unless you chose "playtest from here")
   const st = cur.id === 'test' && testFrom === null ? world.starts.filter(o => !(o.f & 8)).at(-1) : null;
@@ -1695,13 +1700,13 @@ function reset() {
   else if (sx > 0) Object.assign(p, spawnCache ??= spawnState(sx)); // start partway in at a safe spot (worked out once per level)
   else p.y2 = VH - p.y;
   p.ci = world.cps.filter(c => c.x * B <= p.x).length; // checkpoint objects behind a mid-level spawn don't count again
-  // A mid-level spawn (start %, From here, practice checkpoint) waits for your first press instead of moving straight away.
-  p.wait = !hacks.auto && (!!cp || (sx > 0 && !st)); // (a start position goes straight away, as in GD)
+  // A mid-level spawn from the start % hack or "From here" waits for your first press instead of moving straight away.
+  p.wait = !hacks.auto && !cp && sx > 0 && !st; // (a start position or practice checkpoint goes straight away, as in GD)
   if (p.wait) p.dir = p.flip ? 1 : -1; // facing the way a press will send it
   p.ang = p.from = p.dir * (p.mini ? Math.atan(2) : Math.PI / 4); p.cpT = 0; p.sub = 0; speedI = p.speedI;
   trail = p.cube || p.ship ? [] : [[p.x, p.y]]; trail2 = p.dual && !p.cube && !p.ship ? [[p.x, p.y2]] : [];
   plan = hacks.auto ? findPath(world, stateOf(p), Infinity, 300000, false) || [] : []; // autoplay: route to the end, worked out now
-  if (!(cp && (SND.seq || SND.sc) || cp && SND.el && !SND.el.paused)) { songStop(); if (!p.wait) setTimeout(attemptMusic, 0); } // each attempt starts the song again (practice keeps it going)
+  songStop(); if (!p.wait) setTimeout(attemptMusic, 0); // each attempt starts the song again, from where it starts (a checkpoint: that spot)
 }
 // The state a start position sets: its place, speed, gamemode, size, gravity and dual; portals behind it are skipped.
 function startPosState(o) {
@@ -1729,6 +1734,7 @@ function play(level, origin, songOk) {
   if (!songOk) { const id = missingSong(level); if (id) return songGate(level, origin, id); }
   cur = level; from = origin; world = level.id === 'test' ? buildWorld(edObjs) : worldFor(level.code); baseHue = level.hue ?? 200;
   if (level.id === 'test') { testPath = []; testPath2 = []; testClicks = []; testPrevHeld = false; testTick = 0; }
+  practice = false; // a level always starts in normal mode, as in GD (Replay puts practice back)
   attempt = 1; usedHacks = cheating(); checkpoints = []; spawnCache = null; held = false;
   reset(); mode = 'play'; inputs.length = 0; show(null); $('hud').hidden = false;
   updateHackTag();
@@ -1744,9 +1750,13 @@ function exitPlay() {
   if (from === 'editor') return resumeEditor();
   go(from);
 }
-function saveBest(pct) { if (cur.id !== 'test' && !usedHacks && pct > (bests[cur.id] || 0)) { bests[cur.id] = pct; store.set('zd-best', bests); } }
+function saveBest(pct) {
+  if (cur.id === 'test' || usedHacks) return;
+  if (practice) { if (pct > (pbests[cur.id] || 0)) { pbests[cur.id] = pct; store.set('zd-pbest', pbests); } return; } // GD keeps a separate practice best
+  if (pct > (bests[cur.id] || 0)) { bests[cur.id] = pct; store.set('zd-best', bests); }
+}
 function die() {
-  SFX.death(); if (!hacks.practice) songStop();
+  SFX.death(); if (!practice) songStop();
   mode = 'dead'; deadT = hacks.respawn; shake = calm || hacks.layout ? 0 : 16; if (!calm && !hacks.layout) flash = 0.18;
   trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]);
   // GD-style death: a bright flash and a shockwave ring where the icon was, and the icon blowing apart into spinning shards
@@ -1778,14 +1788,15 @@ function win() {
   if (cur.id === 'test' && from === 'editor') { saveBest(100); return endTest(); }
   mode = 'win'; saveBest(100); $('hud').hidden = true; show('done');
   // coins only count on a finished run without hacks; each one is kept once you've finished with it
-  if (world.coins.length && !usedHacks && cur.id !== 'test' && p.coins?.length) {
+  if (world.coins.length && !usedHacks && !practice && cur.id !== 'test' && p.coins?.length) {
     savedCoins[cur.id] = [...new Set([...(savedCoins[cur.id] || []), ...p.coins])].sort((a, b) => a - b); store.set('zd-coins', savedCoins);
   }
   $('doneStats').innerHTML = `<dt>Level</dt><dd>${esc(cur.name)}</dd><dt>Attempts</dt><dd>${attempt}</dd><dt>Length</dt><dd>${Math.round(world.end / B)} blocks</dd>`
-    + (world.coins.length ? `<dt>Coins</dt><dd>${p.coins?.length || 0} / ${world.coins.length}${usedHacks ? ' (hacks: not saved)' : ''}</dd>` : '');
+    + (world.coins.length ? `<dt>Coins</dt><dd>${p.coins?.length || 0} / ${world.coins.length}${usedHacks ? ' (hacks: not saved)' : practice ? ' (practice: not saved)' : ''}</dd>` : '');
   const idx = LEVELS.indexOf(cur), nextLv = LEVELS[idx + 1];
-  if (!usedHacks && idx >= 0) { grant('beat-' + cur.id); if (attempt === 1) grant('flawless'); }
-  $('doneMsg').textContent = usedHacks ? 'Hacks were on, so this run isn\'t saved and nothing unlocks.'
+  if (!usedHacks && !practice && idx >= 0) { grant('beat-' + cur.id); if (attempt === 1) grant('flawless'); }
+  $('doneTitle').textContent = practice ? 'Practice complete' : 'Complete';
+  $('doneMsg').textContent = practice ? 'Practice runs don\'t count. Exit practice from the pause menu and beat it for real.' : usedHacks ? 'Hacks were on, so this run isn\'t saved and nothing unlocks.'
     : idx >= 0 && nextLv ? `Level ${String(idx + 2).padStart(2, '0')} is open: ${nextLv.name}.` : idx === LEVELS.length - 1 ? 'That was the last level. Every main level is cleared.' : '';
 }
 
@@ -1938,7 +1949,7 @@ function songPause() { if (SND.sc) { SND.sc = null; SCP.w?.pause(); SND.paused =
 const PULSE = { lvl: 0, max: 0.05 };
 function audioScale(dt) {
   const playing = SND.an && (SND.seq || SND.el && !SND.el.paused);
-  if (!playing || hacks.practice || mode !== 'play') { PULSE.lvl = 0; return 0.5; }
+  if (!playing || mode !== 'play') { PULSE.lvl = 0; return 0.5; }
   SND.an.getFloatTimeDomainData(SND.buf); let pk = 0; for (const v of SND.buf) pk = Math.max(pk, Math.abs(v));
   PULSE.max = Math.max(pk, PULSE.max * Math.exp(-dt / 8), 0.02);
   PULSE.lvl = Math.max(pk / PULSE.max, PULSE.lvl * Math.exp(-dt / 0.15));
@@ -1973,6 +1984,7 @@ function pauseGame() {
   $('pauseName').textContent = cur.name + (usedHacks ? ' · hacks on' : '');
   $('pExit').textContent = from === 'editor' ? 'Back to editor' : 'Exit level';
   $('pauseHint').textContent = `${keyName(keys.exit)} resumes.` + (keys.restart ? ` ${keyName(keys.restart)} restarts.` : '');
+  $('pPractice').textContent = practice ? 'Exit practice' : 'Practice mode'; $('pAuto').checked = autoCp; $('pAutoRow').hidden = !practice;
   $('pResume').focus();
 }
 function resumeGame() {
@@ -2008,13 +2020,13 @@ function step(dt) {
     if (res === 'win') return win();
     if (res === 'dead') { if (hacks.noclip) hitFlash = 0.3; else return die(); }
     // checkpoint objects: in practice mode, passing one saves a checkpoint right there
-    while ((p.ci || 0) < world.cps.length && world.cps[p.ci || 0].x * B <= p.x) { p.ci = (p.ci || 0) + 1; if (hacks.practice) { checkpoints.push(stateOf(p)); SFX.checkpoint(); toast(`Checkpoint ${checkpoints.length}`); } }
+    while ((p.ci || 0) < world.cps.length && world.cps[p.ci || 0].x * B <= p.x) { p.ci = (p.ci || 0) + 1; if (practice) { checkpoints.push(stateOf(p)); SFX.checkpoint(); toast(`Checkpoint ${checkpoints.length}`); } }
     // practice: drop a checkpoint every 1.5 s, but only where there's a way to keep going for at least half a second
     // (respawning there starts with a press, so holding has to last at least 0.2 s from that spot)
-    if (hacks.practice && (p.cpT += dt) >= 1.5) { p.cpT = 0; const st = stateOf(p); if (survival(st, true) >= 96 && findPath(world, st, 30, 3000, true)) checkpoints.push(st); }
+    if (practice && autoCp && (p.cpT += dt) >= 1.5) { p.cpT = 0; const st = stateOf(p); if (survival(st, true) >= 48 && survival(st, false) >= 48 && findPath(world, st, 30, 3000, true) && findPath(world, st, 30, 3000, false)) checkpoints.push(st); }
   } else if (mode === 'dead') {
     deadT -= dt;
-    if (deadT <= 0) { if (cur.id === 'test' && from === 'editor' && !hacks.practice) return endTest(); attempt++; reset(); mode = 'play'; }
+    if (deadT <= 0) { if (cur.id === 'test' && from === 'editor' && !practice) return endTest(); attempt++; reset(); mode = 'play'; }
   }
   for (const q of parts) {
     const k = q.dr ? Math.exp(-q.dr * dt) : 0.98; q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= k; q.vy *= k; q.life -= dt;
@@ -2355,7 +2367,7 @@ function draw(t, dt) {
     drawCoin(ctx, o, B, t, (savedCoins[cur.id] || []).includes(i) && !ed);
   });
   for (const o of world.texts) { const [cx, , hw] = textBox(o); if ((cx + hw) * B > camX - 60 && (cx - hw) * B < camX + viewW + 60) drawText(ctx, o, B, o.g && world.fadeG.has(o.g) && inGame ? groupAlpha(world, p, o.g) : 1); }
-  if (ed || (inGame && hacks.practice)) for (const o of world.cps) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawCheckpoint(ctx, o, B, ed ? 1 : 0.4);
+  if (ed || (inGame && practice)) for (const o of world.cps) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawCheckpoint(ctx, o, B, ed ? 1 : 0.4);
   if (ed) { // editor only: triggers as labelled tiles, and each grouped object's group number
     for (const o of world.trig) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawTrigger(ctx, o, B);
     for (const o of world.letters) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawLetter(ctx, o, B);
@@ -2369,7 +2381,7 @@ function draw(t, dt) {
     if (ed && o.m) { ctx.fillStyle = '#fff'; ctx.font = '700 15px "Space Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText('MULTI', o.x * B, o.y * B - ORB_R * B * 1.6); } // editor badge
   });
   world.pads.forEach((o, i) => { if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawPad(ctx, o, B, t, inGame && i === p.lastPad); });
-  if (inGame && hacks.practice) for (const c of checkpoints) if (c.x > camX - 30 && c.x < camX + viewW + 30) { // practice checkpoints: green diamonds
+  if (inGame && practice) for (const c of checkpoints) if (c.x > camX - 30 && c.x < camX + viewW + 30) { // practice checkpoints: green diamonds
     ctx.beginPath(); ctx.moveTo(c.x, c.y - 14); ctx.lineTo(c.x + 10, c.y); ctx.lineTo(c.x, c.y + 14); ctx.lineTo(c.x - 10, c.y); ctx.closePath();
     ctx.fillStyle = '#4dff9a'; ctx.fill(); ctx.strokeStyle = '#0c0e1c'; ctx.lineWidth = 2; ctx.stroke();
   }
@@ -2633,7 +2645,7 @@ function renderBoard() {
       <span class="name">${open ? l.name : 'Locked'}</span>
       <span class="best">${open ? `<strong>${best}%</strong><span class="meter"><i style="width:${best}%"></i></span>` : ''}</span>
       <span class="facts"><span><i></i>${l.diff}</span>${open
-        ? levelFacts(worldFor(l.code)) + (overrides[l.id] !== undefined ? '<span style="color:var(--rose)">Edited</span>' : '')
+        ? levelFacts(worldFor(l.code)) + (pbests[l.id] ? `<span style="color:#4dff9a">Practice ${pbests[l.id]}%</span>` : '') + (overrides[l.id] !== undefined ? '<span style="color:var(--rose)">Edited</span>' : '')
         : `<span>Beat ${LEVELS[i - 1].name} to unlock</span>`}</span>
     </button>`;
   }).join('');
@@ -2642,7 +2654,7 @@ function renderBoard() {
 }
 function renderCustoms() {
   $('customList').innerHTML = customs.length ? customs.map(l => `<div class="row"><div><div class="name">${esc(l.name)}</div>
-    <div class="facts"><span>${Math.round(worldFor(l.code).end / B)} blk</span><span>Best ${bests[l.id] || 0}%</span>${worldFor(l.code).coins.length ? `<span>◎ ${(savedCoins[l.id] || []).length}/${worldFor(l.code).coins.length}</span>` : ''}</div></div>
+    <div class="facts"><span>${Math.round(worldFor(l.code).end / B)} blk</span><span>Best ${bests[l.id] || 0}%</span>${pbests[l.id] ? `<span>Practice ${pbests[l.id]}%</span>` : ''}${worldFor(l.code).coins.length ? `<span>◎ ${(savedCoins[l.id] || []).length}/${worldFor(l.code).coins.length}</span>` : ''}</div></div>
     <div class="acts"><button class="primary" data-play="${l.id}">▶ Play</button><button data-edit="${l.id}">Edit</button>${NET.ready && NET.write
       ? `<button class="ghost" data-up="${l.id}">${(NET.uploads[NET.uid]?.levels || []).some(x => x.id === l.id) ? 'Update online' : 'Upload'}</button>` : ''}<button class="danger" data-del="${l.id}">Delete</button></div></div>`).join('')
     : '<p class="note">No levels yet. Press New level to build one, or open Share code in a new level and paste someone\'s code.</p>';
@@ -2985,12 +2997,13 @@ function renderBinds() {
 }
 // ---------- secret hack menu ----------
 function updateHackTag() {
-  $('hackTag').textContent = [hacks.noclip && 'Noclip', hacks.speed !== 1 && hacks.speed + 'x', hacks.start > 0 && 'From ' + Math.round(hacks.start * 100) + '%',
-    hacks.practice && 'Practice', hacks.auto && 'Autoplay', hacks.path && 'Path'].filter(Boolean).join(' · ');
+  $('hud').classList.toggle('practice', practice); $('pcBtns').hidden = !practice;
+  $('hackTag').textContent = [practice && 'Practice', hacks.noclip && 'Noclip', hacks.speed !== 1 && hacks.speed + 'x', hacks.start > 0 && 'From ' + Math.round(hacks.start * 100) + '%',
+    hacks.auto && 'Autoplay', hacks.path && 'Path'].filter(Boolean).join(' · ');
 }
 function renderHacks() {
   $('hNoclip').checked = hacks.noclip; $('hHitbox').checked = hacks.hitbox; $('hFps').checked = hacks.fps;
-  $('hPath').checked = hacks.path; $('hPractice').checked = hacks.practice; $('hAuto').checked = hacks.auto;
+  $('hPath').checked = hacks.path; $('hAuto').checked = hacks.auto;
   $('hAcc').checked = hacks.acc; $('hNoAtt').checked = hacks.noAtt; $('hLayout').checked = hacks.layout;
   $('hRespawn').value = hacks.respawn; $('hRespawnOut').textContent = hacks.respawn.toFixed(2) + ' s';
   $('hCbf').checked = hacks.cbf; $('hUncap').checked = hacks.uncap;
@@ -3003,18 +3016,17 @@ function renderHacks() {
 function readHacks() {
   const was = hacks;
   hacks = { noclip: $('hNoclip').checked, hitbox: $('hHitbox').checked, speed: +(+$('hSpeed').value).toFixed(2), start: +$('hStart').value, fps: $('hFps').checked,
-    cbf: $('hCbf').checked, uncap: $('hUncap').checked, cap: +$('hCap').value, path: $('hPath').checked, practice: $('hPractice').checked,
+    cbf: $('hCbf').checked, uncap: $('hUncap').checked, cap: +$('hCap').value, path: $('hPath').checked,
     auto: $('hAuto').checked, acc: $('hAcc').checked, noAtt: $('hNoAtt').checked, layout: $('hLayout').checked, respawn: +(+$('hRespawn').value).toFixed(2),
     noPulse: $('hNoPulse').checked, trail: +(+$('hTrail').value).toFixed(2) };
   if (hacks.uncap !== !!ctx.getContextAttributes?.().desynchronized) makeCanvas(hacks.uncap);
-  if (!hacks.practice) checkpoints = [];
   if (hacks.start !== was.start) spawnCache = null;
   if (hacks.auto && !was.auto && p) { plan = []; p.sub = 0; } // turning autoplay on mid-run: plan from where you are
   store.set('zd-hacks', hacks); renderHacks();
   if (cheating() && (mode === 'play' || mode === 'dead' || mode === 'pause')) usedHacks = true; // switching a hack on mid-run voids that run's best
   updateHackTag();
 }
-for (const id of ['hNoclip', 'hHitbox', 'hSpeed', 'hStart', 'hFps', 'hCbf', 'hUncap', 'hCap', 'hPath', 'hPractice', 'hAuto', 'hAcc', 'hNoAtt', 'hLayout', 'hRespawn', 'hNoPulse', 'hTrail'])
+for (const id of ['hNoclip', 'hHitbox', 'hSpeed', 'hStart', 'hFps', 'hCbf', 'hUncap', 'hCap', 'hPath', 'hAuto', 'hAcc', 'hNoAtt', 'hLayout', 'hRespawn', 'hNoPulse', 'hTrail'])
   $(id).addEventListener('input', readHacks);
 $('hSpeedReset').onclick = () => { $('hSpeed').value = 1; readHacks(); };
 
@@ -3330,9 +3342,19 @@ $('edLoad').onclick = () => {
 $('exitBtn').onclick = pauseGame;
 $('pResume').onclick = resumeGame;
 $('pRestart').onclick = restartGame;
+// Practice from the pause menu (GD): going in carries on from where you are; leaving starts the level over in normal mode.
+$('pPractice').onclick = () => {
+  if (!practice) { practice = true; checkpoints = []; usedHacks = cheating(); updateHackTag(); resumeGame(); toast(`Practice mode · ${keyName('KeyZ')} places a checkpoint, ${keyName('KeyX')} removes one`); }
+  else { practice = false; updateHackTag(); restartGame(); attempt = 1; }
+};
+$('pAuto').onchange = () => { autoCp = $('pAuto').checked; store.set('zd-autocp', autoCp); };
+function placeCp() { if (!practice || mode !== 'play' || p.wait) return; checkpoints.push(stateOf(p)); SFX.checkpoint(); toast(`Checkpoint ${checkpoints.length} placed`); }
+function removeCp() { if (!practice || !checkpoints.length) return; checkpoints.pop(); toast(checkpoints.length ? `Back to checkpoint ${checkpoints.length}` : 'No checkpoints left'); }
+$('pcPlace').onclick = e => { placeCp(); e.currentTarget.blur(); };
+$('pcDel').onclick = e => { removeCp(); e.currentTarget.blur(); };
 $('pExit').onclick = () => { show(null); exitPlay(); };
 document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); }); // switching tabs mid-level pauses
-$('doneReplay').onclick = () => play(cur, from);
+$('doneReplay').onclick = () => { const pr = practice; play(cur, from); practice = pr; updateHackTag(); };
 $('doneBack').onclick = exitPlay;
 $('bindReset').onclick = () => { keys = structuredClone(DEFAULT_KEYS); store.set('zd-keys', keys); listening = null; renderBinds(); };
 
@@ -3691,9 +3713,8 @@ addEventListener('keydown', e => {
   if (e.code === keys.exit) { e.preventDefault(); return pauseGame(); }
   if (keys.climb.includes(e.code)) { e.preventDefault(); if (!e.repeat) inputDown(e.code, e); return; }
   if (e.code === keys.restart) { e.preventDefault(); if (!e.repeat) restartGame(); return; } // back to the start, like the pause menu's Restart
-  if (hacks.practice && mode === 'play' && !e.repeat) { // practice keys: Z places a checkpoint here, X removes the newest
-    if (e.code === 'KeyZ') { checkpoints.push(stateOf(p)); toast(`Checkpoint ${checkpoints.length} placed`); }
-    else if (e.code === 'KeyX' && checkpoints.length) { checkpoints.pop(); toast(checkpoints.length ? `Back to checkpoint ${checkpoints.length}` : 'No checkpoints left'); }
+  if (practice && !e.repeat) { // practice keys (GD's): Z places a checkpoint here, X removes the newest
+    if (e.code === 'KeyZ') placeCp(); else if (e.code === 'KeyX') removeCp();
   }
 });
 addEventListener('keyup', e => inputUp(e.code, e)); // always forget a released key, even in a menu, so it never sticks
