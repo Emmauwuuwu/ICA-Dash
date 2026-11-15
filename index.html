@@ -499,8 +499,17 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
           <div style="display:flex;flex-direction:column;gap:8px">
             <div class="btnrow"><button id="cubeUpload">Upload cube image</button><button class="ghost" id="cubeRemove">Remove</button></div>
             <input type="file" id="cubeFile" accept="image/*" class="sr" tabindex="-1" aria-hidden="true">
-            <p class="note">Used in cube mode. It fills the cube's whole square (see-through edges are trimmed and it's stretched to square) and spins with it; the hitbox stays the same. Saved in this browser.</p>
+            <p class="note">Used in cube mode. Size, stretch and move it below until it sits in the square the way you like; that's how it looks in game and when you share it. The hitbox stays the same. Saved in this browser.</p>
             <p class="warn" id="cubeMsg"></p>
+            <div id="cubeAdj" hidden>
+              <canvas id="cubeAdjView" width="200" height="200" style="width:140px;height:140px;align-self:center;background:var(--ink-2);border-radius:8px"></canvas>
+              <label class="hrow hcol"><span>Size <b class="hval" data-adjout="s"></b></span><input type="range" data-adj="s" min="0.3" max="2" step="0.01"></label>
+              <label class="hrow hcol"><span>Width <b class="hval" data-adjout="x"></b></span><input type="range" data-adj="x" min="0.3" max="2" step="0.01"></label>
+              <label class="hrow hcol"><span>Height <b class="hval" data-adjout="y"></b></span><input type="range" data-adj="y" min="0.3" max="2" step="0.01"></label>
+              <label class="hrow hcol"><span>Move right <b class="hval" data-adjout="ox"></b></span><input type="range" data-adj="ox" min="-0.5" max="0.5" step="0.01"></label>
+              <label class="hrow hcol"><span>Move down <b class="hval" data-adjout="oy"></b></span><input type="range" data-adj="oy" min="-0.5" max="0.5" step="0.01"></label>
+              <button class="ghost" id="cubeAdjReset">Reset</button>
+            </div>
           </div>
         </div>
         <h3>Ship</h3>
@@ -1281,6 +1290,12 @@ function renderComm() {
   $('commList').innerHTML = !on || COMM.err ? '' : ['wave', 'cube', 'ship'].map(k => { const list = ok.filter(it => it.kind === k);
     return `<h4>${KIND_NAME[k]}s</h4>` + (list.length ? `<div class="commGrid">${list.map(it => tile(it, `<div class="btnrow"><button class="ghost" data-cuse="${it.id}">Use</button>${mod ? `<button class="danger" data-cdel="${it.id}">Remove</button>` : ''}</div>`)).join('')}</div>` : '<p class="note">None yet.</p>'); }).join('');
 }
+// Your cube as you've sized it, drawn into a picture 2 blocks across (the 1-block square in the middle), so it shows up the
+// same for whoever uses it (they draw it at size 2).
+function bakeCube() {
+  const c = document.createElement('canvas'); c.width = c.height = 192;
+  drawCube(c.getContext('2d'), 96, 96, 0, 48 / CUBE_H, { ...icon, useCubeCustom: true }); return c.toDataURL('image/png');
+}
 async function commDo(fn, done) {
   if (COMM.busy) return; COMM.busy = true; $('commMsg').textContent = '';
   try { const r = await fn(); if (r?.error) throw r.error; if (done) toast(done); } catch (e) { $('commMsg').textContent = e.message || String(e); }
@@ -1290,14 +1305,14 @@ $('comm').addEventListener('click', e => {
   const d = e.target.closest('button')?.dataset; if (!d) return;
   const item = id => COMM.items.find(it => it.id === id);
   if (d.cshare) {
-    const kind = d.cshare, img = icon[KIND_SLOT[kind][0]], name = $('commName').value.trim().slice(0, 24);
+    const kind = d.cshare, name = $('commName').value.trim().slice(0, 24), img = kind === 'cube' && icon.cubeCustom && cubeImg.naturalWidth ? bakeCube() : icon[KIND_SLOT[kind][0]];
     if (!img) return void ($('commMsg').textContent = `Upload a custom ${kind} image above first, then share it.`);
     if (!name) return void ($('commMsg').textContent = 'Give your icon a name first.');
     if (!IMG_OK.test(img) || img.length >= 120000) return void ($('commMsg').textContent = 'That image is too big to share. Upload a smaller one.');
     commDo(() => NET.sb.from('community_icons').insert({ kind, name, image: img }), `Sent "${name}" for approval`);
   } else if (d.cuse) {
     const it = item(d.cuse); if (!it) return; const [key, use, imgOf] = KIND_SLOT[it.kind];
-    icon[key] = it.image; icon[use] = true; imgOf().src = it.image; store.set('zd-icon', icon); renderIcons(); toast(`Using "${it.name}" as your ${it.kind}`);
+    icon[key] = it.image; icon[use] = true; imgOf().src = it.image; if (it.kind === 'cube') icon.cubeAdj = { s: 2 }; // shared cubes are baked 2 blocks across store.set('zd-icon', icon); renderIcons(); toast(`Using "${it.name}" as your ${it.kind}`);
   } else if (d.cok) commDo(() => NET.sb.from('community_icons').update({ status: 'approved' }).eq('id', d.cok), 'Approved: everyone can see it now');
   else if (d.cno) commDo(() => NET.sb.from('community_icons').update({ status: 'rejected' }).eq('id', d.cno), 'Rejected');
   else if (d.cdel && confirm('Remove this icon from the community list?')) commDo(() => NET.sb.from('community_icons').delete().eq('id', d.cdel), 'Removed');
@@ -2167,23 +2182,15 @@ function drawShip(g, x, y, a, s, ic, flip) {
 }
 // Cube icon (original design): your colours, a square with an inset square and a core. Or your own cube picture, fitted
 // inside the square (the wave's custom image is a wave icon, so the cube never uses that one).
-// A cube picture fills its whole square, as GD's cube fills its 1-block hitbox: see-through margins are trimmed off and the
-// rest is stretched to square (worked out once per picture, so saved and community cubes get it too).
-let cubeFit = null;
-function cubeSquare() {
-  if (cubeFit?.src === cubeImg.src) return cubeFit.c;
-  const w = cubeImg.naturalWidth, h = cubeImg.naturalHeight, c0 = document.createElement('canvas'); c0.width = w; c0.height = h;
-  const g0 = c0.getContext('2d'); g0.drawImage(cubeImg, 0, 0); const d = g0.getImageData(0, 0, w, h).data;
-  let x0 = w, y0 = h, x1 = -1, y1 = -1;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-  if (x1 < 0) { x0 = y0 = 0; x1 = w - 1; y1 = h - 1; }
-  const c = document.createElement('canvas'); c.width = c.height = 128; c.getContext('2d').drawImage(cubeImg, x0, y0, x1 - x0 + 1, y1 - y0 + 1, 0, 0, 128, 128);
-  cubeFit = { src: cubeImg.src, c }; return c;
-}
+const CUBE_ADJ = { s: 1, x: 1, y: 1, ox: 0, oy: 0 }; // custom cube picture: size, width, height, move right, move down (in cube sizes)
 function drawCube(g, x, y, a, s, ic) {
   const h = CUBE_H * s;
   g.save(); g.translate(x, y); g.rotate(a);
-  if (ic.useCubeCustom && cubeImg.naturalWidth) { g.drawImage(cubeSquare(), -h, -h, 2 * h, 2 * h); g.restore(); return; }
+  if (ic.useCubeCustom && cubeImg.naturalWidth) { // fitted by its longest side, then the player's own size, stretch and position
+    const A = { ...CUBE_ADJ, ...ic.cubeAdj }, k = 2 * h * A.s / Math.max(cubeImg.naturalWidth, cubeImg.naturalHeight);
+    const w = cubeImg.naturalWidth * k * A.x, ih = cubeImg.naturalHeight * k * A.y;
+    g.drawImage(cubeImg, -w / 2 + A.ox * 2 * h, -ih / 2 + A.oy * 2 * h, w, ih); g.restore(); return;
+  }
   g.fillStyle = '#0c0e1c'; g.fillRect(-h, -h, h * 2, h * 2);
   g.fillStyle = COLORS[ic.c1]; g.fillRect(-h + 3 * s, -h + 3 * s, h * 2 - 6 * s, h * 2 - 6 * s);
   g.fillStyle = '#0c0e1c'; g.fillRect(-h * 0.55, -h * 0.55, h * 1.1, h * 1.1);
@@ -3189,7 +3196,14 @@ function renderIcons() {
     if (!custom || hasC) drawCube(g, 60, 60, 0, 1.4, { ...icon, useCubeCustom: custom });
     else { g.strokeStyle = 'rgba(233,237,247,.4)'; g.lineWidth = 4; g.setLineDash([10, 8]); g.strokeRect(20, 20, 80, 80); g.setLineDash([]); g.fillStyle = 'rgba(233,237,247,.6)'; g.fillRect(56, 40, 8, 40); g.fillRect(40, 56, 40, 8); }
   }
-  $('cubeRemove').hidden = !hasC;
+  $('cubeRemove').hidden = !hasC; $('cubeAdj').hidden = !hasC;
+  if (hasC) { // the adjuster: sliders and a big preview with the hitbox square dashed
+    const A = { ...CUBE_ADJ, ...icon.cubeAdj }, v = $('cubeAdjView').getContext('2d');
+    document.querySelectorAll('[data-adj]').forEach(el => { el.value = A[el.dataset.adj]; });
+    document.querySelectorAll('[data-adjout]').forEach(el => { const k = el.dataset.adjout, n = A[k]; el.textContent = k === 'ox' || k === 'oy' ? (n > 0 ? '+' : '') + n.toFixed(2) : n.toFixed(2) + 'x'; });
+    v.clearRect(0, 0, 200, 200); drawCube(v, 100, 100, 0, 2.2, { ...icon, useCubeCustom: true });
+    v.strokeStyle = 'rgba(77,255,154,.9)'; v.lineWidth = 2; v.setLineDash([6, 5]); v.strokeRect(100 - CUBE_H * 2.2, 100 - CUBE_H * 2.2, CUBE_H * 4.4, CUBE_H * 4.4); v.setLineDash([]);
+  }
   const hasS = !!shipImg.naturalWidth, onS = !!icon.useShipCustom && hasS;
   for (const [id, custom] of [['shipTileDef', false], ['shipTile', true]]) {
     const tile = $(id), g = tile.querySelector('canvas').getContext('2d');
@@ -3290,17 +3304,21 @@ $('iconFile').addEventListener('change', async () => {
 });
 const cubeMsg = t => { $('cubeMsg').textContent = t; };
 $('cubeUpload').onclick = () => $('cubeFile').click();
+document.querySelectorAll('[data-adj]').forEach(el => el.addEventListener('input', () => {
+  icon.cubeAdj = { ...CUBE_ADJ, ...icon.cubeAdj, [el.dataset.adj]: +el.value }; store.set('zd-icon', icon); renderIcons();
+}));
+$('cubeAdjReset').onclick = () => { delete icon.cubeAdj; store.set('zd-icon', icon); renderIcons(); };
 $('cubeTileDef').onclick = () => { icon.useCubeCustom = false; store.set('zd-icon', icon); renderIcons(); };
 $('cubeTile').onclick = () => {
   if (!cubeImg.naturalWidth) return $('cubeFile').click();
   icon.useCubeCustom = true; store.set('zd-icon', icon); renderIcons();
 };
 $('cubeRemove').onclick = () => {
-  delete icon.cubeCustom; icon.useCubeCustom = false; cubeImg.removeAttribute('src'); store.set('zd-icon', icon); cubeMsg(''); renderIcons();
+  delete icon.cubeCustom; delete icon.cubeAdj; icon.useCubeCustom = false; cubeImg.removeAttribute('src'); store.set('zd-icon', icon); cubeMsg(''); renderIcons();
 };
 $('cubeFile').addEventListener('change', async () => {
   const { url, err } = await readIconFile($('cubeFile')); if (err) return cubeMsg(err); if (!url) return;
-  icon.cubeCustom = url; icon.useCubeCustom = true; cubeImg.src = url;
+  icon.cubeCustom = url; icon.useCubeCustom = true; delete icon.cubeAdj; cubeImg.src = url;
   cubeMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
 });
 const shipMsg = t => { $('shipMsg').textContent = t; };
