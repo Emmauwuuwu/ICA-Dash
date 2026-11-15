@@ -653,7 +653,7 @@ function decodeLevel(code) {
     else if (t === 'j' && okPos(a, b) && PAD[f[4]]) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4, c: f[4] });
     else if (t === 'p' && okPos(a, b) && c > 0 && c <= 40 && ['S', 'm', 'v', 'w', 'g', 'T'].includes(f[4])) {
       const v = Math.round(num(f[5])) || 0;
-      objs.push({ t, x: a, y: b, h: c, k: f[4], v: f[4] === 'S' ? Math.min(4, Math.max(0, v)) : f[4] === 'v' && v === 2 ? 2 : v ? 1 : 0 });
+      objs.push({ t, x: a, y: b, h: c, k: f[4], v: f[4] === 'S' ? Math.min(4, Math.max(0, v)) : (f[4] === 'v' || f[4] === 'g') && v === 2 ? 2 : v ? 1 : 0 });
     }
     if (objs.length > before && grp(gs)) objs[objs.length - 1].g = grp(gs);
   }
@@ -829,7 +829,7 @@ function settle(wd, x, y, r, pushUp, push) {
 function orbAt(wd, s, r) {
   const bx = s.x / B, br = r / B;
   for (let i = 0; i < wd.orbs.length; i++) {
-    const o = wd.orbs[i]; if (o.x > bx + 2) break; if (o.x < bx - 2 || (o.t === 'q' && !s.cube) || (!o.m && s.used?.includes(i))) continue;
+    const o = wd.orbs[i]; if (o.x > bx + 2) break; if (o.x < bx - 2 || (o.t === 'q' && !s.cube && !s.ship) || (!o.m && s.used?.includes(i))) continue;
     for (const y of s.dual ? [s.y, s.y2] : [s.y]) if (Math.abs(o.x - bx) < br + ORB_HIT && Math.abs(o.y - y / B) < br + ORB_HIT) return i;
   }
   return -1;
@@ -841,7 +841,7 @@ function dashStart(wd, s, i) { const o = wd.orbs[i]; orbTaken(wd, s, i); s.dash 
 // Cube launches from orbs and pads: v (GD units per frame, away from the ground) scaled like the jump (size, game speed).
 // GD's step loss always works against the "away" direction, so it's subtracted whatever v's sign. The dual twin gets the mirror.
 function launch(s, v) {
-  const gs = s.flip ? -1 : 1, sp = (v * GD * (s.mini ? 0.8 : 1) - GD_STEP_LOSS) * JUMP_AT_SPEED[s.speedI];
+  const gs = s.flip ? -1 : 1, sp = v * GD * (s.mini ? 0.8 : 1) * JUMP_AT_SPEED[s.speedI] - stepLoss(s);
   s.vy = -gs * sp; s.vy2 = gs * sp; s.gnd = s.gnd2 = false; s.dash = null;
 }
 function ringUse(wd, s, i) { // a jump orb: uses up the press
@@ -1014,7 +1014,7 @@ const inputs = []; // [timestamp, held] queued so each press lands on the exact 
 const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
 let checkpoints = [], spawnCache = null, plan = [];
 const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
-  used: q.used, lastPad: q.lastPad, cube: q.cube, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2,
+  used: q.used, lastPad: q.lastPad, cube: q.cube, ship: q.ship, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2,
   t: q.t, tf: q.tf, coins: q.coins, ci: q.ci });
 // ---------- cube ----------
 // Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), with GD's player step
@@ -1026,10 +1026,12 @@ const GD = 2 * 60 * 0.9; // GD units per frame -> our units per second
 const CUBE_G = 0.958199 * GD * 60 * 0.9, GD_STEP_LOSS = CUBE_G / 240 / 2;
 // Mini jumps at 0.8x speed (same gravity and fall cap): 1.358 blocks high, matching a recorded GD mini path.
 const CUBE_JUMP = 11.180032 * GD - GD_STEP_LOSS, CUBE_JUMP_MINI = 11.180032 * 0.8 * GD - GD_STEP_LOSS, CUBE_TERM = 15 * GD;
-// GD's jump speed changes a little with game speed (gravity doesn't). Fitted from recorded GD jumps at every speed, for both
-// sizes, which agree to 0.2%: normal 1.955 / 2.131 / 2.227 / 2.143 / 2.153 blocks high, mini 1.240 / 1.354 / 1.421 / 1.360 /
-// 1.367, for 0.5x / 1x / 2x / 3x / 4x. Each factor is the average of the two sizes.
-const JUMP_AT_SPEED = [0.9574, 1, 1.0232, 1.0025, 1.005];
+// GD sets the cube's jump and gravity per game speed (PlayerObject::updateTimeMod, decompiled in camila314/gdp), for
+// 0.5x / 1x / 2x / 3x / 4x. These match what we'd fitted from recorded GD jumps at every speed to 0.2%.
+const GD_JUMP = [10.620032, 11.1800318, 11.420032, 11.230032, 11.230032], GD_GRAV = [0.940199, 0.958199, 0.957199, 0.961199, 0.961199];
+const cubeG = s => GD_GRAV[s.speedI] * GD * 60 * 0.9, stepLoss = s => cubeG(s) / 240 / 2;
+const cubeJump = s => GD_JUMP[s.speedI] * (s.mini ? 0.8 : 1) * GD - stepLoss(s);
+const JUMP_AT_SPEED = GD_JUMP.map(j => j / GD_JUMP[1]); // orbs and pads scale with the speed's jump
 const CUBE_H = B / 2, CUBE_MINI = 0.6, CUBE_INNER = 0.3; // main hitbox 1 x 1 block (mini 0.6); the inner box that dies to solids is 0.3 of it
 const cubeHalf = s => s.mini ? CUBE_H * CUBE_MINI : CUBE_H;
 // Slopes, measured from recorded GD slope runs: the slope holds the cube up at a point 1/3 block ahead of its centre (2/3 of
@@ -1077,7 +1079,7 @@ function cubeBody(wd, s, k, gs, h, dt, v) {
   const rise = was ? -gs * (s[SV] || 0) : 0; // how fast the surface it was standing on rises (against gravity)
   let ny, vy = s[VY] || 0;
   if (s.dash != null) { ny = y + (k === 1 ? -1 : 1) * s.dash * v * dt; vy = 0; }
-  else { const v0 = vy; vy += gs * CUBE_G * dt; if (vy * gs > CUBE_TERM) vy = gs * CUBE_TERM; ny = y + (v0 + vy) / 2 * dt; } // averaged: the arc is exact at any step size
+  else { const v0 = vy; vy += gs * cubeG(s) * dt; if (vy * gs > CUBE_TERM) vy = gs * CUBE_TERM; ny = y + (v0 + vy) / 2 * dt; } // averaged: the arc is exact at any step size
   let gnd = false;
   // Moving with gravity (or riding): land on what its feet reached and keep riding flat ground, downhill slopes and the slope
   // it's being carried up. Moving against gravity: a slope can only push it up so it doesn't sink in; it keeps its own speed
@@ -1101,34 +1103,67 @@ function cubeBody(wd, s, k, gs, h, dt, v) {
   if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null) vy = 0; s[SV] = 0; s[LV] = 0; gnd = true; }
   if ((ny - ceil) * gs < 0) { ny = ceil; if (vy * gs < 0) vy = 0; }
   s[Y] = ny; s[VY] = vy; s[G] = gnd;
-  // Death: the small inner box touching any solid (side or ceiling hits), or the main box touching a saw or spike.
-  const bx = s.x / B, by = ny / B, bi = h * CUBE_INNER / B, bm = h / B;
+  return survives(wd, s.x, ny, h);
+}
+// Cube and ship death: the small inner box touching any solid (side or ceiling hits), or the main box touching a saw or spike.
+function survives(wd, x, y, h) {
+  const bx = x / B, by = y / B, bi = h * CUBE_INNER / B, bm = h / B;
   for (const o of nearObjs(wd, bx - bm, bx + bm)) {
     if (o.t === 's' || o.t === 'k') { if (hazardHit(o, bx, by, bm)) return false; }
     else for (const dx of [-bi, 0, bi]) for (const dy of [-bi, 0, bi]) if (inside(o, bx + dx, by + dy)) return false;
   }
   return true;
 }
+// ---------- ship ----------
+// GD's ship (PlayerObject::updateJump, decompiled in camila314/gdp), per 1/60 s frame in GD units, gravity 0.9582:
+// holding pushes up by 0.9582 x 0.5 while still falling and x 0.4 once rising; letting go pulls down by 0.9582 x 0.4 x 0.8
+// while falling and x 1.2 while still rising. Speed is capped at 8 up and 6.4 down. Mini divides all of it by 0.85.
+// Like the cube it uses GD's 0.9 step scale. It slides along floors and ceilings (and slopes); hitting a side kills it.
+const SHIP_G = 0.9582 * GD * 60 * 0.9;
+function shipBody(wd, s, k, gs, h, dt, v, hold) {
+  const Y = k === 1 ? 'y' : 'y2', VY = k === 1 ? 'vy' : 'vy2', G = k === 1 ? 'gnd' : 'gnd2', was = s[G], y = s[Y], m = s.mini ? 0.85 : 1;
+  let ny, vy = s[VY] || 0;
+  if (s.dash != null) { ny = y + (k === 1 ? -1 : 1) * s.dash * v * dt; vy = 0; }
+  else {
+    const falling = vy * gs > 0, v0 = vy;
+    vy += (hold ? -gs * SHIP_G * (falling ? 0.5 : 0.4) : gs * SHIP_G * 0.4 * (falling ? 0.8 : 1.2)) / m * dt;
+    vy = gs > 0 ? Math.min(6.4 * GD / m, Math.max(-8 * GD / m, vy)) : Math.max(-6.4 * GD / m, Math.min(8 * GD / m, vy));
+    ny = y + (v0 + vy) / 2 * dt;
+  }
+  let gnd = false;
+  const reach = Math.abs(ny - y) + 2.5 * v * dt + 1;
+  if ((ny - y) * gs >= 0) { // moving down (with gravity): land on floors and slide; stay on what it was sliding on
+    const sy = surfaceNear(wd, s.x, ny + gs * h, h, gs, reach, was ? 2.5 * v * dt + 1 : 0);
+    if (sy !== null) { ny = sy - gs * h; if (s.dash == null) vy = SURF_K * v; gnd = true; }
+  } else { // moving up: slide along ceilings
+    const sy = surfaceNear(wd, s.x, ny - gs * h, h, -gs, reach, 0);
+    if (sy !== null) { ny = sy + gs * h; if (s.dash == null) vy = SURF_K * v; }
+  }
+  const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges are floor and ceiling
+  if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null && vy * gs > 0) vy = 0; gnd = true; }
+  if ((ny - ceil) * gs <= 0) { ny = ceil; if (s.dash == null && vy * gs < 0) vy = 0; }
+  s[Y] = ny; s[VY] = vy; s[G] = gnd;
+  return survives(wd, s.x, ny, h);
+}
 // Portals change the state; fx (the real game only) adds the effects first.
 function portalState(s, o) {
   if (o.k === 'S') s.speedI = o.v;
   else if (o.k === 'm') { // a cube keeps its feet where they were
     const h0 = cubeHalf(s); s.mini = !!o.v;
-    if (s.cube) { const d = (h0 - cubeHalf(s)) * (s.flip ? -1 : 1); s.y += d; s.y2 -= d; }
+    if (s.cube || s.ship) { const d = (h0 - cubeHalf(s)) * (s.flip ? -1 : 1); s.y += d; s.y2 -= d; }
   }
   else if (o.k === 'v') s.flip = o.v === 2 ? !s.flip : !!o.v; // 2: the swap portal flips whichever way gravity is
   else if (o.k === 'T') { // teleport entrance: up or down to the nearest exit's height (keeping where you are within the gate)
     const d = teleportShift(s.wd, o); if (!d) return;
-    s.y += d; s.y2 -= d; if (s.cube) { s.gnd = s.gnd2 = false; s.sv = s.sv2 = s.lv = s.lv2 = 0; }
+    s.y += d; s.y2 -= d; if (s.cube || s.ship) { s.gnd = s.gnd2 = false; s.sv = s.sv2 = s.lv = s.lv2 = 0; }
   }
   else if (o.k === 'w') { if (o.v && !s.dual) { s.y2 = VH - s.y; s.vy2 = -(s.vy || 0); s.gnd2 = false; } s.dual = !!o.v; }
-  else if (o.k === 'g') {
-    const c = !!o.v;
-    if (c && !s.cube) { // wave -> cube: keeps half of the wave's vertical speed
+  else if (o.k === 'g') { // gamemode: v 0 wave, 1 cube, 2 ship
+    if (o.v && !s.cube && !s.ship) { // from the wave: keeps half of the wave's vertical speed
       const v = SPEEDS[s.speedI] * B, dy = s.dash != null ? -s.dash * v : s.dir * v * (s.mini ? 2 : 1);
       s.vy = dy / 2; s.vy2 = -dy / 2; s.gnd = s.gnd2 = false;
-    }
-    s.cube = c;
+    } else if (o.v === 2 && s.cube) { s.vy = (s.vy || 0) / 2; s.vy2 = (s.vy2 || 0) / 2; s.gnd = s.gnd2 = false; } // cube -> ship: half its speed
+    s.cube = o.v === 1; s.ship = o.v === 2;
   }
 }
 // How far (game units, down positive) a teleport entrance moves you: to the exit nearest it along the level. 0 if none.
@@ -1153,7 +1188,7 @@ function tick1(wd, s, hold, dt, fx, fresh) {
   s.t = (s.t || 0) + dt; s.wd = wd; // game time (for triggers); the world, for teleports
   if (fresh) s.spent = false; // a new button went down (even with another still held): it can take the next orb
   if (!hold) { // letting go ends a dash (a cube keeps the dash's speed) and frees the next press for an orb
-    if (s.dash != null) { if (s.cube) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner(); }
+    if (s.dash != null) { if (s.cube || s.ship) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner(); }
     s.spent = false;
   }
   const portals = () => {
@@ -1163,26 +1198,27 @@ function tick1(wd, s, hold, dt, fx, fresh) {
     }
     fireTriggers(wd, s); placeMoving(wd, s); // moving groups are placed before this tick's collisions
   };
-  if (s.cube) {
+  if (s.cube || s.ship) {
     const gs = s.flip ? -1 : 1, h = cubeHalf(s);
     if (hold && !s.spent) { // an orb takes the press before a jump
       const oi = orbAt(wd, s, h);
       if (oi >= 0) { if (wd.orbs[oi].t === 'd') { dashStart(wd, s, oi); s.gnd = s.gnd2 = false; } else ringUse(wd, s, oi); fx?.orb(); }
     }
-    if (hold && s.dash == null) { // holding on the ground jumps (a jump uses up the press, so it won't also take an orb)
+    if (s.cube && hold && s.dash == null) { // holding on the ground jumps (a jump uses up the press, so it won't also take an orb)
       // Jumping while riding up a slope launches at 1.2x the slope's rising speed when that beats a normal jump: fitted from
       // recorded GD slope jumps (2:1 slope at 1x: 24.73 blocks/s, three recordings within 0.3%).
       // shortcut: only measured on 2:1 slopes at 1x; "jump + 0.23x slope speed" fits those too; a 1:1 slope jump would decide.
-      const jv = (s.mini ? CUBE_JUMP_MINI : CUBE_JUMP) * JUMP_AT_SPEED[s.speedI], jumpOff = rise => Math.max(jv, 1.2 * rise - GD_STEP_LOSS);
+      const jv = cubeJump(s), jumpOff = rise => Math.max(jv, 1.2 * rise - stepLoss(s));
       if (s.gnd) { s.vy = -gs * jumpOff(-gs * (s.sv || 0)); s.gnd = false; s.spent = true; s.lv = 0; }
       if (s.dual && s.gnd2) { s.vy2 = gs * jumpOff(gs * (s.sv2 || 0)); s.gnd2 = false; s.spent = true; s.lv2 = 0; }
     }
     s.x += v * dt;
     if (s.x >= wd.end) return 'win';
     portals();
-    if (!s.cube) return; // switched to wave: it takes over next tick
+    if (!s.cube && !s.ship) return; // switched to wave: it takes over next tick
     const h2 = cubeHalf(s), g2 = s.flip ? -1 : 1;
-    const ok = cubeBody(wd, s, 1, g2, h2, dt, v) && (!s.dual || cubeBody(wd, s, 2, -g2, h2, dt, v));
+    const ok = s.ship ? shipBody(wd, s, 1, g2, h2, dt, v, hold) && (!s.dual || shipBody(wd, s, 2, -g2, h2, dt, v, hold))
+      : cubeBody(wd, s, 1, g2, h2, dt, v) && (!s.dual || cubeBody(wd, s, 2, -g2, h2, dt, v));
     if (!ok) return 'dead';
     const pi = padAt(wd, s, h2); if (pi >= 0) { padUse(wd, s, pi, h2); fx?.orb(); } // pads fire on touch, no press needed
     if (wd.coins.length) takeCoins(wd, s, h2, fx);
@@ -1196,7 +1232,7 @@ function tick1(wd, s, hold, dt, fx, fresh) {
   if (s.x >= wd.end) return 'win';
   // Portals apply after the move and before collisions, so a wave never spends a step in a corridor that just closed.
   portals();
-  if (s.cube) return; // switched to cube: it takes over next tick
+  if (s.cube || s.ship) return; // switched to cube or ship: it takes over next tick
   // The top and bottom of the screen act as ceiling and floor: the wave slides along them, and along D blocks.
   const cy = Math.min(VH - r, Math.max(r, s.y)), cy2 = Math.min(VH - r, Math.max(r, s.y2));
   if (hold && !s.spent) { const oi = orbAt(wd, { ...s, y: cy, y2: cy2 }, r); if (oi >= 0) { dashStart(wd, s, oi); fx?.corner(); fx?.orb(); } }
@@ -1230,7 +1266,7 @@ function findPath(wd, s0, decisions, budget, firstHold = held, untilX = Infinity
       const nn = { s: t, hold, depth: node.depth + 1, up: node };
       if (t.won || nn.depth >= decisions || t.x >= untilX) { const out = []; for (let q = nn; q.up; q = q.up) out.push(q.hold); return out.reverse(); }
       const key = (t.x / 3 | 0) + ',' + Math.round(t.y / 3) + ',' + (t.mini ? 1 : 0) + (t.flip ? 1 : 0) + (t.dash != null ? 1 : 0)
-        + (t.cube ? ',' + Math.round(t.vy / 150) + (t.gnd ? 'g' : '') : '');
+        + (t.cube || t.ship ? ',' + Math.round(t.vy / 150) + (t.gnd ? 'g' : '') + (t.ship ? 's' : '') : '');
       if (seen.has(key)) continue; seen.add(key); stack.push(nn);
     }
   }
@@ -1278,7 +1314,7 @@ function spawnState(x) {
 // Effects for the real game: tick1 calls these on p (portal ones before the state changes). The wave draws a trail of its
 // corners; a cube draws none, so the trail breaks (null) while it's a cube.
 const FX = {
-  corner() { if (p.cube) return; trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang; p.turnT = 0; },
+  corner() { if (p.cube || p.ship) return; trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang; p.turnT = 0; },
   trail(k, x, y) { (k === 1 ? trail : trail2).push([x, y]); },
   orb() { if (!calm) flash = 0.2; },
   coin() { if (!calm) flash = 0.15; for (let i = 0; i < 14; i++) { const a = Math.random() * 6.283, v = 60 + Math.random() * 160; parts.push({ x: p.x, y: p.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5, col: '#ffd84a' }); } },
@@ -1287,16 +1323,16 @@ const FX = {
     if (o.k === 'S') { if (p.speedI !== o.v && !calm) flash = 0.45; }
     else if (o.k === 'm') { if (!!o.v !== p.mini && !p.cube) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } }
     else if (o.k === 'w') { if (o.v && !p.dual) trail2 = p.cube ? [] : [[p.x, VH - p.y]]; } // second icon appears mirrored
-    else if (o.k === 'g' && !!o.v !== p.cube) {
-      if (o.v) { trail.push([p.x, p.y], null); if (p.dual) trail2.push([p.x, p.y2], null); p.rot = 0; } // into cube: the trail stops here
-      else { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang = 0; p.turnT = 0; } // back to wave: a new trail starts
+    else if (o.k === 'g' && o.v !== (p.cube ? 1 : p.ship ? 2 : 0)) { // the wave and ship leave a trail; the cube doesn't
+      if (o.v === 1) { trail.push([p.x, p.y], null); if (p.dual) trail2.push([p.x, p.y2], null); p.rot = 0; } // into cube: the trail stops here
+      else { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang = 0; p.turnT = 0; p.sa = 0; } // a trail starts (or carries on)
       if (!calm) flash = 0.3;
     }
   },
 };
 function reset() {
   p = { x: 0, y: VH / 2, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
-    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 };
+    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 };
   trail = []; trail2 = []; parts = [];
   const cp = hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
@@ -1392,6 +1428,7 @@ function step(dt) {
     speedI = p.speedI;
     if (res === 'win') return win();
     if (res === 'dead') { if (hacks.noclip) hitFlash = 0.3; else return die(); }
+    if (p.ship && ++p.tk % 6 === 0) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } // the ship's trail follows its curve
     // checkpoint objects: in practice mode, passing one saves a checkpoint right there
     while ((p.ci || 0) < world.cps.length && world.cps[p.ci || 0].x * B <= p.x) { p.ci = (p.ci || 0) + 1; if (hacks.practice) { checkpoints.push(stateOf(p)); toast(`Checkpoint ${checkpoints.length}`); } }
     // practice: drop a checkpoint every 1.5 s, but only where there's a way to keep going for at least half a second
@@ -1423,6 +1460,22 @@ function spikePath(g, o, u) { // a spike filling its cell (a small one 0.45 tall
     [[x, y], [x + u / 2, y + u * k], [x + u, y]], [[x + u, y], [x + u * (1 - k), y + u / 2], [x + u, y + u]]][o.o];
   g.moveTo(...P[0]); g.lineTo(...P[1]); g.lineTo(...P[2]); g.closePath();
 }
+// Ship (original design): a swept hull in your colours with a small cube riding in the cockpit and a flame at the back.
+// Upside down it's drawn flipped so the cockpit faces away from gravity.
+function drawShip(g, x, y, a, s, ic, flip) {
+  const h = CUBE_H * s;
+  g.save(); g.translate(x, y); g.rotate(a); if (flip) g.scale(1, -1);
+  g.fillStyle = '#ff9f43'; g.globalAlpha = 0.85; // flame
+  g.beginPath(); g.moveTo(-h * 1.05, h * 0.05); g.lineTo(-h * (1.5 + Math.random() * 0.25), h * 0.25); g.lineTo(-h * 1.05, h * 0.45); g.closePath(); g.fill(); g.globalAlpha = 1;
+  drawCube(g, -h * 0.05, -h * 0.35, 0, s * 0.62, { ...ic, useCubeCustom: false }); // pilot
+  g.beginPath(); // hull
+  g.moveTo(-h * 1.1, -h * 0.05); g.lineTo(h * 0.35, -h * 0.05); g.lineTo(h * 1.15, h * 0.3); g.lineTo(h * 0.55, h * 0.7); g.lineTo(-h * 1.1, h * 0.7); g.closePath();
+  g.fillStyle = '#0c0e1c'; g.fill(); g.lineJoin = 'round'; g.lineWidth = 3 * s; g.strokeStyle = '#0c0e1c'; g.stroke();
+  g.beginPath(); g.moveTo(-h * 0.98, h * 0.05); g.lineTo(h * 0.3, h * 0.05); g.lineTo(h * 0.95, h * 0.32); g.lineTo(h * 0.5, h * 0.6); g.lineTo(-h * 0.98, h * 0.6); g.closePath();
+  g.fillStyle = COLORS[ic.c1]; g.fill();
+  g.fillStyle = COLORS[ic.c2]; g.fillRect(-h * 0.85, h * 0.22, h * 1.15, h * 0.18); // stripe
+  g.restore();
+}
 // Cube icon (original design): your colours, a square with an inset square and a core. Or your own cube picture, fitted
 // inside the square (the wave's custom image is a wave icon, so the cube never uses that one).
 function drawCube(g, x, y, a, s, ic) {
@@ -1441,8 +1494,8 @@ function drawCube(g, x, y, a, s, ic) {
 }
 function drawPortal(g, o, u, label = true) {
   const x = o.x * u, y = o.y * u, h = o.h * u, on = o.k === 'S' || o.k === 'g' || o.k === 'T' || !!o.v;
-  const col = o.k === 'S' ? `hsl(${50 + o.v * 70},100%,65%)` : o.k === 'g' ? (o.v ? '#8dff3a' : '#3fb6ff') : o.k === 'T' ? (o.v ? '#ff9f43' : '#3f8cff') : PORTALS[o.k][0];
-  const text = o.k === 'S' ? SPD_LABELS[o.v] : o.k === 'v' && o.v === 2 ? 'SWAP' : PORTALS[o.k][o.v ? 1 : 2], bw = u / 5;
+  const col = o.k === 'S' ? `hsl(${50 + o.v * 70},100%,65%)` : o.k === 'g' ? ['#3fb6ff', '#8dff3a', '#ff6bd6'][o.v] : o.k === 'T' ? (o.v ? '#ff9f43' : '#3f8cff') : PORTALS[o.k][0];
+  const text = o.k === 'S' ? SPD_LABELS[o.v] : o.k === 'v' && o.v === 2 ? 'SWAP' : o.k === 'g' && o.v === 2 ? 'SHIP' : PORTALS[o.k][o.v ? 1 : 2], bw = u / 5;
   g.globalAlpha = on ? 0.35 : 0.12; g.fillStyle = col; g.fillRect(x - bw / 2, y, bw, h); g.globalAlpha = 1;
   g.strokeStyle = col; g.lineWidth = u / 20; g.setLineDash(on ? [] : [u / 10, u / 10]); g.strokeRect(x - bw / 2, y, bw, h); g.setLineDash([]);
   if (label) { g.fillStyle = col; g.font = `700 ${Math.round(u * 0.22)}px "Space Mono", monospace`; g.textAlign = 'center'; g.fillText(text, x, y - u * 0.14); }
@@ -1685,7 +1738,13 @@ function draw(t, dt) {
       if (alive && on && !p.cube && !gap) ctx.lineTo(p.x, py);
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7; ctx.stroke();
     }
-    if (alive && p.cube) { // GD's cube: turns 180° per full jump in the air (backwards upside down), squares up on the ground
+    if (alive && p.ship) { // GD's ship turns toward the way it's moving, easing 0.15 of the way per frame (updateShipRotation)
+      const v = SPEEDS[p.speedI] * B, gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0, tgt = Math.atan2(p.vy || 0, v);
+      p.sa += (tgt - p.sa) * Math.min(1, gdt * 0.15 * 54);
+      const s = p.mini ? CUBE_MINI : 1;
+      drawShip(ctx, p.x, p.y, p.sa, s, icon, p.flip);
+      if (p.dual) drawShip(ctx, p.x, p.y2, -p.sa, s, icon, !p.flip);
+    } else if (alive && p.cube) { // GD's cube: turns 180° per full jump in the air (backwards upside down), squares up on the ground
       // the spin runs on game time: it stops while paused or waiting at a spawn, and slows with the speedhack
       const air = 2 * (p.mini ? CUBE_JUMP_MINI : CUBE_JUMP) / CUBE_G, gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0;
       if ((!p.gnd && p.pu == null) || p.dash != null) p.rot += (p.flip ? -1 : 1) * Math.PI / air * gdt; // only truly in the air
@@ -1856,7 +1915,8 @@ function levelFacts(wd) { // speeds used and modes used, from the level's portal
   const speeds = [...new Set(wd.portals.filter(o => o.k === 'S').map(o => SPD_LABELS[o.v]))];
   const modes = [...new Set(wd.portals.filter(o => o.k !== 'S' && o.k !== 'T' && o.v).map(o => o.k))];
   return `<span>${Math.round(wd.end / B)} blk</span><span>${Math.round(duration(wd))} s</span><span>${(speeds.length ? speeds : ['1x']).join(' → ')}</span>`
-    + modes.map(m => `<span style="color:${PORTALS[m][0]}">${PORTALS[m][1]}</span>`).join('');
+    + modes.map(m => `<span style="color:${PORTALS[m][0]}">${PORTALS[m][1]}</span>`).join('')
+    + (wd.portals.some(o => o.k === 'g' && o.v === 2) ? '<span style="color:#ff6bd6">SHIP</span>' : '');
 }
 function renderBoard() {
   if (!levelOpen(lvIndex) && !editMain) lvIndex = 0;
@@ -1910,6 +1970,7 @@ const PALETTE = [
   { id: 'trc', label: 'Colour trigger', make: (x, y) => ({ t: 'x', x: x + 0.5, y: y + 0.5, k: 'c', g: 1, dur: 1, a: 300, b: 0 }) },
   { id: 'g1', label: 'Cube', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 1 }) },
   { id: 'g0', label: 'Wave', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 0 }) },
+  { id: 'g2', label: 'Ship', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 2 }) },
   { id: 'dblock', label: 'D block', make: (x, y) => ({ t: 'r', x, y, w: 1, h: 1, d: 1 }) },
   { id: 'dslope', label: 'D slope', make: (x, y) => ({ t: 't', x, y, w: 1, h: 1, o: edRot, d: 1 }) },
   ...Object.entries(PAD).map(([c, k]) => ({ id: 'pad' + c, label: k.name, make: (x, y) => ({ t: 'j', x, y, o: edRot, c }) })),
