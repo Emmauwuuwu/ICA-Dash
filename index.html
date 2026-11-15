@@ -822,7 +822,8 @@ function textBox(o) { // centre and half-size in blocks
   measureCtx.font = textFont(100); const w = measureCtx.measureText(o.txt || ' ').width / 100 * 0.6 * o.s;
   return [o.x, o.y, Math.max(0.2, w / 2 + 0.1), 0.35 * o.s + 0.1];
 }
-function drawText(g, o, u, a = 1) { // white letters with a dark outline, like GD's text objects
+function drawText(g, o, u, a) { return withXf(g, o, u, () => drawText0(g, o, u, a)); }
+function drawText0(g, o, u, a = 1) { // white letters with a dark outline, like GD's text objects
   g.save(); g.globalAlpha *= a; g.font = textFont(0.6 * o.s * u); g.textAlign = 'center'; g.textBaseline = 'middle';
   g.lineJoin = 'round'; g.lineWidth = Math.max(1, 0.08 * o.s * u); g.strokeStyle = '#0c0e1c'; g.strokeText(o.txt, o.x * u, o.y * u);
   g.fillStyle = '#fff'; g.fillText(o.txt, o.x * u, o.y * u); g.restore();
@@ -835,7 +836,7 @@ function encodeLevel(objs) {
     : o.t === 's' ? `s,${n(o.x)},${n(o.y)}` : o.t === 'd' ? `d,${n(o.x)},${n(o.y)},${o.a},${o.f}${o.m ? ',1' : ''}` : o.t === 'k' ? `k,${n(o.x)},${n(o.y)},${o.o}${o.z ? ',1' : ''}`
     : o.t === 'q' ? `q,${n(o.x)},${n(o.y)},${o.c}${o.m ? ',1' : ''}` : o.t === 'j' ? `j,${n(o.x)},${n(o.y)},${o.o},${o.c}`
     : o.t === 'c' || o.t === 'h' ? `${o.t},${n(o.x)},${n(o.y)}` : o.t === 'x' ? `x,${n(o.x)},${n(o.y)},${o.k},${o.g},${n(o.dur)},${n(o.a)},${n(o.b || 0)}`
-    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : o.t === 'a' ? `a,${n(o.x)},${n(o.y)},${n(o.s)},${encodeURIComponent(o.txt)}` : o.t === 'P' ? `P,${n(o.x)},${n(o.y)},${o.sp},${o.m},${o.f}` : o.t === 'M' ? (o.k === 2 ? `M,2,${encodeURIComponent(o.url || '')},${n(o.off || 0)}` : `M,${o.k},${o.n},${n(o.off || 0)}`) : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
+    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : o.t === 'a' ? `a,${n(o.x)},${n(o.y)},${n(o.s)},${encodeURIComponent(o.txt)}` : o.t === 'P' ? `P,${n(o.x)},${n(o.y)},${o.sp},${o.m},${o.f}` : o.t === 'M' ? (o.k === 2 ? `M,2,${encodeURIComponent(o.url || '')},${n(o.off || 0)}` : `M,${o.k},${o.n},${n(o.off || 0)}`) : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (XF_T.includes(o.t) && xfd(o) ? `@${n(o.ra || 0)},${n(o.sc || 1)}` : '') + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
 }
 // Pasted codes are untrusted: every field is checked, sizes are capped, and anything malformed is skipped.
 function decodeLevel(code) {
@@ -844,7 +845,7 @@ function decodeLevel(code) {
   const grp = s => { const g = Math.round(num(s)); return g >= 1 && g <= 999 ? g : 0; };
   for (const whole of String(code).trim().split(';').slice(1)) {
     if (objs.length >= 20000) break; // keeps a huge pasted code from freezing the page
-    const [part, gs] = whole.split('|'), before = objs.length;
+    const [part0, gs] = whole.split('|'), [part, xs] = part0.split('@'), before = objs.length;
     const f = part.trim().split(','), t = f[0], [a, b, c, d] = f.slice(1, 5).map(num);
     if (t === 'x') { // trigger: x, y, kind, target group, duration, a, b
       const k = f[3], g = grp(f[4]), dur = Math.min(60, Math.max(0, num(f[5]) || 0)), A = num(f[6]) || 0, Bv = num(f[7]) || 0;
@@ -878,6 +879,12 @@ function decodeLevel(code) {
       objs.push({ t, x: a, y: b, h: c, k: f[4], v: f[4] === 'S' ? Math.min(4, Math.max(0, v)) : (f[4] === 'v' || f[4] === 'g') && v === 2 ? 2 : v ? 1 : 0 });
     }
     if (objs.length > before && grp(gs)) objs[objs.length - 1].g = grp(gs);
+    if (objs.length > before && xs && XF_T.includes(objs[objs.length - 1].t)) { // turned / sized: "@angle,size"
+      const o = objs[objs.length - 1], [ra, sc] = xs.split(',').map(num);
+      if (Number.isFinite(ra) && ra) o.ra = ((ra % 360) + 540) % 360 - 180 || undefined;
+      if (Number.isFinite(sc) && Math.abs(sc - 1) > 0.005) o.sc = Math.max(0.25, Math.min(4, sc));
+      if (o.ra === undefined) delete o.ra;
+    }
   }
   return objs;
 }
@@ -938,7 +945,8 @@ function buildWorld(objs) {
   for (const o of objs) {
     if (o.t === 'p' || o.t === 'x' || o.t === 'M') continue;
     if ('dqjchLaP'.includes(o.t)) { right = Math.max(right, o.x + 1); continue; }
-    const l = o.t === 's' ? o.x - SAW_R : o.x, r = o.t === 's' ? o.x + SAW_R : o.t === 'k' ? o.x + 1 : o.x + o.w;
+    let l = o.t === 's' ? o.x - SAW_R : o.x, r = o.t === 's' ? o.x + SAW_R : o.t === 'k' ? o.x + 1 : o.x + o.w;
+    if ((o.t === 's' || o.t === 'k') && xfd(o)) { const [cx] = xCentre(o), e = (o.t === 's' ? SAW_R : 0.75) * (o.sc || 1); l = cx - e; r = cx + e; }
     right = Math.max(right, r);
     if (o.g && movingG.has(o.g)) { moving.push(o); continue; }
     for (let c = Math.floor(l); c <= Math.floor(r); c++) { let a = cols.get(c); if (!a) cols.set(c, a = []); a.push(o); }
@@ -1015,10 +1023,40 @@ const spikeBox = o => {
   const q = [[l, t, r, b], [1 - b, l, 1 - t, r], [1 - r, 1 - b, 1 - l, 1 - t], [t, l, b, r]][o.o];
   return [o.x + q[0], o.y + q[1], o.x + q[2], o.y + q[3]];
 };
+// GD's free rotate and scale: an object may carry ra (degrees, clockwise) and sc (size, 0.25-4), applied about its centre.
+// Spikes, saws, orbs, pads, coins, portals, checkpoints and text take them, and their hitboxes turn and size with them
+// (tested as turned boxes, like GD's rotated hitboxes). Blocks and slopes size by their width and height and turn in quarters.
+const XF_T = 'kjpqcsdah';
+const xfd = o => !!(o.ra || (o.sc && o.sc !== 1));
+function xCentre(o) { return 'kjLP'.includes(o.t) ? [o.x + 0.5, o.y + 0.5] : o.t === 'p' ? [o.x, o.y + o.h / 2] : [o.x, o.y]; }
+function xPt(o, x, y) { // a point of the unturned object (blocks), where it is once turned and sized
+  if (!xfd(o)) return [x, y];
+  const [cx, cy] = xCentre(o), k = o.sc || 1, a = (o.ra || 0) * Math.PI / 180, c = Math.cos(a), n = Math.sin(a), dx = (x - cx) * k, dy = (y - cy) * k;
+  return [cx + dx * c - dy * n, cy + dx * n + dy * c];
+}
+function xInv(o, x, y) { // the other way: a point in the level, in the unturned object's frame
+  if (!xfd(o)) return [x, y];
+  const [cx, cy] = xCentre(o), k = o.sc || 1, a = -(o.ra || 0) * Math.PI / 180, c = Math.cos(a), n = Math.sin(a), dx = x - cx, dy = y - cy;
+  return [cx + (dx * c - dy * n) / k, cy + (dx * n + dy * c) / k];
+}
+// Does the box [l, t, r, b] of the unturned object, turned and sized with it, overlap a square of half-size br at (bx, by)?
+// (separating axes: the square's two and the turned box's two)
+function boxHit(o, l, t, r, b, bx, by, br) {
+  if (!xfd(o)) return bx + br > l && bx - br < r && by + br > t && by - br < b;
+  const [ox, oy] = xPt(o, (l + r) / 2, (t + b) / 2), k = o.sc || 1, hx = (r - l) / 2 * k, hy = (b - t) / 2 * k;
+  const a = (o.ra || 0) * Math.PI / 180, c = Math.abs(Math.cos(a)), n = Math.abs(Math.sin(a)), C = Math.cos(a), N = Math.sin(a), dx = bx - ox, dy = by - oy;
+  return Math.abs(dx) < br + hx * c + hy * n && Math.abs(dy) < br + hx * n + hy * c
+    && Math.abs(dx * C + dy * N) < hx + br * (c + n) && Math.abs(-dx * N + dy * C) < hy + br * (c + n);
+}
+function withXf(g, o, u, fn) { // draw fn() turned and sized like o
+  if (!xfd(o)) return fn();
+  const [cx, cy] = xCentre(o); g.save(); g.translate(cx * u, cy * u); g.rotate((o.ra || 0) * Math.PI / 180); g.scale(o.sc || 1, o.sc || 1); g.translate(-cx * u, -cy * u);
+  fn(); g.restore();
+}
 // Hazards (saws, spikes) against a square of half-size br blocks at (bx, by): GD tests these with the player's main hitbox.
 function hazardHit(o, bx, by, br) {
-  if (o.t === 's') return Math.hypot(Math.max(0, Math.abs(o.x - bx) - br), Math.max(0, Math.abs(o.y - by) - br)) < SAW_HIT - 2 / B;
-  const [l, t, r, b] = spikeBox(o); return bx + br > l && bx - br < r && by + br > t && by - br < b;
+  if (o.t === 's') return Math.hypot(Math.max(0, Math.abs(o.x - bx) - br), Math.max(0, Math.abs(o.y - by) - br)) < SAW_HIT * (o.sc || 1) - 2 / B;
+  const [l, t, r, b] = spikeBox(o); return boxHit(o, l, t, r, b, bx, by, br);
 }
 // Letter blocks of kind k overlapping a box of half-size br blocks at (bx, by) (touching counts).
 function letterHit(wd, k, bx, by, br) {
@@ -1046,7 +1084,7 @@ const NEAR = [];
 function nearObjs(wd, x0, x1) {
   NEAR.length = 0;
   for (let c = Math.floor(x0); c <= Math.floor(x1); c++) for (const o of wd.cols.get(c) || []) NEAR.push(o);
-  for (const o of MOVING) { const [cx, , hw] = centreOf(o); if (cx + hw >= x0 - 1 && cx - hw <= x1 + 1) NEAR.push(o); }
+  for (const o of MOVING) { const [cx, , hw] = centreOf(o), e = hw * (o.sc || 1) + (o.ra ? hw : 0); if (cx + e >= x0 - 1 && cx - e <= x1 + 1) NEAR.push(o); }
   return NEAR;
 }
 const solidHit = (wd, x, y, r) => hitKind(wd, x, y, r) !== 0;
@@ -1065,8 +1103,8 @@ function settle(wd, x, y, r, pushUp, push) {
 function orbAt(wd, s, r) {
   const bx = s.x / B, br = r / B;
   for (let i = 0; i < wd.orbs.length; i++) {
-    const o = wd.orbs[i]; if (o.x > bx + 2) break; if (o.x < bx - 2 || (o.t === 'q' && !s.cube && !s.ship && !RING[o.c].flip) || (!o.m && s.used?.includes(i))) continue; // the wave only takes gravity orbs (blue, green), as in GD
-    for (const y of s.dual ? [s.y, s.y2] : [s.y]) if (Math.abs(o.x - bx) < br + ORB_HIT && Math.abs(o.y - y / B) < br + ORB_HIT) return i;
+    const o = wd.orbs[i]; if (o.x > bx + 5) break; if (o.x < bx - 5 || (o.t === 'q' && !s.cube && !s.ship && !RING[o.c].flip) || (!o.m && s.used?.includes(i))) continue; // the wave only takes gravity orbs (blue, green), as in GD
+    for (const y of s.dual ? [s.y, s.y2] : [s.y]) if (boxHit(o, o.x - ORB_HIT, o.y - ORB_HIT, o.x + ORB_HIT, o.y + ORB_HIT, bx, y / B, br)) return i;
   }
   return -1;
 }
@@ -1097,9 +1135,9 @@ const SHIP_RING = { y: 10.22, p: 7.37, r: 11.56, b: -4.13, g: 10.36, k: -13.53 }
 function padAt(wd, s, h) {
   const bx = s.x / B, bh = h / B;
   for (let i = 0; i < wd.pads.length; i++) {
-    const o = wd.pads[i]; if (o.x > bx + 2) break; if (o.x < bx - 2 || i === s.lastPad) continue;
+    const o = wd.pads[i]; if (o.x > bx + 5) break; if (o.x < bx - 5 || i === s.lastPad) continue;
     const [l, t, r, b] = padBox(o);
-    for (const y of s.dual ? [s.y, s.y2] : [s.y]) { const by = y / B; if (bx + bh > l && bx - bh < r && by + bh > t && by - bh < b) return i; }
+    for (const y of s.dual ? [s.y, s.y2] : [s.y]) if (boxHit(o, l, t, r, b, bx, y / B, bh)) return i;
   }
   return -1;
 }
@@ -1621,12 +1659,17 @@ function teleportShift(wd, o) {
   let best = null; for (const e of wd.portals) if (e.k === 'T' && e.v === 1 && (!best || Math.abs(e.x - o.x) < Math.abs(best.x - o.x))) best = e;
   return best ? ((best.y + best.h / 2) - (o.y + o.h / 2)) * B : 0;
 }
+// A turned or sized portal's left and right reach (blocks), from its hitbox's corners.
+function portalReach(o) {
+  const xs = [[o.x - PORTAL_W / 2, o.y], [o.x + PORTAL_W / 2, o.y], [o.x - PORTAL_W / 2, o.y + o.h], [o.x + PORTAL_W / 2, o.y + o.h]].map(([x, y]) => xPt(o, x, y)[0]);
+  return [Math.min(...xs), Math.max(...xs)];
+}
 // Coins: one the player's box (half-size r) touches and hasn't taken this attempt; taken ones are listed in s.coins.
 function takeCoins(wd, s, r, fx) {
   const bx = s.x / B, br = r / B;
   wd.coins.forEach((o, i) => {
-    if (Math.abs(o.x - bx) > br + COIN_R || s.coins?.includes(i)) return;
-    for (const y of s.dual ? [s.y, s.y2] : [s.y]) if (Math.abs(o.y - y / B) < br + COIN_R) { s.coins = (s.coins || []).concat(i); fx?.coin(); return; }
+    if (Math.abs(o.x - bx) > br + COIN_R * 4 || s.coins?.includes(i)) return;
+    for (const y of s.dual ? [s.y, s.y2] : [s.y]) if (boxHit(o, o.x - COIN_R, o.y - COIN_R, o.x + COIN_R, o.y + COIN_R, bx, y / B, br)) { s.coins = (s.coins || []).concat(i); fx?.coin(); return; }
   });
 }
 const COIN_R = 0.4;
@@ -1647,13 +1690,15 @@ function tick1(wd, s, hold, dt, fx, fresh) {
       if (s.cube || s.ship) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner();
     }
   }
-  const portals = () => { // like GD: a portal works when your hitbox touches its hitbox (PORTAL_W wide, its full height)
+  const portals = () => { // like GD: a portal works when your hitbox touches its hitbox (PORTAL_W wide, its full height, turned and sized with it)
     const ph = cubeHalf(s), P = wd.portals, hw = PORTAL_W / 2 * B; // the icon's 1-block box (the wave's tiny one is only for walls)
     let moved = false;
-    while (s.pi < P.length && P[s.pi].x * B + hw < s.x - ph) { s.pi++; moved = true; } // passed it
+    const reach = o => xfd(o) ? portalReach(o) : null;
+    while (s.pi < P.length && (reach(P[s.pi])?.[1] ?? P[s.pi].x + PORTAL_W / 2) * B < s.x - ph) { s.pi++; moved = true; } // passed it
     if (moved && s.pt) s.pt = s.pt.filter(i => i >= s.pi);
-    for (let i = s.pi; i < P.length && P[i].x * B - hw <= s.x + ph; i++) {
-      const o = P[i]; if (s.pt?.includes(i) || s.y + ph < o.y * B || s.y - ph > (o.y + o.h) * B) continue;
+    for (let i = s.pi; i < P.length && (reach(P[i])?.[0] ?? P[i].x - PORTAL_W / 2) * B <= s.x + ph; i++) {
+      const o = P[i]; if (s.pt?.includes(i)) continue;
+      if (xfd(o) ? !boxHit(o, o.x - PORTAL_W / 2, o.y, o.x + PORTAL_W / 2, o.y + o.h, s.x / B, s.y / B, ph / B) : s.y + ph < o.y * B || s.y - ph > (o.y + o.h) * B) continue;
       s.pt = (s.pt || []).concat(i); fx?.portal(o); portalState(s, o); // (the list is copied, never changed in place)
     }
     fireTriggers(wd, s); placeMoving(wd, s); // moving groups are placed before this tick's collisions
@@ -2160,8 +2205,9 @@ function triPath(g, o, u) { // the box corner opposite the right angle is left o
 }
 function addSolid(g, o, u) { if (o.t === 'r') g.rect(o.x * u, o.y * u, o.w * u, o.h * u); else triPath(g, o, u); }
 function spikePath(g, o, u) { // a spike filling its cell (a small one 0.45 tall), base on the side opposite its point
-  const x = o.x * u, y = o.y * u, k = o.z ? 0.45 : 1, P = [[[x, y + u], [x + u / 2, y + u * (1 - k)], [x + u, y + u]], [[x, y], [x + u * k, y + u / 2], [x, y + u]],
+  const x = o.x * u, y = o.y * u, k = o.z ? 0.45 : 1; let P = [[[x, y + u], [x + u / 2, y + u * (1 - k)], [x + u, y + u]], [[x, y], [x + u * k, y + u / 2], [x, y + u]],
     [[x, y], [x + u / 2, y + u * k], [x + u, y]], [[x + u, y], [x + u * (1 - k), y + u / 2], [x + u, y + u]]][o.o];
+  if (xfd(o)) P = P.map(([px, py]) => xPt(o, px / u, py / u).map(v => v * u)); // turned and sized
   g.moveTo(...P[0]); g.lineTo(...P[1]); g.lineTo(...P[2]); g.closePath();
 }
 // Ship (drawn here, not copied from any game's art): your cube riding low in a swept hull with a curled nose and a tail fin,
@@ -2252,31 +2298,71 @@ function drawCube(g, x, y, a, s, ic) {
 // teleport blue in / orange out; speed orange, blue, green, pink, red. The label shows only in the editor.
 const PORTAL_COL = { g: ['#3fd8ff', '#4dff4a', '#ff5ce6'], v: ['#3f8cff', '#ffe23a', '#4dff9a'], m: ['#4dff4a', '#ff5ce6'], w: ['#3f8cff', '#ff9f2e'], T: ['#3f8cff', '#ff9f2e'],
   S: ['#ff9f2e', '#3fb6ff', '#4dff4a', '#ff5ce6', '#ff3b3b'] };
-function drawPortal(g, o, u, label = true) {
-  const col = PORTAL_COL[o.k][o.v] || '#fff', cx = o.x * u, top = o.y * u, hh = o.h * u, cy = top + hh / 2;
+function drawPortal(g, o, u, label = true) { return withXf(g, o, u, () => drawPortal0(g, o, u, label)); }
+const mixHex = (h, w, k) => '#' + [1, 3, 5].map(i => Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - k) + w * k).toString(16).padStart(2, '0')).join(''); // toward w (0 black, 255 white) by k
+function drawPortal0(g, o, u, label) {
+  const col = PORTAL_COL[o.k][o.v] || '#ffffff', cx = o.x * u, top = o.y * u, hh = o.h * u, cy = top + hh / 2, tt = performance.now() / 1000;
+  const lite = mixHex(col, 255, 0.55), deep = mixHex(col, 0, 0.45), ink = '#0c0e1c';
   g.save(); g.lineJoin = 'round'; g.lineCap = 'round';
-  if (o.k === 'S') { // chevrons
-    const n = o.v === 0 ? 1 : o.v, ch = Math.min(hh, u * 2.2) / 2, cw = Math.min(ch * 0.55, PORTAL_W * u * 0.85 / (1 + 0.8 * (n - 1))), gap = cw * 0.8, dir = o.v === 0 ? -1 : 1, lw = n > 2 ? 0.7 : 1; // they fit in the hitbox
-    const x0 = cx - ((n - 1) * gap) / 2;
-    for (const [w, c] of [[u * 0.34, 'rgba(12,14,28,.9)'], [u * 0.2, col], [u * 0.06, 'rgba(255,255,255,.8)']]) {
-      g.strokeStyle = c; g.lineWidth = w * lw; g.beginPath();
-      for (let i = 0; i < n; i++) { const x = x0 + i * gap; g.moveTo(x - dir * cw / 2, cy - ch); g.lineTo(x + dir * cw / 2, cy); g.lineTo(x - dir * cw / 2, cy + ch); }
-      g.stroke();
+  if (o.k === 'S') {
+    // GD-style speed changer: big arrows in a row (one pointing back for 0.5x, then 1 to 4 forward), each a thick chevron with
+    // a dark outline, a light-to-deep fill and a bright edge; a soft glow and speed streaks running the way it sends you
+    const n = o.v === 0 ? 1 : o.v, dir = o.v === 0 ? -1 : 1, ch = Math.min(hh, u * 1.9) / 2, cw = ch * 0.78, th = cw * 0.5, gap = cw * 0.62;
+    const x0 = cx - ((n - 1) * gap) / 2 * dir;
+    const glow = g.createRadialGradient(cx, cy, 0, cx, cy, ch * 1.5); glow.addColorStop(0, col + '66'); glow.addColorStop(1, col + '00');
+    g.fillStyle = glow; g.beginPath(); g.ellipse(cx, cy, cw / 2 + (n - 1) * gap / 2 + ch * 0.6, ch * 1.4, 0, 0, 7); g.fill();
+    g.strokeStyle = lite; g.lineWidth = Math.max(1, u * 0.04);
+    for (let i = 0; i < 6; i++) { // streaks
+      const ph = (tt * 1.6 + i / 6) % 1, y = cy + ((i * 0.37) % 1 - 0.5) * ch * 1.6, len = u * 0.6;
+      const xs = cx - dir * (cw + n * gap) * (1 - ph) - dir * u * 0.3; g.globalAlpha = Math.sin(ph * Math.PI) * 0.7;
+      g.beginPath(); g.moveTo(xs, y); g.lineTo(xs - dir * len, y); g.stroke();
     }
-  } else { // a ring seen side-on, like a ")": its far half thin and dim, its near half thick and bright, lights on the near side
-    const ry = hh / 2, rx = Math.min(u * 0.45, ry * 0.34);
-    const arc = (a0, a1, sx = 1) => { g.beginPath(); g.ellipse(cx, cy, rx * sx, ry, 0, a0, a1); };
-    g.globalAlpha = 0.22; g.strokeStyle = col; g.lineWidth = u * 0.55; arc(-Math.PI / 2, Math.PI / 2); g.stroke(); g.globalAlpha = 1; // glow
-    g.globalAlpha = 0.55; g.strokeStyle = 'rgba(12,14,28,.95)'; g.lineWidth = u * 0.16; arc(Math.PI / 2, Math.PI * 1.5); g.stroke();
-    g.strokeStyle = col; g.lineWidth = u * 0.07; arc(Math.PI / 2, Math.PI * 1.5); g.stroke(); g.globalAlpha = 1; // far half
-    g.strokeStyle = 'rgba(12,14,28,.95)'; g.lineWidth = u * 0.34; arc(-Math.PI / 2, Math.PI / 2); g.stroke();
-    g.strokeStyle = col; g.lineWidth = u * 0.2; arc(-Math.PI / 2, Math.PI / 2); g.stroke(); // near half
-    g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = u * 0.05; arc(-Math.PI * 0.4, Math.PI * 0.4, 0.86); g.stroke();
-    g.fillStyle = col; for (const f of [-0.62, 0, 0.62]) { g.beginPath(); g.arc(cx + rx * 1.45, cy + f * ry, u * 0.06, 0, 7); g.fill(); }
+    g.globalAlpha = 1;
+    const chev = x => { // a chevron band pointing dir, its tip at x + dir * cw / 2
+      const b = x - dir * cw / 2, tip = x + dir * cw / 2;
+      g.beginPath(); g.moveTo(b, cy - ch); g.lineTo(b + dir * th, cy - ch); g.lineTo(tip, cy); g.lineTo(b + dir * th, cy + ch); g.lineTo(b, cy + ch); g.lineTo(tip - dir * th, cy); g.closePath();
+    };
+    for (let i = n - 1; i >= 0; i--) { // back to front, so the front arrow overlaps
+      const x = x0 + i * gap * dir, fill = g.createLinearGradient(0, cy - ch, 0, cy + ch);
+      fill.addColorStop(0, lite); fill.addColorStop(0.45, col); fill.addColorStop(1, deep);
+      chev(x); g.strokeStyle = ink; g.lineWidth = u * 0.14; g.stroke(); g.fillStyle = fill; g.fill();
+      g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = u * 0.035; g.beginPath(); g.moveTo(x - dir * cw / 2 + dir * th * 0.6, cy - ch * 0.86); g.lineTo(x + dir * cw / 2 - dir * th * 0.35, cy - ch * 0.04); g.stroke();
+    }
+  } else {
+    // GD-style gamemode portal: a tall ring seen side-on with a toothed frame behind it, a swirl of colour inside, a thick
+    // shaded near rim with a highlight, and sparks drawn into it
+    const ry = hh / 2, rx = Math.min(u * 0.5, ry * 0.36);
+    const ell = (sx, sy, a0, a1) => { g.beginPath(); g.ellipse(cx, cy, rx * sx, ry * sy, 0, a0, a1); };
+    const glow = g.createRadialGradient(cx, cy, 0, cx, cy, ry * 1.05); glow.addColorStop(0, col + '50'); glow.addColorStop(1, col + '00');
+    g.save(); g.translate(cx, cy); g.scale(rx * 2.6 / ry, 1); g.fillStyle = glow; g.beginPath(); g.arc(0, 0, ry * 1.05, 0, 7); g.fill(); g.restore();
+    for (let i = 0; i < 5; i++) { // teeth on the frame's back
+      const th = Math.PI / 2 + (i + 1) * Math.PI / 6, d = 0.16, pt = (a, k) => [cx + Math.cos(a) * rx * k, cy + Math.sin(a) * ry * Math.min(1.06, k)];
+      g.beginPath(); g.moveTo(...pt(th - d, 1)); g.lineTo(...pt(th, 1.75)); g.lineTo(...pt(th + d, 1)); g.closePath();
+      g.fillStyle = deep; g.fill(); g.strokeStyle = ink; g.lineWidth = u * 0.06; g.stroke();
+    }
+    g.strokeStyle = ink; g.lineWidth = u * 0.2; ell(1, 1, Math.PI / 2, Math.PI * 1.5); g.stroke(); // the frame's back
+    g.strokeStyle = deep; g.lineWidth = u * 0.1; ell(1, 1, Math.PI / 2, Math.PI * 1.5); g.stroke();
+    for (let k = 0; k < 3; k++) { // swirl inside, drawn in toward the middle
+      const ph = (tt * 0.7 + k / 3) % 1; g.globalAlpha = Math.sin(ph * Math.PI) * 0.55; g.strokeStyle = lite; g.lineWidth = u * 0.05;
+      g.beginPath(); g.ellipse(cx, cy, rx * 0.85 * (1 - ph * 0.8), ry * 0.9 * (1 - ph * 0.8), 0, 0, 7); g.stroke();
+    }
+    g.globalAlpha = 1;
+    for (let i = 0; i < 7; i++) { // sparks pulled in from behind
+      const ph = (tt * 0.9 + i / 7) % 1, y0 = cy + (((i * 0.61) % 1) - 0.5) * hh * 0.85, sx = cx - rx * 3.2;
+      const x = sx + (cx - sx) * ph, y = y0 + (cy - y0) * ph * 0.3, z = u * 0.09 * (1 - ph * 0.5);
+      g.globalAlpha = Math.sin(ph * Math.PI); g.fillStyle = i % 2 ? lite : col; g.fillRect(x - z / 2, y - z / 2, z, z);
+    }
+    g.globalAlpha = 1;
+    const rim = g.createLinearGradient(0, top, 0, top + hh); rim.addColorStop(0, lite); rim.addColorStop(0.5, col); rim.addColorStop(1, deep);
+    g.strokeStyle = ink; g.lineWidth = u * 0.42; ell(1, 1, -Math.PI / 2, Math.PI / 2); g.stroke(); // near rim: outline,
+    g.strokeStyle = rim; g.lineWidth = u * 0.27; ell(1, 1, -Math.PI / 2, Math.PI / 2); g.stroke(); // shaded colour,
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = u * 0.06; ell(1.1, 0.95, -Math.PI * 0.38, Math.PI * 0.12); g.stroke(); // and a highlight
+    g.fillStyle = ink; g.beginPath(); g.ellipse(cx, top + u * 0.02, rx * 0.55, u * 0.12, 0, 0, 7); g.ellipse(cx, top + hh - u * 0.02, rx * 0.55, u * 0.12, 0, 0, 7); g.fill(); // end caps
+    g.fillStyle = col; g.beginPath(); g.ellipse(cx, top + u * 0.02, rx * 0.4, u * 0.07, 0, 0, 7); g.ellipse(cx, top + hh - u * 0.02, rx * 0.4, u * 0.07, 0, 0, 7); g.fill();
   }
   if (label) {
     const text = o.k === 'S' ? SPD_LABELS[o.v] : o.k === 'v' && o.v === 2 ? 'SWAP' : o.k === 'g' ? ['WAVE', 'CUBE', 'SHIP'][o.v] : PORTALS[o.k][o.v ? 1 : 2];
-    g.fillStyle = col; g.font = `700 ${Math.round(u * 0.22)}px "Space Mono", monospace`; g.textAlign = 'center'; g.fillText(text, cx, top - u * 0.14);
+    g.fillStyle = col; g.font = `700 ${Math.round(u * 0.22)}px "Space Mono", monospace`; g.textAlign = 'center'; g.fillText(text, cx, top - u * 0.3);
   }
   g.restore();
 }
@@ -2301,7 +2387,8 @@ function drawRing(g, o, u, t, used) {
   g.globalAlpha = 1;
 }
 // Jump pads (original look): a glowing slab on its side of the cell with a chevron pointing the way it launches.
-function drawPad(g, o, u, t, used) {
+function drawPad(g, o, u, t, used) { return withXf(g, o, u, () => drawPad0(g, o, u, t, used)); }
+function drawPad0(g, o, u, t, used) {
   const k = PAD[o.c], [l, tp, r, b] = padBox(o), up = [[0, -1], [1, 0], [0, 1], [-1, 0]][o.o];
   g.globalAlpha = used ? 0.45 : 1;
   g.fillStyle = k.col; g.strokeStyle = '#fff'; g.lineWidth = Math.max(1, u / 26);
@@ -2317,7 +2404,8 @@ function drawPad(g, o, u, t, used) {
 }
 // Coin (original look): a gold disc with a raised rim and a star, gently bobbing and turning; a coin you've already saved
 // shows as faded silver.
-function drawCoin(g, o, u, t, got) {
+function drawCoin(g, o, u, t, got) { return withXf(g, o, u, () => drawCoin0(g, o, u, t, got)); }
+function drawCoin0(g, o, u, t, got) {
   const x = o.x * u, y = o.y * u + Math.sin(t * 3 + o.x) * u * 0.05, r = COIN_R * u, sx = Math.max(0.25, Math.abs(Math.cos(t * 2 + o.x)));
   g.save(); g.translate(x, y); g.scale(sx, 1); g.globalAlpha = got ? 0.45 : 1;
   const c1 = got ? '#c9cfe8' : '#ffd84a', c2 = got ? '#7d849e' : '#c98a12';
@@ -2327,7 +2415,8 @@ function drawCoin(g, o, u, t, got) {
   g.lineWidth = Math.max(1.5, u / 22); g.strokeStyle = '#0c0e1c'; g.beginPath(); g.arc(0, 0, r, 0, 7); g.stroke();
   g.restore();
 }
-function drawCheckpoint(g, o, u, a = 1) { // a small flag on a pole
+function drawCheckpoint(g, o, u, a) { return withXf(g, o, u, () => drawCheckpoint0(g, o, u, a)); }
+function drawCheckpoint0(g, o, u, a = 1) { // a small flag on a pole
   const x = o.x * u, y = o.y * u; g.globalAlpha = a;
   g.strokeStyle = '#e9edf7'; g.lineWidth = Math.max(1.5, u / 18); g.beginPath(); g.moveTo(x, y + u * 0.45); g.lineTo(x, y - u * 0.45); g.stroke();
   g.fillStyle = '#4dff9a'; g.beginPath(); g.moveTo(x, y - u * 0.45); g.lineTo(x + u * 0.42, y - u * 0.28); g.lineTo(x, y - u * 0.1); g.closePath(); g.fill();
@@ -2340,7 +2429,8 @@ function drawTrigger(g, o, u) { // editor: a tile with the trigger's letter, its
   g.fillStyle = k.col; g.textAlign = 'center'; g.font = `700 ${Math.round(s * 0.42)}px "Space Mono", monospace`; g.fillText(k.name[0], x, y + s * 0.08);
   g.font = `700 ${Math.round(s * 0.24)}px "Space Mono", monospace`; g.fillText('g' + o.g, x, y + s * 0.38);
 }
-function drawOrb(g, o, u, t, used) {
+function drawOrb(g, o, u, t, used) { return withXf(g, o, u, () => drawOrb0(g, o, u, t, used)); }
+function drawOrb0(g, o, u, t, used) {
   if (o.t === 'q') return drawRing(g, o, u, t, used);
   const x = o.x * u, y = o.y * u, r = ORB_R * u, a = -o.a * Math.PI / 180, col = ORB_COL[o.f], pulse = 1 + 0.08 * Math.sin(t * 7);
   g.globalAlpha = used ? 0.35 : 1;
@@ -2485,8 +2575,8 @@ function draw(t, dt) {
     else { glowStroke(ctx, '#fff', `hsl(${hue},100%,65%)`, 4); ctx.fillStyle = wallCol; ctx.fill(); }
   }
   const drawSaw = s => {
-    sawPath(ctx, s.x * B, s.y * B, SAW_R * B, t); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = wallCol; ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_R * B * 0.25, 0, 7); ctx.fill();
+    sawPath(ctx, s.x * B, s.y * B, SAW_R * B * (s.sc || 1), t); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = wallCol; ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_R * B * 0.25 * (s.sc || 1), 0, 7); ctx.fill();
   };
   for (const s of saws) drawSaw(s);
   for (const [o, a] of singles) { // moving and faded objects, one at a time in the same style
@@ -2626,13 +2716,13 @@ function draw(t, dt) {
   if (hacks.hitbox && (inGame || ed)) {
     ctx.lineWidth = 2; ctx.strokeStyle = '#ff3355';
     ctx.beginPath(); for (const o of solids) addSolid(ctx, o, B); ctx.stroke();
-    for (const s of saws) { ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_HIT * B - 2, 0, 7); ctx.stroke(); }
-    ctx.strokeStyle = '#3fd8ff'; for (const o of world.orbs) ctx.strokeRect((o.x - ORB_HIT) * B, (o.y - ORB_HIT) * B, ORB_HIT * 2 * B, ORB_HIT * 2 * B);
-    ctx.strokeStyle = '#33ff88'; for (const o of world.portals) ctx.strokeRect((o.x - PORTAL_W / 2) * B, o.y * B, PORTAL_W * B, o.h * B);
+    for (const s of saws) { ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_HIT * B * (s.sc || 1) - 2, 0, 7); ctx.stroke(); }
+    ctx.strokeStyle = '#3fd8ff'; for (const o of world.orbs) withXf(ctx, o, B, () => ctx.strokeRect((o.x - ORB_HIT) * B, (o.y - ORB_HIT) * B, ORB_HIT * 2 * B, ORB_HIT * 2 * B));
+    ctx.strokeStyle = '#33ff88'; for (const o of world.portals) withXf(ctx, o, B, () => ctx.strokeRect((o.x - PORTAL_W / 2) * B, o.y * B, PORTAL_W * B, o.h * B));
     ctx.strokeStyle = '#3fd8ff';
-    for (const o of world.pads) { const [l, tp, r, b] = padBox(o); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
+    for (const o of world.pads) { const [l, tp, r, b] = padBox(o); withXf(ctx, o, B, () => ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B)); }
     if (!ed) { ctx.globalAlpha = 0.6; for (const o of world.letters) drawLetter(ctx, o, B); ctx.globalAlpha = 1; } // letter blocks (the editor draws them anyway)
-    ctx.strokeStyle = '#ff3355'; for (const k of spikes) { const [l, tp, r, b] = spikeBox(k); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
+    ctx.strokeStyle = '#ff3355'; for (const k of spikes) { const [l, tp, r, b] = spikeBox(k); withXf(ctx, k, B, () => ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B)); }
     if (inGame) { // also on death, so you can see what you hit
       const box = p.cube || p.ship, r = box ? cubeHalf(p) : p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
       for (const y of p.dual ? [p.y, p.y2] : [p.y]) {
@@ -2850,7 +2940,8 @@ for (const q of PALETTE) if (!ED_CATS.some(([, ids]) => ids.includes(q.id))) ED_
 // Edit tab buttons, as in GD's edit pages: moves by a block, half a block, a small step (2 GD units) and 5 blocks, turns and flips.
 const ED_ACTS = [['up', 'Up'], ['down', 'Down'], ['left', 'Left'], ['right', 'Right'], ['upH', 'Up ½'], ['downH', 'Down ½'], ['leftH', 'Left ½'], ['rightH', 'Right ½'],
   ['upS', 'Up small'], ['downS', 'Down small'], ['leftS', 'Left small'], ['rightS', 'Right small'], ['upB', 'Up big'], ['downB', 'Down big'], ['leftB', 'Left big'], ['rightB', 'Right big'],
-  ['ccw', 'Rotate ↺'], ['cw', 'Rotate ↻'], ['fx', 'Flip X'], ['fy', 'Flip Y'], ['w-', 'Width −'], ['w+', 'Width +'], ['h-', 'Height −'], ['h+', 'Height +'], ['multi', 'Multi activate']];
+  ['ccw', 'Rotate ↺'], ['cw', 'Rotate ↻'], ['fx', 'Flip X'], ['fy', 'Flip Y'], ['w-', 'Width −'], ['w+', 'Width +'], ['h-', 'Height −'], ['h+', 'Height +'],
+  ['r-', 'Turn 15° ↺'], ['r+', 'Turn 15° ↻'], ['s-', 'Size −'], ['s+', 'Size +'], ['xr', 'Reset turn & size'], ['multi', 'Multi activate']];
 const ED_STEP = { '': 1, H: 0.5, S: 1 / 15, B: 5 };
 
 // Grid steps the Grid button cycles through; 0 is free placement (no snapping).
@@ -2882,15 +2973,16 @@ function placeAt(bx, by) {
 function objectAt(bx, by) { // portals over saws over solids; within a kind, the one drawn last
   let best = null, rank = 0;
   const consider = (o, r) => { if (r >= rank) { best = o; rank = r; } };
-  for (const o of world.portals) if (Math.abs(o.x - bx) < PORTAL_W / 2 && by >= o.y && by <= o.y + o.h) consider(o, 3);
-  for (const o of world.orbs) if (Math.hypot(o.x - bx, o.y - by) < ORB_R * 1.35) consider(o, 3);
-  for (const o of world.pads) if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 3);
+  const at = o => xInv(o, bx, by); // the click in the object's own (unturned) frame
+  for (const o of world.portals) { const [x, y] = at(o); if (Math.abs(o.x - x) < PORTAL_W / 2 && y >= o.y && y <= o.y + o.h) consider(o, 3); }
+  for (const o of world.orbs) { const [x, y] = at(o); if (Math.hypot(o.x - x, o.y - y) < ORB_R * 1.35) consider(o, 3); }
+  for (const o of world.pads) { const [x, y] = at(o); if (x >= o.x && x <= o.x + 1 && y >= o.y && y <= o.y + 1) consider(o, 3); }
   for (const o of [...world.letters, ...world.starts]) if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 2);
   for (const o of world.texts) { const [cx, cy, hw, hh] = textBox(o); if (Math.abs(bx - cx) <= hw && Math.abs(by - cy) <= hh) consider(o, 4); }
-  for (const o of [...world.coins, ...world.cps, ...world.trig]) if (Math.abs(o.x - bx) < 0.45 && Math.abs(o.y - by) < 0.5) consider(o, 4);
+  for (const o of [...world.coins, ...world.cps, ...world.trig]) { const [x, y] = at(o); if (Math.abs(o.x - x) < 0.45 && Math.abs(o.y - y) < 0.5) consider(o, 4); }
   for (const o of [...(world.cols.get(Math.floor(bx)) || []), ...world.moving]) { // moving objects sit where they start in the editor
-    if (o.t === 's') { if (Math.hypot(o.x - bx, o.y - by) < SAW_R) consider(o, 2); }
-    else if (o.t === 'k') { if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 2); }
+    if (o.t === 's') { if (Math.hypot(o.x - bx, o.y - by) < SAW_R * (o.sc || 1)) consider(o, 2); }
+    else if (o.t === 'k') { const [x, y] = at(o); if (x >= o.x && x <= o.x + 1 && y >= o.y && y <= o.y + 1) consider(o, 2); }
     else if (bx >= o.x && bx <= o.x + o.w && by >= o.y && by <= o.y + o.h) consider(o, 1);
   }
   return best;
@@ -2952,6 +3044,22 @@ function edAction(a, fine) {
   else if (a === 'dtog') { if (!objs.some(solid)) return; const on = !objs.filter(solid).every(o => o.d); for (const o of objs) if (solid(o)) { if (on) o.d = 1; else delete o.d; } }
   else if (a === 'w-' || a === 'w+') { for (const o of objs) if (solid(o)) o.w = tidy(Math.max(g, o.w + (a === 'w+' ? g : -g))); }
   else if (a === 'h-' || a === 'h+') { for (const o of objs) if (solid(o) || o.t === 'p') o.h = tidy(Math.max(g, o.h + (a === 'h+' ? g : -g))); }
+  else if (a === 'r-' || a === 'r+') { // GD's free rotate, 15° a press (Shift+Q / Shift+E); dash orbs tilt their dash instead
+    const d = a === 'r+' ? 15 : -15; let n = 0;
+    for (const o of objs) {
+      if (o.t === 'd') { o.a = Math.max(-ORB_MAX, Math.min(ORB_MAX, o.a - d)); n++; }
+      else if (XF_T.includes(o.t)) { o.ra = (((o.ra || 0) + d) % 360 + 540) % 360 - 180; if (!o.ra) delete o.ra; n++; }
+    }
+    if (!n) return toast('Blocks and slopes turn in quarter turns (Rotate ↺ / ↻).');
+  }
+  else if (a === 's-' || a === 's+') { // GD's scale: x1.25 a press; blocks and slopes grow their width and height about their middle
+    const f = a === 's+' ? 1.25 : 0.8;
+    for (const o of objs) {
+      if (solid(o)) { const [cx, cy] = objCenter(o); o.w = tidy(Math.max(0.1, o.w * f)); o.h = tidy(Math.max(0.1, o.h * f)); setCenter(o, cx, cy); }
+      else if (XF_T.includes(o.t)) { o.sc = +Math.max(0.25, Math.min(4, (o.sc || 1) * f)).toFixed(3); if (Math.abs(o.sc - 1) < 0.01) delete o.sc; }
+    }
+  }
+  else if (a === 'xr') { for (const o of objs) { delete o.ra; delete o.sc; } }
   else if (a === 'del') { edObjs = edObjs.filter(o => !sel.has(o)); sel = new Set(); }
   else return;
   commit(before); edChanged(); renderPane();
@@ -3103,8 +3211,8 @@ function editorKey(e) {
   if (k === 'Enter') { e.preventDefault(); return $('edTest').click(); }
   if (c === 'Digit1' || c === 'Digit2' || c === 'Digit3') { edTool = ['build', 'edit', 'delete'][+c.slice(5) - 1]; clearArmed = false; edPage = 0; return renderPane(); }
   if (k === 'F1' || k === 'F2') { e.preventDefault(); edTool = 'build'; edCat = (edCat + (k === 'F2' ? 1 : ED_CATS.length - 1)) % ED_CATS.length; edPage = 0; return renderPane(); }
-  if (c === 'KeyQ') { e.preventDefault(); return edAction(e.altKey ? 'fx' : 'ccw'); }
-  if (c === 'KeyE') { e.preventDefault(); return edAction(e.altKey ? 'fy' : 'cw'); }
+  if (c === 'KeyQ') { e.preventDefault(); return edAction(e.shiftKey ? 'r-' : e.altKey ? 'fx' : 'ccw'); }
+  if (c === 'KeyE') { e.preventDefault(); return edAction(e.shiftKey ? 'r+' : e.altKey ? 'fy' : 'cw'); }
   if (c === 'KeyR') return edAction('cw'); // (GD's R shows a free-rotate handle; objects here only turn in quarters)
   if (c === 'KeyT') { edSwipe = !edSwipe; return renderPane(); }
   if (c === 'KeyF') return toggleFree();
