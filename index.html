@@ -232,6 +232,14 @@ input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
   .edtabs { order: 1; } .edmain { order: 2; flex: 1 1 100%; } .edside { order: 3; }
   .edright button { min-width: 0; font-size: 11px; padding: 6px 8px; }
 }
+.btnlink { display: inline-flex; align-items: center; padding: 9px 14px; border: 2px solid var(--hair); color: inherit; text-decoration: none; font-family: var(--mono); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+.songlist { display: flex; flex-direction: column; gap: 6px; }
+.songlist .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.vols { display: flex; flex-wrap: wrap; gap: 14px 28px; }
+.vols label { display: flex; align-items: center; gap: 10px; }
+.edsong { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.edsong .prop { display: flex; flex-direction: column; gap: 3px; font-size: 11px; letter-spacing: .04em; color: var(--mute, #9aa0b8); }
+.edsong .prop input, .edsong .prop select { padding: 7px 9px; }
 #sharePop { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(580px, calc(100% - 32px)); z-index: 5; }
 textarea { width: 100%; box-sizing: border-box; min-height: 110px; background: var(--ink-2); border: 0; border-left: 3px solid var(--sun); padding: 10px;
   font-family: var(--mono); font-size: 13px; resize: vertical; user-select: text; }
@@ -419,6 +427,17 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
       <button class="ghost" id="edShare">Share code</button>
       <button class="ghost" id="edReset" hidden>Reset to original</button>
     </div>
+    <h3>Song</h3>
+    <div class="edsong">
+      <label class="prop"><span>Source</span><select class="field" id="songKind"><option value="0">Built-in track</option><option value="1">Newgrounds</option></select></label>
+      <label class="prop" id="songNumBox"><span>Track</span><select class="field" id="songNum"></select></label>
+      <label class="prop" id="songIdBox"><span>Newgrounds ID</span><input class="field" type="number" id="songId" min="1" step="1"></label>
+      <span id="songNgBox" class="btnrow"><a class="ghost btnlink" id="songPage" target="_blank" rel="noopener">Open on Newgrounds</a><button class="ghost" id="songLoad">Load song file</button></span>
+      <input type="file" id="songFile" accept="audio/*,.mp3,.ogg,.wav,.m4a" class="sr" tabindex="-1" aria-hidden="true">
+      <label class="prop"><span>Start at (s)</span><input class="field" type="number" id="songOff" min="0" step="0.1"></label>
+      <button class="ghost" id="songTest">▶ Listen</button>
+    </div>
+    <p class="note" id="songMsg"></p>
     <div class="btnrow">
       <button class="ghost" id="edSelAll">Select all</button>
       <button class="ghost" id="edSelLeft">Select all left</button>
@@ -522,6 +541,17 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
       <div class="binds" id="binds"></div>
       <button class="ghost" id="bindReset" style="align-self:flex-start">Reset keybinds</button>
       <p class="note" id="hackNote" hidden>Hack menu unlocked · press Tab anywhere to open or close it.</p>
+      <h3>Sound</h3>
+      <div class="vols">
+        <label>Music <input type="range" id="volMusic" min="0" max="1" step="0.05"></label>
+        <label>Sound effects <input type="range" id="volSfx" min="0" max="1" step="0.05"></label>
+      </div>
+      <h3>Songs</h3>
+      <p class="note">Levels can use Newgrounds songs. Newgrounds doesn't let other sites stream them, so, like GD, you download a song from Newgrounds once and load the file here; it's kept in this browser.</p>
+      <div class="btnrow"><label class="prop">Newgrounds ID <input class="field" type="number" id="setSongId" min="1" step="1" style="width:130px"></label><button class="ghost" id="setSongLoad">Load song file</button></div>
+      <input type="file" id="setSongFile" accept="audio/*,.mp3,.ogg,.wav,.m4a" class="sr" tabindex="-1" aria-hidden="true">
+      <p class="warn" id="setSongMsg"></p>
+      <div class="songlist" id="songList"></div>
       <h3>Account</h3>
       <p class="note" id="acctStatus">Checking your sign-in…</p>
       <div id="acctAuth" hidden>
@@ -544,6 +574,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
   <div class="panel">
     <div class="head"><h2>Paused</h2><span class="label" id="pauseInfo"></span></div>
     <p class="note" id="pauseName"></p>
+    <p class="note" id="pauseSong"></p>
     <div class="btnrow"><button class="primary" id="pResume">Resume</button><button class="ghost" id="pRestart">Restart</button><button class="ghost" id="pExit">Exit level</button></div>
     <p class="note" id="pauseHint"></p>
   </div>
@@ -687,6 +718,8 @@ const PORTALS = { m: ['#ff6bd6', 'MINI', 'BIG'], v: ['#4dff9a', 'FLIP', 'UPRIGHT
 //   P  start position {x, y, sp, m, f}: the cell at (x, y) where an editor playtest starts (GD's Start Pos), at speed sp
 //      (0..4 = 0.5x..4x), as m (0 wave, 1 cube, 2 ship), with flags f: 1 mini, 2 upside down, 4 dual, 8 switched off.
 //      The rightmost one that's on is used; normal play always starts at the beginning.
+//   M  the level's song {k, n, off}: k 0 a built-in track n, k 1 the Newgrounds song with ID n (played from a copy the player
+//      loaded on their device, like GD's downloaded songs), starting off seconds in.
 //   a  text {x, y, s, txt} (centre): decoration only, s its size (1 = half a block tall letters); txt is URI-encoded in codes.
 // Share codes are "ICA2;" plus one comma-separated object per ";". Older path codes (u/d/f tokens) are converted on load.
 const SAW_R = 0.6, SAW_HIT = SAW_R * 0.9; // saws are drawn at SAW_R; their hitbox is 10% smaller
@@ -738,7 +771,7 @@ function encodeLevel(objs) {
     : o.t === 's' ? `s,${n(o.x)},${n(o.y)}` : o.t === 'd' ? `d,${n(o.x)},${n(o.y)},${o.a},${o.f}${o.m ? ',1' : ''}` : o.t === 'k' ? `k,${n(o.x)},${n(o.y)},${o.o}${o.z ? ',1' : ''}`
     : o.t === 'q' ? `q,${n(o.x)},${n(o.y)},${o.c}${o.m ? ',1' : ''}` : o.t === 'j' ? `j,${n(o.x)},${n(o.y)},${o.o},${o.c}`
     : o.t === 'c' || o.t === 'h' ? `${o.t},${n(o.x)},${n(o.y)}` : o.t === 'x' ? `x,${n(o.x)},${n(o.y)},${o.k},${o.g},${n(o.dur)},${n(o.a)},${n(o.b || 0)}`
-    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : o.t === 'a' ? `a,${n(o.x)},${n(o.y)},${n(o.s)},${encodeURIComponent(o.txt)}` : o.t === 'P' ? `P,${n(o.x)},${n(o.y)},${o.sp},${o.m},${o.f}` : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
+    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : o.t === 'a' ? `a,${n(o.x)},${n(o.y)},${n(o.s)},${encodeURIComponent(o.txt)}` : o.t === 'P' ? `P,${n(o.x)},${n(o.y)},${o.sp},${o.m},${o.f}` : o.t === 'M' ? `M,${o.k},${o.n},${n(o.off || 0)}` : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
 }
 // Pasted codes are untrusted: every field is checked, sizes are capped, and anything malformed is skipped.
 function decodeLevel(code) {
@@ -767,6 +800,11 @@ function decodeLevel(code) {
     else if (t === 'k' && okPos(a, b)) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4, ...(f[4] === '1' ? { z: 1 } : {}) });
     else if (t === 'q' && okPos(a, b) && RING[f[3]]) objs.push({ t, x: a, y: b, c: f[3], ...(f[4] === '1' ? { m: 1 } : {}) });
     else if (t === 'L' && okPos(a, b) && LETTERS[f[3]]) objs.push({ t, x: a, y: b, k: f[3] });
+    else if (t === 'M') { // the song: one per level (the last one wins)
+      const k = a === 1 ? 1 : 0, nn = Math.max(1, Math.min(k ? 1e8 : SONG_COUNT, Math.round(b) || 1));
+      for (let i = objs.length - 1; i >= 0; i--) if (objs[i].t === 'M') objs.splice(i, 1);
+      objs.push({ t, k, n: nn, off: Math.max(0, Math.min(600, c || 0)) });
+    }
     else if (t === 'P' && okPos(a, b)) objs.push({ t, x: a, y: b, sp: Math.min(4, Math.max(0, Math.round(c) || 0)), m: Math.min(2, Math.max(0, Math.round(d) || 0)), f: (Math.round(num(f[5])) || 0) & 15 });
     else if (t === 'a' && okPos(a, b)) { let txt = ''; try { txt = cleanText(decodeURIComponent(f[4] || '')); } catch (e) {} if (txt) objs.push({ t, x: a, y: b, s: Math.min(4, Math.max(0.25, c || 1)), txt }); }
     else if (t === 'j' && okPos(a, b) && PAD[f[4]]) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4, c: f[4] });
@@ -833,7 +871,7 @@ function buildWorld(objs) {
   const trig = byX('x'), movingG = new Set(trig.filter(o => o.k === 'm' || o.k === 'r').map(o => o.g)), moving = [];
   let right = -Infinity;
   for (const o of objs) {
-    if (o.t === 'p' || o.t === 'x') continue;
+    if (o.t === 'p' || o.t === 'x' || o.t === 'M') continue;
     if ('dqjchLaP'.includes(o.t)) { right = Math.max(right, o.x + 1); continue; }
     const l = o.t === 's' ? o.x - SAW_R : o.x, r = o.t === 's' ? o.x + SAW_R : o.t === 'k' ? o.x + 1 : o.x + o.w;
     right = Math.max(right, r);
@@ -848,7 +886,7 @@ function buildWorld(objs) {
     if (x0 < Infinity) pivots.set(g, [(x0 + x1) / 2, (y0 + y1) / 2]);
   }
   const portals = byX('p'), orbs = byX('dq'), pads = byX('j'); // orbs: dash orbs and jump orbs share one list (one press, one orb)
-  return { objs, cols, portals, orbs, pads, letters: byX('L'), texts: byX('a'), starts: byX('P'), coins: byX('c'), cps: byX('h'), trig, moving, pivots, fadeG: new Set(trig.filter(o => o.k === 'f').map(o => o.g)),
+  return { objs, cols, portals, orbs, pads, letters: byX('L'), texts: byX('a'), starts: byX('P'), song: objs.find(o => o.t === 'M') || null, coins: byX('c'), cps: byX('h'), trig, moving, pivots, fadeG: new Set(trig.filter(o => o.k === 'f').map(o => o.g)),
     end: ((Number.isFinite(right) ? right : 7) + 3) * B };
 }
 // Centre and half-size of an object, in blocks.
@@ -1605,7 +1643,7 @@ const FX = {
   corner() { if (p.cube || p.ship) return; trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang; p.turnT = 0; },
   trail(k, x, y) { (k === 1 ? trail : trail2).push([x, y]); },
   orb() { if (!calm) flash = 0.2; },
-  coin() { if (!calm) flash = 0.15; for (let i = 0; i < 14; i++) { const a = Math.random() * 6.283, v = 60 + Math.random() * 160; parts.push({ x: p.x, y: p.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5, col: '#ffd84a' }); } },
+  coin() { SFX.coin(); if (!calm) flash = 0.15; for (let i = 0; i < 14; i++) { const a = Math.random() * 6.283, v = 60 + Math.random() * 160; parts.push({ x: p.x, y: p.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5, col: '#ffd84a' }); } },
   portal(o) {
     if (o.k === 'T' && !o.v && !p.cube) { const d = teleportShift(world, o); if (d) { trail.push([p.x, p.y], null, [p.x, p.y + d]); if (p.dual) trail2.push([p.x, p.y2], null, [p.x, p.y2 - d]); } }
     if (o.k === 'S') { if (p.speedI !== o.v && !calm) flash = 0.45; }
@@ -1637,6 +1675,7 @@ function reset() {
   p.ang = p.from = p.dir * (p.mini ? Math.atan(2) : Math.PI / 4); p.cpT = 0; p.sub = 0; speedI = p.speedI;
   trail = p.cube || p.ship ? [] : [[p.x, p.y]]; trail2 = p.dual && !p.cube && !p.ship ? [[p.x, p.y2]] : [];
   plan = hacks.auto ? findPath(world, stateOf(p), Infinity, 300000, false) || [] : []; // autoplay: route to the end, worked out now
+  if (!(cp && SND.seq || cp && SND.el && !SND.el.paused)) { songStop(); if (!p.wait) setTimeout(attemptMusic, 0); } // each attempt starts the song again (practice keeps it going)
 }
 // The state a start position sets: its place, speed, gamemode, size, gravity and dual; portals behind it are skipped.
 function startPosState(o) {
@@ -1660,12 +1699,14 @@ function play(level, origin) {
   document.activeElement?.blur();
 }
 function exitPlay() {
+  songStop();
   $('hud').hidden = true; held = false; inputs.length = 0;
   if (from === 'editor') return resumeEditor();
   go(from);
 }
 function saveBest(pct) { if (cur.id !== 'test' && !usedHacks && pct > (bests[cur.id] || 0)) { bests[cur.id] = pct; store.set('zd-best', bests); } }
 function die() {
+  SFX.death(); if (!hacks.practice) songStop();
   mode = 'dead'; deadT = hacks.respawn; shake = calm || hacks.layout ? 0 : 16; if (!calm && !hacks.layout) flash = 0.18;
   trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]);
   // GD-style death: a bright flash and a shockwave ring where the icon was, and the icon blowing apart into spinning shards
@@ -1693,6 +1734,7 @@ function endTest() {
   editCam = x - 0.5 * W / (S * edZoom); clampEd();
 }
 function win() {
+  songStop(); SFX.win();
   if (cur.id === 'test' && from === 'editor') { saveBest(100); return endTest(); }
   mode = 'win'; saveBest(100); $('hud').hidden = true; show('done');
   // coins only count on a finished run without hacks; each one is kept once you've finished with it
@@ -1707,6 +1749,129 @@ function win() {
     : idx >= 0 && nextLv ? `Level ${String(idx + 2).padStart(2, '0')} is open: ${nextLv.name}.` : idx === LEVELS.length - 1 ? 'That was the last level. Every main level is cleared.' : '';
 }
 
+// ---------- sound ----------
+// Everything is made in the browser with Web Audio: the sound effects, and the built-in music (original tracks written by a
+// small sequencer from a seed: drums, bass, chords and a lead). A level can instead use a Newgrounds song by its ID. Newgrounds
+// doesn't let other sites stream its songs (it answers with a short stand-in clip), so, like GD, each player downloads the song
+// from Newgrounds once and loads the file; it's kept in this browser (IndexedDB) under its ID.
+const SONG_COUNT = 20, NG_MAX = 40e6;
+const SONGS = new Map(); // Newgrounds ID -> { url (object URL of the stored file), name, size }
+const songDB = {
+  db: null,
+  open() { return this.db ??= new Promise((res, rej) => { const r = indexedDB.open('zd-songs', 1); r.onupgradeneeded = () => r.result.createObjectStore('s'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+  async run(mode, fn) { const db = await this.open(); return new Promise((res, rej) => { const tx = db.transaction('s', mode), r = fn(tx.objectStore('s')); tx.oncomplete = () => res(r?.result); tx.onerror = () => rej(tx.error); }); },
+};
+async function loadSongs() {
+  try {
+    const db = await songDB.open();
+    await new Promise(res => { const r = db.transaction('s').objectStore('s').openCursor(); r.onsuccess = () => { const c = r.result; if (!c) return res(); const v = c.value; if (v?.blob) SONGS.set(+c.key, { url: URL.createObjectURL(v.blob), name: v.name, size: v.blob.size }); c.continue(); }; r.onerror = () => res(); });
+  } catch (e) { /* no storage here: Newgrounds songs only last this session */ }
+  renderSongs();
+}
+async function addSong(id, file) { // returns an error message, or ''
+  if (!(id >= 1)) return 'Enter the song\u2019s Newgrounds ID first.';
+  if (!file) return '';
+  if (!/^audio\//.test(file.type) && !/\.(mp3|ogg|wav|m4a)$/i.test(file.name)) return 'That isn\u2019t a sound file. Load the .mp3 you downloaded from Newgrounds.';
+  if (file.size > NG_MAX) return 'That file is over 40 MB.';
+  const old = SONGS.get(id); if (old) URL.revokeObjectURL(old.url);
+  SONGS.set(id, { url: URL.createObjectURL(file), name: file.name, size: file.size });
+  try { await songDB.run('readwrite', st => st.put({ blob: file, name: file.name }, id)); } catch (e) { renderSongs(); return 'Loaded for now, but this browser wouldn\u2019t store it, so it\u2019ll be gone after a reload.'; }
+  renderSongs(); return '';
+}
+async function removeSong(id) { const old = SONGS.get(id); if (old) URL.revokeObjectURL(old.url); SONGS.delete(id); try { await songDB.run('readwrite', st => st.delete(id)); } catch (e) {} renderSongs(); }
+const ngPage = id => `https://www.newgrounds.com/audio/listen/${id}`;
+const SND = { ctx: null, music: null, sfx: null, vol: { music: 0.6, sfx: 0.8, ...store.get('zd-vol', {}) }, el: null, seq: null, noise: null };
+function audioCtx() {
+  if (!SND.ctx) {
+    const C = window.AudioContext || window.webkitAudioContext; if (!C) return null;
+    try { SND.ctx = new C(); } catch (e) { return null; }
+    SND.music = SND.ctx.createGain(); SND.sfx = SND.ctx.createGain();
+    SND.music.connect(SND.ctx.destination); SND.sfx.connect(SND.ctx.destination); applyVol();
+  }
+  if (SND.ctx.state === 'suspended') SND.ctx.resume().catch(() => {});
+  return SND.ctx;
+}
+function applyVol() {
+  if (SND.music) SND.music.gain.value = SND.vol.music * 0.45;
+  if (SND.sfx) SND.sfx.gain.value = SND.vol.sfx * 0.55;
+  if (SND.el) SND.el.volume = Math.min(1, SND.vol.music);
+}
+addEventListener('pointerdown', audioCtx, { once: true }); addEventListener('keydown', audioCtx, { once: true }); // browsers start sound on a press
+function tone(type, f0, f1, dur, vol, at = 0, dest) {
+  const c = audioCtx(); if (!c) return; const t = Math.max(c.currentTime, at || c.currentTime), o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(dest || SND.sfx); o.start(t); o.stop(t + dur + 0.02);
+}
+function hiss(dur, vol, type, freq, at = 0, dest) {
+  const c = audioCtx(); if (!c) return;
+  if (!SND.noise) { const b = c.createBuffer(1, c.sampleRate, c.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; SND.noise = b; }
+  const t = Math.max(c.currentTime, at || c.currentTime), src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  src.buffer = SND.noise; f.type = type; f.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(dest || SND.sfx); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.02);
+}
+const audioNow = () => SND.ctx ? SND.ctx.currentTime : 0;
+const SFX = { // original sounds
+  death() { hiss(0.5, 0.9, 'lowpass', 1600); tone('sine', 170, 38, 0.4, 0.9); tone('square', 520, 70, 0.16, 0.12); },
+  win() { [0, 4, 7, 12, 16, 19].forEach((n, i) => tone('square', 523.25 * 2 ** (n / 12), 0, 0.25, 0.1, audioNow() + i * 0.075)); },
+  coin() { tone('square', 988, 0, 0.09, 0.1); tone('square', 1319, 0, 0.28, 0.1, audioNow() + 0.07); },
+  checkpoint() { tone('triangle', 660, 990, 0.14, 0.22); },
+  click() { tone('square', 760, 540, 0.035, 0.05); },
+};
+// ---- built-in music: a seeded little sequencer ----
+const midi = m => 440 * 2 ** ((m - 69) / 12);
+function makeSong(seed) {
+  let a = seed * 9301 + 49297; const r = () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const pick = arr => arr[Math.floor(r() * arr.length)];
+  const minor = r() < 0.7, scale = minor ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11];
+  const prog = pick(minor ? [[0, 5, 2, 6], [0, 3, 4, 4], [0, 6, 5, 4], [0, 5, 3, 4], [5, 6, 0, 0]] : [[0, 4, 5, 3], [0, 5, 3, 4], [3, 4, 0, 5], [0, 3, 5, 4]]);
+  const lead = Array.from({ length: 32 }, (_, i) => r() < (i % 4 === 0 ? 0.75 : i % 2 ? 0.25 : 0.45) ? Math.floor(r() * 8) : null);
+  const bass = Array.from({ length: 16 }, (_, i) => i % 4 === 0 || r() < 0.35);
+  const kick = Array.from({ length: 16 }, (_, i) => i % 4 === 0 || (i % 2 === 0 && r() < 0.2));
+  return { bpm: 0, root: 45 + Math.floor(r() * 8), scale, prog, lead, bass, kick, hat16: r() < 0.5, arp: r() < 0.6 };
+}
+const deg = (song, d) => song.root + song.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7);
+function playStep(song, step, t) {
+  const c = SND.ctx, M = SND.music, bar = Math.floor(step / 16) % song.prog.length, i = step % 16, ch = song.prog[bar], spb = 60 / song.bpm / 4;
+  if (song.kick[i]) { const o = c.createOscillator(), g = c.createGain(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22); o.connect(g).connect(M); o.start(t); o.stop(t + 0.25); }
+  if (i === 4 || i === 12) hiss(0.16, 0.45, 'bandpass', 1800, t, M);
+  if (song.hat16 || i % 2 === 0) hiss(0.04, i % 2 ? 0.08 : 0.14, 'highpass', 7000, t, M);
+  if (song.bass[i]) { const o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain(); o.type = 'sawtooth'; o.frequency.value = midi(deg(song, ch) - 12 + (i % 8 === 6 ? 12 : 0)); f.type = 'lowpass'; f.frequency.value = 700; g.gain.setValueAtTime(0.32, t); g.gain.exponentialRampToValueAtTime(0.0001, t + spb * 1.8); o.connect(f).connect(g).connect(M); o.start(t); o.stop(t + spb * 2); }
+  if (song.arp) { const n = [0, 2, 4, 7][i % 4]; tone('triangle', midi(deg(song, ch + n) + 12), 0, spb * 0.9, 0.07, t, M); }
+  else if (i % 8 === 0) for (const n of [0, 2, 4]) tone('triangle', midi(deg(song, ch + n) + 12), 0, spb * 7, 0.05, t, M);
+  const L = song.lead[(Math.floor(step / 16) % 2) * 16 + i];
+  if (L !== null && step >= 64) tone('square', midi(deg(song, ch + L) + 24), 0, spb * 1.6, 0.06, t, M); // the lead comes in after 4 bars
+}
+function songStart(level, offset) { // level: { song, bpm } ; offset: seconds into the song
+  songStop(); const c = audioCtx(); if (!c || SND.vol.music <= 0) return;
+  const sg = level.song;
+  if (sg && sg.k === 1) {
+    const have = SONGS.get(sg.n);
+    if (!have) { if (songStart.warned !== sg.n) { songStart.warned = sg.n; toast(`This level uses Newgrounds song #${sg.n}. Load it in Settings → Songs to hear it.`); } return; }
+    const el = new Audio(); el.src = have.url; el.preload = 'auto'; el.volume = Math.min(1, SND.vol.music); SND.el = el;
+    const at = (sg.off || 0) + offset; const go = () => { try { el.currentTime = at; } catch (e) {} el.play().catch(() => {}); };
+    if (el.readyState >= 1) go(); else el.addEventListener('loadedmetadata', go, { once: true });
+    return;
+  }
+  const song = makeSong(sg ? sg.n : 1); song.bpm = level.bpm || 128;
+  const spb = 60 / song.bpm / 4; let step = Math.floor(((sg?.off || 0) + offset) / spb), t = c.currentTime + 0.06;
+  SND.seq = setInterval(() => { while (t < SND.ctx.currentTime + 0.12) { playStep(song, step++, t); t += spb; } }, 25);
+}
+function songStop() { if (SND.seq) { clearInterval(SND.seq); SND.seq = null; } if (SND.el) { SND.el.pause(); SND.el.removeAttribute('src'); SND.el = null; } }
+function songPause() { if (SND.seq) { clearInterval(SND.seq); SND.seq = null; SND.paused = true; } if (SND.el) SND.el.pause(); }
+// Seconds from the level's start to x (game units), following its speed portals.
+function timeAt(wd, xu) {
+  let t = 0, i = 1, x = 0;
+  for (const o of wd.portals) if (o.k === 'S') { const sx = Math.min(o.x * B, xu); if (sx <= x) { if (o.x * B <= xu) i = o.v; continue; } t += (sx - x) / (SPEEDS[i] * B); x = sx; if (o.x * B <= xu) i = o.v; }
+  return t + Math.max(0, xu - x) / (SPEEDS[i] * B);
+}
+const BPM_FOR = { Easy: 120, Normal: 128, Hard: 136, Harder: 144, Insane: 150, Extreme: 160 };
+function levelMusic() { // what the current level plays
+  const song = world.song || { t: 'M', k: 0, n: LEVELS.includes(cur) ? LEVELS.indexOf(cur) + 1 : 1, off: 0 };
+  return { song, bpm: LEVELS.includes(cur) ? BPM_FOR[cur.diff] || 128 : 132 };
+}
+function attemptMusic() { if (mode === 'play' || mode === 'dead') songStart(levelMusic(), timeAt(world, p.x)); }
+
 // ---------- pause ----------
 // Pausing freezes the simulation (step() does nothing while mode is 'pause'); resuming restarts the clock from now so the
 // game doesn't jump ahead to catch up on the paused time, and drops any key that was held when the pause began.
@@ -1714,7 +1879,10 @@ let pausedFrom = 'play';
 function pauseGame() {
   if (!inGame()) return;
   pausedFrom = mode; mode = 'pause'; held = false; inputs.length = 0;
+  songPause();
   show('pause');
+  const sg = levelMusic().song;
+  $('pauseSong').innerHTML = sg.k === 1 ? `Song: <a href="https://www.newgrounds.com/audio/listen/${sg.n}" target="_blank" rel="noopener">Newgrounds #${sg.n}</a>` : `Song: built-in track ${sg.n}`;
   $('pauseInfo').textContent = `${Math.min(100, Math.max(0, Math.floor(p.x / world.end * 100)))}% · Attempt ${attempt}`;
   $('pauseName').textContent = cur.name + (usedHacks ? ' · hacks on' : '');
   $('pExit').textContent = from === 'editor' ? 'Back to editor' : 'Exit level';
@@ -1725,6 +1893,7 @@ function resumeGame() {
   if (mode !== 'pause') return;
   show(null); mode = pausedFrom; held = false; inputs.length = 0;
   simT = lastDraw = performance.now();
+  if (SND.el && mode === 'play') SND.el.play().catch(() => {}); else if (SND.paused && mode === 'play') { SND.paused = false; attemptMusic(); }
   document.activeElement?.blur();
 }
 function restartGame() {
@@ -1762,7 +1931,7 @@ function step(dt) {
       if (parts.length > 400) parts = parts.filter(q => q.life > 0);
     }
     // checkpoint objects: in practice mode, passing one saves a checkpoint right there
-    while ((p.ci || 0) < world.cps.length && world.cps[p.ci || 0].x * B <= p.x) { p.ci = (p.ci || 0) + 1; if (hacks.practice) { checkpoints.push(stateOf(p)); toast(`Checkpoint ${checkpoints.length}`); } }
+    while ((p.ci || 0) < world.cps.length && world.cps[p.ci || 0].x * B <= p.x) { p.ci = (p.ci || 0) + 1; if (hacks.practice) { checkpoints.push(stateOf(p)); SFX.checkpoint(); toast(`Checkpoint ${checkpoints.length}`); } }
     // practice: drop a checkpoint every 1.5 s, but only where there's a way to keep going for at least half a second
     // (respawning there starts with a press, so holding has to last at least 0.2 s from that spot)
     if (hacks.practice && (p.cpT += dt) >= 1.5) { p.cpT = 0; const st = stateOf(p); if (survival(st, true) >= 96 && findPath(world, st, 30, 3000, true)) checkpoints.push(st); }
@@ -2304,7 +2473,7 @@ function next() {
   mc.port2.postMessage(0); // always hand control back to the browser between frames
 }
 function setHeld(v, e, fresh = v) {
-  if (v && p?.wait && mode === 'play') { p.wait = false; held = true; inputs.length = 0; return; } // first press starts a waiting spawn
+  if (v && p?.wait && mode === 'play') { p.wait = false; held = true; inputs.length = 0; attemptMusic(); return; } // first press starts a waiting spawn (and its music)
   const now = performance.now(); let ts = e && e.timeStamp;
   if (!(ts > now - 250 && ts <= now)) ts = now; // fall back if the browser's event clock differs
   if (inputs.length && ts < inputs[inputs.length - 1][0]) ts = inputs[inputs.length - 1][0];
@@ -2520,7 +2689,7 @@ function edAction(a, fine) {
   if (a === 'none') { sel = new Set(); return renderPane(); }
   if (a === 'selall' || a === 'selleft' || a === 'selright') { // left / right of the middle of the view, like GD's pause menu
     const mid = (editCam + W / (S * edZoom) / 2) / B;
-    sel = new Set(edObjs.filter(o => a === 'selall' || (a === 'selleft' ? objCenter(o)[0] <= mid : objCenter(o)[0] >= mid))); return renderPane();
+    sel = new Set(edObjs.filter(o => o.t !== 'M' && (a === 'selall' || (a === 'selleft' ? objCenter(o)[0] <= mid : objCenter(o)[0] >= mid)))); return renderPane(); // (the song isn't an object you select)
   }
   if (a === 'paste') { // GD pastes in place, selected, ready to move
     if (!edClip) return; const before = JSON.stringify(edObjs), objs = JSON.parse(edClip);
@@ -2648,10 +2817,10 @@ function renderProps() {
 }
 function openProps(kind) { propKind = kind; $('edMenu').hidden = true; $('sharePop').hidden = true; $('edProps').hidden = false; renderProps(); }
 function openMenu() {
-  $('edProps').hidden = true; $('sharePop').hidden = true; $('edMenu').hidden = false;
+  $('edProps').hidden = true; $('sharePop').hidden = true; $('edMenu').hidden = false; $('songMsg').textContent = ''; renderSong();
   $('edInfo2').textContent = $('edStats').textContent.replace(/^· /, '');
 }
-function closePops() { $('edMenu').hidden = true; $('edProps').hidden = true; $('sharePop').hidden = true; }
+function closePops() { if (!$('edMenu').hidden) { songStop(); $('songTest').textContent = '▶ Listen'; } $('edMenu').hidden = true; $('edProps').hidden = true; $('sharePop').hidden = true; }
 function updateEdInfo() {
   const n = edObjs.length, txt = `${n} object${n === 1 ? '' : 's'} · ${Math.round(world.end / B)} blocks · ${Math.round(duration(world))} s`;
   $('edStats').textContent = '· ' + txt; $('edInfo').textContent = txt;
@@ -2982,6 +3151,45 @@ $('edZoomOut').onclick = () => zoomBy(0.8);
 $('edSwipe').onclick = () => { edSwipe = !edSwipe; renderPane(); };
 $('edGrid').onclick = () => { const i = GRIDS.findIndex(([v]) => v === edGrid); edGrid = GRIDS[(i + 1) % GRIDS.length][0]; renderPane(); };
 $('edTrash').onclick = () => edAction('del');
+// volume sliders (saved; synced with the rest of the settings)
+for (const [id, k] of [['volMusic', 'music'], ['volSfx', 'sfx']]) {
+  $(id).value = SND.vol[k];
+  $(id).oninput = () => { SND.vol[k] = +$(id).value; store.set('zd-vol', SND.vol); applyVol(); if (k === 'sfx') SFX.click(); if (k === 'music' && !SND.vol.music) songStop(); };
+}
+// the editor's song picker: a built-in track, or a Newgrounds song by ID (its file loaded on this device)
+$('songNum').innerHTML = Array.from({ length: SONG_COUNT }, (_, i) => `<option value="${i + 1}">Track ${i + 1}</option>`).join('');
+function edSong() { return edObjs.find(o => o.t === 'M') || null; }
+function renderSong() {
+  const sg = edSong() || { k: 0, n: 1, off: 0 };
+  $('songKind').value = sg.k; $('songNum').value = sg.k ? 1 : sg.n; $('songId').value = sg.k ? sg.n : ''; $('songOff').value = sg.off || 0;
+  $('songNumBox').hidden = !!sg.k; $('songIdBox').hidden = !sg.k; $('songNgBox').hidden = !sg.k;
+  if (sg.k) { $('songPage').href = ngPage(sg.n); const h = SONGS.get(sg.n); $('songMsg').textContent = h ? `Song #${sg.n} is loaded on this device (${h.name}).` : `Song #${sg.n} isn't on this device yet: open it on Newgrounds, download it, then press Load song file.`; }
+}
+function setSong(patch) {
+  const before = JSON.stringify(edObjs), cur0 = edSong() || { t: 'M', k: 0, n: 1, off: 0 }, next = { ...cur0, ...patch };
+  edObjs = edObjs.filter(o => o.t !== 'M'); edObjs.push(next); commit(before); edChanged(); renderSong();
+}
+$('songKind').onchange = () => { $('songMsg').textContent = ''; const k = +$('songKind').value; setSong({ k, n: k ? Math.max(1, Math.round(+$('songId').value) || 1) : 1 }); };
+$('songNum').onchange = () => setSong({ n: +$('songNum').value });
+$('songId').onchange = () => setSong({ n: Math.max(1, Math.round(+$('songId').value) || 1) });
+$('songOff').onchange = () => setSong({ off: Math.max(0, Math.min(600, +$('songOff').value || 0)) });
+$('songLoad').onclick = () => $('songFile').click();
+$('songFile').onchange = async () => { const f = $('songFile').files[0]; $('songFile').value = ''; const sg = edSong(); const err = await addSong(sg?.n, f); renderSong(); if (err) $('songMsg').textContent = err; };
+$('songTest').onclick = () => {
+  if (SND.seq || SND.el) { songStop(); $('songTest').textContent = '▶ Listen'; return; }
+  const sg = edSong() || { k: 0, n: 1, off: 0 };
+  if (sg.k === 1 && !SONGS.get(sg.n)) { renderSong(); return; }
+  $('songTest').textContent = '■ Stop'; songStart({ song: sg, bpm: 132 }, 0);
+};
+// Settings → Songs: load a Newgrounds song for an ID, see and remove the ones kept here
+function renderSongs() {
+  const list = $('songList'); if (!list) return;
+  list.innerHTML = SONGS.size ? [...SONGS].map(([id, v]) => `<div class="row"><a href="${ngPage(id)}" target="_blank" rel="noopener">Newgrounds #${id}</a><span class="note">${esc(v.name)} · ${(v.size / 1e6).toFixed(1)} MB</span><button class="ghost" data-song-del="${id}">Remove</button></div>`).join('') : '<p class="note">No songs loaded yet.</p>';
+}
+$('setSongLoad').onclick = () => { if (!(+$('setSongId').value >= 1)) { $('setSongMsg').textContent = 'Enter the song’s Newgrounds ID first.'; return; } $('setSongFile').click(); };
+$('setSongFile').onchange = async () => { const f = $('setSongFile').files[0]; $('setSongFile').value = ''; $('setSongMsg').textContent = await addSong(Math.round(+$('setSongId').value), f); };
+$('songList').addEventListener('click', e => { const b = e.target.closest('[data-song-del]'); if (b) removeSong(+b.dataset.songDel); });
+loadSongs();
 $('edPause').onclick = openMenu;
 $('edResume').onclick = closePops;
 $('edPropsOk').onclick = () => { $('edProps').hidden = true; };

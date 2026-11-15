@@ -26,6 +26,7 @@ Keybinds can be changed in Settings.
 - **Triggers** (move, rotate, fade, colour) acting on numbered groups of objects, plus **coins** to collect, **checkpoints** for practice mode, **teleport** and **gravity swap** portals and **small spikes**
 - **Level editor** laid out like Geometry Dash's: build, edit and delete modes, object tabs and pages, GD's edit buttons and shortcuts (W A S D to move, Q / E to turn, Alt+Q / Alt+E to flip, Ctrl+C / V / D, F1 / F2 for tabs, Enter to playtest), copy and paste, box select, swipe, start positions (speed, gamemode, mini, gravity, dual) to playtest from, and a playtest that leaves your route drawn in the editor. Slopes, saws, spikes, pads, orbs, portals (including cube, ship and wave), letter blocks, text and dash orbs, a fine grid and undo/redo
 - **Share codes**: copy a level's code from the editor and paste someone else's to play it
+- **Music and sound**: 20 original built-in tracks (made in the browser), sound effects, volume sliders, and Newgrounds songs by ID for your own levels. Newgrounds doesn't allow other sites to stream its songs, so, like GD, you download a song from Newgrounds once and load the file; it stays in your browser
 - **Practice tools** in a hidden menu: practice mode with checkpoints, show path, start position, hitboxes and more
 
 Progress, icons and your levels are saved in your browser.
