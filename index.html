@@ -120,7 +120,9 @@ button.danger { background: transparent; color: var(--rose); box-shadow: inset 0
 .track i { display: block; height: 100%; background: var(--sun); }
 .track::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(12, 14, 28, .8) calc(10% - 2px) 10%); }
 #pcBtns { pointer-events: auto; position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 10px; }
-#pcBtns[hidden] { display: none; }
+#pcBtns[hidden], #spSwitch[hidden] { display: none; }
+#spSwitch { pointer-events: auto; position: fixed; left: 50%; bottom: calc(68px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 8px; align-items: center; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+#spSwitch button { padding: 6px 12px; }
 #hud.practice .track i { background: #4dff9a; }
 .hudr { justify-self: end; text-align: right; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
 #hackTag { display: block; color: var(--rose); }
@@ -303,6 +305,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
   <button class="ghost" id="exitBtn" aria-label="Pause">II</button>
   <div class="prog"><div class="track"><i id="pbar"></i></div><span id="pct">0%</span></div>
   <div class="hudr"><span id="att">Att 1</span><span id="hackTag"></span></div>
+  <div id="spSwitch" hidden><button class="ghost" id="spPrev" title="Previous start (←)">◀</button><span id="spLabel"></span><button class="ghost" id="spNext" title="Next start (→)">▶</button></div>
   <div id="pcBtns" hidden><button class="ghost" id="pcPlace" title="Place a checkpoint (Z)">◆ Place</button><button class="ghost" id="pcDel" title="Remove the newest checkpoint (X)">✕ Remove</button></div>
 </div>
 
@@ -1326,7 +1329,10 @@ store.set('zd-overrides', overrides);
 for (const l of LEVELS) { l.orig = l.code; if (typeof overrides[l.id] === 'string') l.code = overrides[l.id]; }
 let editMain = false;
 if (!unlocked) hacks = { ...HACK_DEFAULTS }; // hacks only apply once the menu is found
-const cheating = () => hacks.noclip || hacks.speed !== 1 || hacks.start > 0 || hacks.path || hacks.auto;
+const cheating = () => hacks.noclip || hacks.speed !== 1 || hacks.start > 0 || hacks.path || hacks.auto || (spIdx > 0 && cur?.id !== 'test');
+// Start position switcher (like GD's mod menus): in normal play, 0 is the level's start and 1..n its start positions that are on.
+let spIdx = 0;
+const spList = () => world.starts.filter(o => !(o.f & 8));
 // Practice mode (GD's, from the pause menu): checkpoints you respawn at, its own saved best, and no normal best or unlocks.
 let practice = false, autoCp = store.get('zd-autocp', true), pbests = store.get('zd-pbest', {});
 
@@ -1887,7 +1893,8 @@ function reset() {
   const cp =practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
   // an editor playtest starts at the rightmost start position that's on (unless you chose "playtest from here")
-  const st = cur.id === 'test' && testFrom === null ? world.starts.filter(o => !(o.f & 8)).at(-1) : null;
+  const st = cur.id === 'test' ? (testFrom === null ? spList().at(-1) : null) : spIdx > 0 ? spList()[spIdx - 1] || null : null; // playtest: the rightmost on; play: the switcher's choice
+  if (cur.id !== 'test') usedHacks = cheating(); // each attempt: one from a start position (or with hacks on) doesn't count
   if (cp) Object.assign(p, cp); // practice: back to the newest checkpoint
   else if (st) Object.assign(p, startPosState(st));
   else if (sx > 0) Object.assign(p, spawnCache ??= spawnState(sx)); // start partway in at a safe spot (worked out once per level)
@@ -1928,7 +1935,7 @@ function play(level, origin, songOk) {
   cur = level; from = origin; world = level.id === 'test' ? buildWorld(edObjs) : worldFor(level.code); baseHue = level.hue ?? 200;
   if (level.id === 'test') { testPath = []; testPath2 = []; testClicks = []; testPrevHeld = false; testTick = 0; }
   practice = false; // a level always starts in normal mode, as in GD (Replay puts practice back)
-  attempt = 1; usedHacks = cheating(); checkpoints = []; spawnCache = null; held = false;
+  spIdx = 0; attempt = 1; usedHacks = cheating(); checkpoints = []; spawnCache = null; held = false;
   reset(); mode = 'play'; inputs.length = 0; show(null); $('hud').hidden = false;
   updateHackTag();
   if (level === LEVELS[0] && !(bests[level.id] > 0)) { // a brand-new player's first go: say how to play
@@ -3287,7 +3294,9 @@ function renderBinds() {
 // ---------- secret hack menu ----------
 function updateHackTag() {
   $('hud').classList.toggle('practice', practice); $('pcBtns').hidden = !practice;
-  $('hackTag').textContent = [practice && 'Practice', hacks.noclip && 'Noclip', hacks.speed !== 1 && hacks.speed + 'x', hacks.start > 0 && 'From ' + Math.round(hacks.start * 100) + '%',
+  const n = cur && cur.id !== 'test' && world ? spList().length : 0; $('spSwitch').hidden = !n;
+  if (n) $('spLabel').textContent = spIdx ? `Start pos ${spIdx} / ${n}` : `Level start · ${n} start pos`;
+  $('hackTag').textContent = [practice && 'Practice', spIdx > 0 && cur?.id !== 'test' && 'Start pos', hacks.noclip && 'Noclip', hacks.speed !== 1 && hacks.speed + 'x', hacks.start > 0 && 'From ' + Math.round(hacks.start * 100) + '%',
     hacks.auto && 'Autoplay', hacks.path && 'Path'].filter(Boolean).join(' · ');
 }
 function renderHacks() {
@@ -3657,6 +3666,13 @@ $('edLoad').onclick = () => {
 $('exitBtn').onclick = pauseGame;
 $('pResume').onclick = resumeGame;
 $('pRestart').onclick = () => restartGame();
+// The start position switcher: pick where attempts start; switching starts a new attempt there.
+function switchStart(d) {
+  const n = spList().length; if (!n || cur.id === 'test' || !(mode === 'play' || mode === 'dead')) return;
+  spIdx = (spIdx + d + n + 1) % (n + 1); checkpoints = []; spawnCache = null; restartGame(); updateHackTag();
+}
+$('spPrev').onclick = e => { switchStart(-1); e.currentTarget.blur(); };
+$('spNext').onclick = e => { switchStart(1); e.currentTarget.blur(); };
 // Practice from the pause menu (GD): going in carries on from where you are; leaving starts the level over in normal mode.
 $('pPractice').onclick = () => {
   if (!practice) { practice = true; checkpoints = []; usedHacks = cheating(); updateHackTag(); resumeGame(); toast(`Practice mode · ${keyName('KeyZ')} places a checkpoint, ${keyName('KeyX')} removes one`); }
@@ -4027,7 +4043,8 @@ addEventListener('keydown', e => {
   if (!inGame()) return;
   if (e.code === keys.exit) { e.preventDefault(); return pauseGame(); }
   if (keys.climb.includes(e.code)) { e.preventDefault(); if (!e.repeat) inputDown(e.code, e); return; }
-  if (e.code === keys.restart) { e.preventDefault(); if (!e.repeat) restartGame(true); return; } // back to the start (in practice: to your newest checkpoint)
+  if (e.code === keys.restart) { e.preventDefault(); if (!e.repeat) restartGame(true); return; }
+  if ((e.code === 'ArrowLeft' || e.code === 'ArrowRight') && !e.repeat && cur.id !== 'test' && spList().length) { e.preventDefault(); return switchStart(e.code === 'ArrowRight' ? 1 : -1); } // back to the start (in practice: to your newest checkpoint)
   if (practice && !e.repeat) { // practice keys (GD's): Z places a checkpoint here, X removes the newest
     if (e.code === 'KeyZ') placeCp(); else if (e.code === 'KeyX') removeCp();
   }
