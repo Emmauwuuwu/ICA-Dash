@@ -2209,8 +2209,10 @@ function drawShip(g, x, y, a, s, ic, flip) {
   // GD's proportions inside the 1-block hitbox: a big ship (up to 1.4 blocks long, 0.6 tall) on the box's bottom, and a
   // small cube (0.55 of a block) riding in it with its top at the box's top.
   const custom = ic.useShipCustom && shipImg.naturalWidth, A = { ...SHIP_ADJ, ...(custom ? ic.shipAdj : null) };
-  const seat = custom ? shipSeat(ic, h) : null; // a custom ship: the pilot sinks 40% into the picture's top edge under it
-  drawCube(g, -h * 0.1, (seat == null ? -h * 0.42 : seat - 0.11 * h) + A.py * 2 * h, 0, s * 0.55, ic); // the pilot: your cube (or your cube picture), its bottom inside the hull
+  // The pilot's seat: its top at the box's top, as in GD. On a custom ship too low to reach it, it drops until a quarter of
+  // it sits behind the picture's top edge (GD's cubes sit about that deep), never higher than the usual seat.
+  const seat = custom ? shipSeat(ic, h) : null;
+  drawCube(g, -h * 0.1, (seat == null ? -h * 0.42 : Math.max(-h * 0.42, seat - 0.275 * h)) + A.py * 2 * h, 0, s * 0.55, ic); // the pilot: your cube (or your cube picture), its bottom inside the hull
   if (custom) { drawShipPic(g, h, ic); g.restore(); return; }
   g.translate(0, h * 0.278); g.scale(0.95, 0.95); // hull: 2.65 h long, 1.2 h tall, its outline's bottom on the box's bottom
   g.lineJoin = 'round';
