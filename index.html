@@ -323,6 +323,8 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
     <label class="hrow"><input type="checkbox" class="sr" id="hAcc"><span class="hchk"></span>Accurate percentage</label>
     <label class="hrow"><input type="checkbox" class="sr" id="hNoAtt"><span class="hchk"></span>Hide attempts</label>
     <label class="hrow"><input type="checkbox" class="sr" id="hLayout"><span class="hchk"></span>Layout mode</label>
+    <label class="hrow"><input type="checkbox" class="sr" id="hNoPulse"><span class="hchk"></span>No wave pulse</label>
+    <label class="hrow hcol"><span>Wave trail size <b class="hval" id="hTrailOut">1x</b></span><input type="range" id="hTrail" min="0" max="3" step="0.05" value="1"></label>
     <label class="hrow hcol"><span>Respawn delay <b class="hval" id="hRespawnOut">0.75 s</b></span><input type="range" id="hRespawn" min="0" max="1.5" step="0.05" value="0.75"></label>
   </div>
   <div class="hwin" data-win="perf">
@@ -1190,7 +1192,7 @@ let keys = store.get('zd-keys', DEFAULT_KEYS);
 if (!Array.isArray(keys.climb) || typeof keys.exit !== 'string') keys = structuredClone(DEFAULT_KEYS);
 if (typeof keys.restart !== 'string') keys.restart = DEFAULT_KEYS.restart; // saved before the restart key existed
 const HACK_DEFAULTS = { noclip: false, hitbox: false, speed: 1, start: 0, fps: false, cbf: true, uncap: false, cap: 1,
-  path: false, practice: false, auto: false, acc: false, noAtt: false, layout: false, respawn: 0.75 };
+  path: false, practice: false, auto: false, acc: false, noAtt: false, layout: false, respawn: 0.75, noPulse: false, trail: 1 };
 let hacks = { ...HACK_DEFAULTS, ...store.get('zd-hacks', {}) };
 let unlocked = store.get('zd-unlocked', false);
 // Balance edits to main levels (made with "Edit levels" once the hack menu is unlocked). They're kept in this browser and
@@ -2401,9 +2403,9 @@ function draw(t, dt) {
   }
   // trail + player
   if (inGame) {
-    const pulse = ((audioScale(dt) - 0.1) * 2.1 + 0.4) / 1.24; // 1 = GD's still width (audioScale 0.5)
+    const pulse = (hacks.noPulse ? 1 : ((audioScale(dt) - 0.1) * 2.1 + 0.4) / 1.24) * hacks.trail; // 1 = GD's still width (audioScale 0.5); hacks: no pulse, trail size
     for (const [tr, py, on] of [[trail, p.y, true], [trail2, p.y2, p.dual]]) { // solid trail, no glow band; null breaks it (cube stretches)
-      if (!tr.length) continue;
+      if (!tr.length || pulse <= 0) continue; // trail size 0x: no trail (canvas ignores a 0 line width)
       ctx.beginPath(); let gap = true;
       for (const q of tr) { if (!q) { gap = true; continue; } if (gap) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); gap = false; }
       if (alive && on && !p.cube && !p.ship && !gap) ctx.lineTo(p.x, py);
@@ -2979,13 +2981,15 @@ function renderHacks() {
   $('hCap').value = hacks.cap; $('hCapOut').textContent = CAPS[hacks.cap]; $('hCap').disabled = !hacks.uncap;
   $('hSpeed').value = hacks.speed; $('hSpeedOut').textContent = hacks.speed + 'x';
   $('hStart').value = hacks.start; $('hStartOut').textContent = Math.round(hacks.start * 100) + '%';
+  $('hNoPulse').checked = hacks.noPulse; $('hTrail').value = hacks.trail; $('hTrailOut').textContent = hacks.trail + 'x';
   $('fps').hidden = !hacks.fps;
 }
 function readHacks() {
   const was = hacks;
   hacks = { noclip: $('hNoclip').checked, hitbox: $('hHitbox').checked, speed: +(+$('hSpeed').value).toFixed(2), start: +$('hStart').value, fps: $('hFps').checked,
     cbf: $('hCbf').checked, uncap: $('hUncap').checked, cap: +$('hCap').value, path: $('hPath').checked, practice: $('hPractice').checked,
-    auto: $('hAuto').checked, acc: $('hAcc').checked, noAtt: $('hNoAtt').checked, layout: $('hLayout').checked, respawn: +(+$('hRespawn').value).toFixed(2) };
+    auto: $('hAuto').checked, acc: $('hAcc').checked, noAtt: $('hNoAtt').checked, layout: $('hLayout').checked, respawn: +(+$('hRespawn').value).toFixed(2),
+    noPulse: $('hNoPulse').checked, trail: +(+$('hTrail').value).toFixed(2) };
   if (hacks.uncap !== !!ctx.getContextAttributes?.().desynchronized) makeCanvas(hacks.uncap);
   if (!hacks.practice) checkpoints = [];
   if (hacks.start !== was.start) spawnCache = null;
@@ -2994,7 +2998,7 @@ function readHacks() {
   if (cheating() && (mode === 'play' || mode === 'dead' || mode === 'pause')) usedHacks = true; // switching a hack on mid-run voids that run's best
   updateHackTag();
 }
-for (const id of ['hNoclip', 'hHitbox', 'hSpeed', 'hStart', 'hFps', 'hCbf', 'hUncap', 'hCap', 'hPath', 'hPractice', 'hAuto', 'hAcc', 'hNoAtt', 'hLayout', 'hRespawn'])
+for (const id of ['hNoclip', 'hHitbox', 'hSpeed', 'hStart', 'hFps', 'hCbf', 'hUncap', 'hCap', 'hPath', 'hPractice', 'hAuto', 'hAcc', 'hNoAtt', 'hLayout', 'hRespawn', 'hNoPulse', 'hTrail'])
   $(id).addEventListener('input', readHacks);
 $('hSpeedReset').onclick = () => { $('hSpeed').value = 1; readHacks(); };
 
