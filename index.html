@@ -1042,7 +1042,9 @@ function ringUse(wd, s, i) { // a jump orb: uses up the press
 // ratio of the cube's (yellow 0.93x, red only 0.75x).
 // shortcut: blue couldn't be measured (its launch is hidden behind the orb's box), so it uses yellow's 0.93x of the cube's
 // -4.437; ship pads still use the cube's values. A recording of those would settle them.
-const SHIP_RING = { y: 10.42, p: 7.37, r: 11.56, b: -4.13, g: 10.36, k: -13.53 };
+// shortcut: only yellow was re-fitted (10.42 -> 10.22) after the ship got GD's 2x-gravity "falling" rule; p r g k were fitted under
+// the old 1x rule and may be ~2% off. Re-fit them from their recordings (images 50-54) if an orb ever feels wrong.
+const SHIP_RING = { y: 10.22, p: 7.37, r: 11.56, b: -4.13, g: 10.36, k: -13.53 };
 // Pads: the index of a pad the cube's main box touches (not the one it just used), or -1.
 function padAt(wd, s, h) {
   const bx = s.x / B, bh = h / B;
@@ -1391,9 +1393,11 @@ function shipBody(wd, s, k, gs, h, dt, v, hold) {
   let ny, vy = s[VY] || 0;
   if (s.dash != null) { ny = y + (k === 1 ? -1 : 1) * s.dash * v * dt; vy = 0; }
   else {
-    // GD's playerIsFalling: "falling" until it rises faster than gravity (0.958 a frame), so lift-off gets the stronger
-    // 0.5 push and the top of a rise eases over with 0.8 (fits the recorded GD path best: 1.9 px vs 2.7 px off)
-    const falling = -vy * gs < GD_GRAV[s.speedI] * GD, v0 = vy, up = -vy * gs, capU = 8 * GD / m, capD = 6.4 * GD / m;
+    // GD's playerIsFallingBugged (2.2081 decompiles): "falling" until it rises faster than twice gravity (1.92 a frame), so
+    // lift-off keeps the stronger 0.5 push longer and a rise you let go of brakes at 0.8 below that (recorded GD path: 1.0 px
+    // off, vs 1.9 px with 1x gravity). Upside down it keeps GD's pre-2.2 bug: "falling" only while moving toward its ground
+    // faster than twice gravity, so a flipped ship pushes weaker and drops harder.
+    const up = -vy * gs, g2 = 2 * GD_GRAV[s.speedI] * GD, falling = gs > 0 ? up < g2 : up < -g2, v0 = vy, capU = 8 * GD / m, capD = 6.4 * GD / m;
     // After an orb or pad (GD's m_isAccelerating, until the speed is back inside the limits): no speed limit, and holding
     // while still rising from the boost slows it at 0.8 x (0.5 or 0.4) instead of pushing up. Letting go works as usual
     // (a recorded GD ship yellow orb rise slows at 0.4 x 1.2, as a normal let-go rise does).
