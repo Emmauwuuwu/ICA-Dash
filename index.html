@@ -1150,7 +1150,7 @@ function survives(wd, x, y, h) {
 }
 // ---------- ship ----------
 // GD's ship (PlayerObject::updateJump, decompiled in camila314/gdp), per 1/60 s frame in GD units, gravity 0.9582:
-// holding pushes up by 0.9582 x 0.5 while still falling and x 0.4 once rising; letting go pulls down by 0.9582 x 0.4 x 0.8
+// holding pushes up by 0.9582 x 0.5 while "falling" and x 0.4 once rising; letting go pulls down by 0.9582 x 0.4 x 0.8
 // while falling and x 1.2 while still rising. Speed is capped at 8 up and 6.4 down. Mini divides all of it by 0.85.
 // Like the cube it uses GD's 0.9 step scale. It slides along floors and ceilings (and slopes); hitting a side kills it.
 const SHIP_G = 0.9582 * GD * 60 * 0.9;
@@ -1159,7 +1159,9 @@ function shipBody(wd, s, k, gs, h, dt, v, hold) {
   let ny, vy = s[VY] || 0;
   if (s.dash != null) { ny = y + (k === 1 ? -1 : 1) * s.dash * v * dt; vy = 0; }
   else {
-    const falling = vy * gs > 0, v0 = vy;
+    // GD's playerIsFalling: "falling" until it rises faster than gravity (0.958 a frame), so lift-off gets the stronger
+    // 0.5 push and the top of a rise eases over with 0.8 (fits the recorded GD path best: 1.9 px vs 2.7 px off)
+    const falling = -vy * gs < GD_GRAV[s.speedI] * GD, v0 = vy;
     vy += (hold ? -gs * SHIP_G * (falling ? 0.5 : 0.4) : gs * SHIP_G * 0.4 * (falling ? 0.8 : 1.2)) / m * dt;
     vy = gs > 0 ? Math.min(6.4 * GD / m, Math.max(-8 * GD / m, vy)) : Math.max(-6.4 * GD / m, Math.min(8 * GD / m, vy));
     ny = y + (v0 + vy) / 2 * dt;
