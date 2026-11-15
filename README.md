@@ -26,7 +26,7 @@ Keybinds can be changed in Settings.
 - **Triggers** (move, rotate, fade, colour) acting on numbered groups of objects, plus **coins** to collect, **checkpoints** for practice mode, **teleport** and **gravity swap** portals and **small spikes**
 - **Level editor** laid out like Geometry Dash's: build, edit and delete modes, object tabs and pages, GD's edit buttons and shortcuts (W A S D to move, Q / E to turn, Alt+Q / Alt+E to flip, Ctrl+C / V / D, F1 / F2 for tabs, Enter to playtest), copy and paste, box select, swipe, start positions (speed, gamemode, mini, gravity, dual) to playtest from, and a playtest that leaves your route drawn in the editor. Slopes, saws, spikes, pads, orbs, portals (including cube, ship and wave), letter blocks, text and dash orbs, a fine grid and undo/redo
 - **Share codes**: copy a level's code from the editor and paste someone else's to play it
-- **Music and sound**: 20 original built-in tracks (made in the browser), sound effects, volume sliders, and Newgrounds songs by ID for your own levels. Newgrounds doesn't allow other sites to stream its songs, so, like GD, you download a song from Newgrounds once and load the file; it stays in your browser. When you open someone's level that uses a Newgrounds song you don't have, the game asks first: open it on Newgrounds, load the file, or play without it, and the online list shows each level's song. A creator can also tick "Upload the song with this level" in the editor's Song menu (only if the artist allows it): the song file is stored with the level and players get it automatically
+- **Music and sound**: 20 original built-in tracks (made in the browser), sound effects, volume sliders, and Newgrounds songs by ID for your own levels. Newgrounds doesn't allow other sites to stream its songs, so, like GD, you download a song from Newgrounds once and load the file; it stays in your browser. When you open someone's level that uses a Newgrounds song you don't have, the game asks first: open it on Newgrounds, load the file, or play without it, and the online list shows each level's song
 - **Practice tools** in a hidden menu: practice mode with checkpoints, show path, start position, hitboxes and more
 
 Progress, icons and your levels are saved in your browser.
@@ -35,7 +35,7 @@ Progress, icons and your levels are saved in your browser.
 
 Anyone can browse and play online levels, no account needed. Make an account (username + password, under Settings → Account) to upload and like levels and to keep your progress in a cloud save, which you can also encrypt with a passphrase.
 
-The online part runs on [Supabase](https://supabase.com). `supabase/schema.sql` creates the tables and the `songs` storage bucket (`supabase/songs.sql` adds just the bucket to a database set up earlier), and Row Level Security there decides who may change what, so the public key in `index.html` can't be used to edit other players' data.
+The online part runs on [Supabase](https://supabase.com). `supabase/schema.sql` creates the tables, and Row Level Security there decides who may change what, so the public key in `index.html` can't be used to edit other players' data.
 
 ## Files
 
