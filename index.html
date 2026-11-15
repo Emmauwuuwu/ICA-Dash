@@ -520,8 +520,18 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
             <input type="file" id="shipFile" accept="image/*" class="sr" tabindex="-1" aria-hidden="true">
             <div id="shipOpts"><label class="hrow"><input type="checkbox" class="sr" id="shipMirror"><span class="hchk"></span>Mirror (face the other way)</label>
             <label class="hrow"><input type="checkbox" class="sr" id="shipTint"><span class="hchk"></span>Use my colours (grey &rarr; main, white &rarr; second, black stays)</label></div>
-            <p class="note">Used in ship mode, with your cube riding in it; the hitbox stays the same. A plain white background is removed. Saved in this browser.</p>
+            <p class="note">Used in ship mode, with your cube riding in it. Size, stretch and move it below (and your cube's seat) until it looks right in the dashed hitbox; that's how it looks in game and when you share it. The hitbox stays the same. A plain white background is removed. Saved in this browser.</p>
             <p class="warn" id="shipMsg"></p>
+            <div id="shipAdj" hidden>
+              <canvas id="shipAdjView" width="300" height="200" style="width:210px;height:140px;align-self:center;background:var(--ink-2);border-radius:8px"></canvas>
+              <label class="hrow hcol"><span>Size <b class="hval" data-sadjout="s"></b></span><input type="range" data-sadj="s" min="0.3" max="2" step="0.01"></label>
+              <label class="hrow hcol"><span>Width <b class="hval" data-sadjout="x"></b></span><input type="range" data-sadj="x" min="0.3" max="2" step="0.01"></label>
+              <label class="hrow hcol"><span>Height <b class="hval" data-sadjout="y"></b></span><input type="range" data-sadj="y" min="0.3" max="2" step="0.01"></label>
+              <label class="hrow hcol"><span>Move right <b class="hval" data-sadjout="ox"></b></span><input type="range" data-sadj="ox" min="-0.75" max="0.75" step="0.01"></label>
+              <label class="hrow hcol"><span>Move down <b class="hval" data-sadjout="oy"></b></span><input type="range" data-sadj="oy" min="-0.75" max="0.75" step="0.01"></label>
+              <label class="hrow hcol"><span>Pilot cube down <b class="hval" data-sadjout="py"></b></span><input type="range" data-sadj="py" min="-0.5" max="0.5" step="0.01"></label>
+              <button class="ghost" id="shipAdjReset">Reset</button>
+            </div>
           </div>
         </div>
         <h3>Main colour · trail</h3><div class="swatches" id="c1"></div>
@@ -1296,6 +1306,10 @@ function bakeCube() {
   const c = document.createElement('canvas'); c.width = c.height = 192;
   drawCube(c.getContext('2d'), 96, 96, 0, 48 / CUBE_H, { ...icon, useCubeCustom: true }); return c.toDataURL('image/png');
 }
+function bakeShip() { // the ship picture as you've set it up, in a 3 x 3 block square around the box's centre (h = 40 px)
+  const c = document.createElement('canvas'); c.width = c.height = 240; const g = c.getContext('2d'); g.translate(120, 120);
+  drawShipPic(g, 40, icon); return c.toDataURL('image/png');
+}
 async function commDo(fn, done) {
   if (COMM.busy) return; COMM.busy = true; $('commMsg').textContent = '';
   try { const r = await fn(); if (r?.error) throw r.error; if (done) toast(done); } catch (e) { $('commMsg').textContent = e.message || String(e); }
@@ -1305,14 +1319,15 @@ $('comm').addEventListener('click', e => {
   const d = e.target.closest('button')?.dataset; if (!d) return;
   const item = id => COMM.items.find(it => it.id === id);
   if (d.cshare) {
-    const kind = d.cshare, name = $('commName').value.trim().slice(0, 24), img = kind === 'cube' && icon.cubeCustom && cubeImg.naturalWidth ? bakeCube() : icon[KIND_SLOT[kind][0]];
+    const kind = d.cshare, name = $('commName').value.trim().slice(0, 24), img = kind === 'cube' && icon.cubeCustom && cubeImg.naturalWidth ? bakeCube() : kind === 'ship' && icon.shipCustom && shipImg.naturalWidth ? bakeShip() : icon[KIND_SLOT[kind][0]];
     if (!img) return void ($('commMsg').textContent = `Upload a custom ${kind} image above first, then share it.`);
     if (!name) return void ($('commMsg').textContent = 'Give your icon a name first.');
     if (!IMG_OK.test(img) || img.length >= 120000) return void ($('commMsg').textContent = 'That image is too big to share. Upload a smaller one.');
     commDo(() => NET.sb.from('community_icons').insert({ kind, name, image: img }), `Sent "${name}" for approval`);
   } else if (d.cuse) {
     const it = item(d.cuse); if (!it) return; const [key, use, imgOf] = KIND_SLOT[it.kind];
-    icon[key] = it.image; icon[use] = true; imgOf().src = it.image; if (it.kind === 'cube') icon.cubeAdj = { s: 2 }; // shared cubes are baked 2 blocks across store.set('zd-icon', icon); renderIcons(); toast(`Using "${it.name}" as your ${it.kind}`);
+    icon[key] = it.image; icon[use] = true; imgOf().src = it.image; if (it.kind === 'cube') icon.cubeAdj = { s: 2 }; // shared cubes are baked 2 blocks across
+    if (it.kind === 'ship') { icon.shipBaked = true; delete icon.shipAdj; icon.shipMirror = icon.shipTint = false; } // shared ships are baked as they looked store.set('zd-icon', icon); renderIcons(); toast(`Using "${it.name}" as your ${it.kind}`);
   } else if (d.cok) commDo(() => NET.sb.from('community_icons').update({ status: 'approved' }).eq('id', d.cok), 'Approved: everyone can see it now');
   else if (d.cno) commDo(() => NET.sb.from('community_icons').update({ status: 'rejected' }).eq('id', d.cno), 'Rejected');
   else if (d.cdel && confirm('Remove this icon from the community list?')) commDo(() => NET.sb.from('community_icons').delete().eq('id', d.cdel), 'Removed');
@@ -2156,17 +2171,23 @@ function shipHull(g, h) {
   g.lineTo(-h * 1.06, h * 0.64); g.quadraticCurveTo(-h * 1.3, h * 0.6, -h * 1.27, h * 0.24); // keel and stern
   g.closePath();
 }
+// Custom ship picture: fitted to the box's bottom (up to 2.8 h long, 1.2 h tall), or, for a shared one (shipBaked), the
+// 6 h square it was baked into; then the player's size, width, height and position (and the pilot's height), in box sizes.
+const SHIP_ADJ = { s: 1, x: 1, y: 1, ox: 0, oy: 0, py: 0 };
+function drawShipPic(g, h, ic) {
+  const pic = shipPicture(ic), A = { ...SHIP_ADJ, ...ic.shipAdj };
+  const k = ic.shipBaked ? 6 * h / pic.width : Math.min(2.8 * h / pic.width, 1.2 * h / pic.height), w = pic.width * k * A.s * A.x, ih = pic.height * k * A.s * A.y;
+  g.save(); g.translate(A.ox * 2 * h, A.oy * 2 * h); if (ic.shipMirror) g.scale(-1, 1);
+  g.drawImage(pic, -w / 2, ic.shipBaked ? -ih / 2 : h - ih, w, ih); g.restore();
+}
 function drawShip(g, x, y, a, s, ic, flip) {
   const h = CUBE_H * s, c1 = COLORS[ic.c1], c2 = COLORS[ic.c2];
   g.save(); g.translate(x, y); g.rotate(a); if (flip) g.scale(1, -1);
   // GD's proportions inside the 1-block hitbox: a big ship (up to 1.4 blocks long, 0.6 tall) on the box's bottom, and a
   // small cube (0.55 of a block) riding in it with its top at the box's top.
-  drawCube(g, -h * 0.1, -h * 0.42, 0, s * 0.55, ic); // the pilot: your cube (or your cube picture), its bottom inside the hull
-  if (ic.useShipCustom && shipImg.naturalWidth) { // your own ship picture, fitted to the bottom of the box
-    const pic = shipPicture(ic), k = Math.min(2.8 * h / pic.width, 1.2 * h / pic.height), w = pic.width * k, ih = pic.height * k;
-    if (ic.shipMirror) g.scale(-1, 1);
-    g.drawImage(pic, -w / 2, h - ih, w, ih); g.restore(); return;
-  }
+  const custom = ic.useShipCustom && shipImg.naturalWidth, A = { ...SHIP_ADJ, ...(custom ? ic.shipAdj : null) };
+  drawCube(g, -h * 0.1, -h * 0.42 + A.py * 2 * h, 0, s * 0.55, ic); // the pilot: your cube (or your cube picture), its bottom inside the hull
+  if (custom) { drawShipPic(g, h, ic); g.restore(); return; }
   g.translate(0, h * 0.278); g.scale(0.95, 0.95); // hull: 2.65 h long, 1.2 h tall, its outline's bottom on the box's bottom
   g.lineJoin = 'round';
   shipHull(g, h); g.lineWidth = h * 0.24; g.strokeStyle = '#0c0e1c'; g.stroke(); // thick dark outline
@@ -3211,7 +3232,14 @@ function renderIcons() {
     if (!custom || hasS) drawShip(g, 80, 50, 0, 1.2, { ...icon, useShipCustom: custom });
     else { g.strokeStyle = 'rgba(233,237,247,.4)'; g.lineWidth = 4; g.setLineDash([10, 8]); g.strokeRect(30, 20, 100, 60); g.setLineDash([]); g.fillStyle = 'rgba(233,237,247,.6)'; g.fillRect(76, 30, 8, 40); g.fillRect(60, 46, 40, 8); }
   }
-  $('shipRemove').hidden = !hasS; $('shipOpts').hidden = !hasS;
+  $('shipRemove').hidden = !hasS; $('shipOpts').hidden = !hasS; $('shipAdj').hidden = !hasS;
+  if (hasS) { // the adjuster: sliders and a big preview with the 1-block hitbox dashed
+    const A = { ...SHIP_ADJ, ...icon.shipAdj }, v = $('shipAdjView').getContext('2d'), z = 2.2;
+    document.querySelectorAll('[data-sadj]').forEach(el => { el.value = A[el.dataset.sadj]; });
+    document.querySelectorAll('[data-sadjout]').forEach(el => { const k = el.dataset.sadjout, n = A[k]; el.textContent = 'xys'.includes(k) && k.length === 1 ? n.toFixed(2) + 'x' : (n > 0 ? '+' : '') + n.toFixed(2); });
+    v.clearRect(0, 0, 300, 200); drawShip(v, 150, 100, 0, z, { ...icon, useShipCustom: true });
+    v.strokeStyle = 'rgba(77,255,154,.9)'; v.lineWidth = 2; v.setLineDash([6, 5]); v.strokeRect(150 - CUBE_H * z, 100 - CUBE_H * z, CUBE_H * 2 * z, CUBE_H * 2 * z); v.setLineDash([]);
+  }
   $('shipMirror').checked = !!icon.shipMirror; $('shipTint').checked = !!icon.shipTint;
 }
 
@@ -3329,13 +3357,17 @@ $('shipTile').onclick = () => {
   icon.useShipCustom = true; store.set('zd-icon', icon); renderIcons();
 };
 $('shipRemove').onclick = () => {
-  delete icon.shipCustom; icon.useShipCustom = false; shipImg.removeAttribute('src'); store.set('zd-icon', icon); shipMsg(''); renderIcons();
+  delete icon.shipAdj; delete icon.shipBaked; delete icon.shipCustom; icon.useShipCustom = false; shipImg.removeAttribute('src'); store.set('zd-icon', icon); shipMsg(''); renderIcons();
 };
 $('shipFile').addEventListener('change', async () => {
   const { url, err } = await readIconFile($('shipFile'), 256, true); if (err) return shipMsg(err); if (!url) return;
-  icon.shipCustom = url; icon.useShipCustom = true; shipImg.src = url;
+  icon.shipCustom = url; icon.useShipCustom = true; delete icon.shipAdj; delete icon.shipBaked; shipImg.src = url;
   shipMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
 });
+document.querySelectorAll('[data-sadj]').forEach(el => el.addEventListener('input', () => {
+  icon.shipAdj = { ...SHIP_ADJ, ...icon.shipAdj, [el.dataset.sadj]: +el.value }; store.set('zd-icon', icon); renderIcons();
+}));
+$('shipAdjReset').onclick = () => { delete icon.shipAdj; store.set('zd-icon', icon); renderIcons(); };
 for (const k of ['shipMirror', 'shipTint']) $(k).onchange = e => { icon[k] = e.target.checked; store.set('zd-icon', icon); renderIcons(); };
 // A new level starts empty, like GD's: just the ground.
 $('newLevel').onclick = () => openEditor({ id: 'c' + Date.now(), name: 'Untitled level', code: 'ICA2;' });
