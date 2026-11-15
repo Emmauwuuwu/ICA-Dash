@@ -1327,7 +1327,7 @@ $('comm').addEventListener('click', e => {
   } else if (d.cuse) {
     const it = item(d.cuse); if (!it) return; const [key, use, imgOf] = KIND_SLOT[it.kind];
     icon[key] = it.image; icon[use] = true; imgOf().src = it.image; if (it.kind === 'cube') icon.cubeAdj = { s: 2 }; // shared cubes are baked 2 blocks across
-    if (it.kind === 'ship') { icon.shipBaked = true; delete icon.shipAdj; icon.shipMirror = icon.shipTint = false; } // shared ships are baked as they looked store.set('zd-icon', icon); renderIcons(); toast(`Using "${it.name}" as your ${it.kind}`);
+    if (it.kind === 'ship') { icon.shipBaked = true; delete icon.shipAdj2; icon.shipMirror = icon.shipTint = false; } // shared ships are baked as they looked store.set('zd-icon', icon); renderIcons(); toast(`Using "${it.name}" as your ${it.kind}`);
   } else if (d.cok) commDo(() => NET.sb.from('community_icons').update({ status: 'approved' }).eq('id', d.cok), 'Approved: everyone can see it now');
   else if (d.cno) commDo(() => NET.sb.from('community_icons').update({ status: 'rejected' }).eq('id', d.cno), 'Rejected');
   else if (d.cdel && confirm('Remove this icon from the community list?')) commDo(() => NET.sb.from('community_icons').delete().eq('id', d.cdel), 'Removed');
@@ -2174,45 +2174,41 @@ function shipHull(g, h) {
 // Custom ship picture: fitted to the box's bottom (up to 2.8 h long, 1.2 h tall), or, for a shared one (shipBaked), the
 // 6 h square it was baked into; then the player's size, width, height and position (and the pilot's height), in box sizes.
 const SHIP_ADJ = { s: 1, x: 1, y: 1, ox: 0, oy: 0, py: 0 };
-// Where a custom ship picture's top edge is, under the pilot (x -0.1 h, +-0.15 h), as drawn by drawShipPic; null if it's
-// see-through there. Each picture's per-column top rows are worked out once.
-let picTopsCache = { key: null, tops: null };
-function picTops(pic) {
+// The see-through-trimmed part of a picture (its content box), worked out once per picture.
+let picBoxCache = { key: null, box: null };
+function picBox(pic) {
   const key = shipImg.src.length + '|' + shipImg.src.slice(-60) + '|' + (pic === shipImg ? '' : shipTintCache.key);
-  if (picTopsCache.key === key) return picTopsCache.tops;
+  if (picBoxCache.key === key) return picBoxCache.box;
   const W = pic.width, H = pic.height, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d'); g.drawImage(pic, 0, 0); const d = g.getImageData(0, 0, W, H).data, tops = new Float32Array(W).fill(-1);
-  for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) if (d[(y * W + x) * 4 + 3] > 60) { tops[x] = y; break; }
-  picTopsCache = { key, tops }; return tops;
+  const g = c.getContext('2d'); g.drawImage(pic, 0, 0); const d = g.getImageData(0, 0, W, H).data;
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  const box = x1 < 0 ? { x: 0, y: 0, w: W, h: H } : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  picBoxCache = { key, box }; return box;
 }
-function shipSeat(ic, h) {
-  const pic = shipPicture(ic), A = { ...SHIP_ADJ, ...ic.shipAdj }, tops = picTops(pic);
-  const k = ic.shipBaked ? 6 * h / pic.width : Math.min(2.8 * h / pic.width, 1.2 * h / pic.height), w = pic.width * k * A.s * A.x, ih = pic.height * k * A.s * A.y;
-  const ox = A.ox * 2 * h, y0 = A.oy * 2 * h + (ic.shipBaked ? -ih / 2 : h - ih);
-  let top = Infinity;
-  for (let X = -0.25 * h; X <= 0.05 * h; X += h / 30) {
-    const u = ic.shipMirror ? (ox + w / 2 - X) / w : (X - ox + w / 2) / w, col = Math.floor(u * pic.width);
-    if (col < 0 || col >= pic.width || tops[col] < 0) continue;
-    top = Math.min(top, y0 + tops[col] / pic.height * ih);
-  }
-  return top === Infinity ? null : top;
-}
+// A custom ship picture placed like a GD ship sprite: GD's ships are 23-27 GD units tall (37-53 long, in its standard icon
+// sheets), drawn at their own size 5 units below the box's middle. So the picture's content is scaled to 24 units tall (at
+// most 60 long) and centred there; then your size, stretch and position. A shared one (shipBaked) is drawn as it was baked:
+// a 6 h square around the box's middle.
 function drawShipPic(g, h, ic) {
-  const pic = shipPicture(ic), A = { ...SHIP_ADJ, ...ic.shipAdj };
-  const k = ic.shipBaked ? 6 * h / pic.width : Math.min(2.8 * h / pic.width, 1.2 * h / pic.height), w = pic.width * k * A.s * A.x, ih = pic.height * k * A.s * A.y;
+  const pic = shipPicture(ic), A = { ...SHIP_ADJ, ...ic.shipAdj2 }, u = h / 15; // h is 15 GD units
   g.save(); g.translate(A.ox * 2 * h, A.oy * 2 * h); if (ic.shipMirror) g.scale(-1, 1);
-  g.drawImage(pic, -w / 2, ic.shipBaked ? -ih / 2 : h - ih, w, ih); g.restore();
+  if (ic.shipBaked) { const w = 6 * h * A.s * A.x, ih = 6 * h * A.s * A.y; g.drawImage(pic, -w / 2, -ih / 2, w, ih); }
+  else {
+    const b = picBox(pic), k = Math.min(24 * u / b.h, 60 * u / b.w) * A.s, w = b.w * k * A.x, ih = b.h * k * A.y;
+    g.drawImage(pic, b.x, b.y, b.w, b.h, -w / 2, 5 * u - ih / 2, w, ih);
+  }
+  g.restore();
 }
 function drawShip(g, x, y, a, s, ic, flip) {
   const h = CUBE_H * s, c1 = COLORS[ic.c1], c2 = COLORS[ic.c2];
   g.save(); g.translate(x, y); g.rotate(a); if (flip) g.scale(1, -1);
   // GD's proportions inside the 1-block hitbox: a big ship (up to 1.4 blocks long, 0.6 tall) on the box's bottom, and a
   // small cube (0.55 of a block) riding in it with its top at the box's top.
-  const custom = ic.useShipCustom && shipImg.naturalWidth, A = { ...SHIP_ADJ, ...(custom ? ic.shipAdj : null) };
-  // The pilot's seat: its top at the box's top, as in GD. On a custom ship too low to reach it, it drops until a quarter of
-  // it sits behind the picture's top edge (GD's cubes sit about that deep), never higher than the usual seat.
-  const seat = custom ? shipSeat(ic, h) : null;
-  drawCube(g, -h * 0.1, (seat == null ? -h * 0.42 : Math.max(-h * 0.42, seat - 0.275 * h)) + A.py * 2 * h, 0, s * 0.55, ic); // the pilot: your cube (or your cube picture), its bottom inside the hull
+  const custom = ic.useShipCustom && shipImg.naturalWidth, A = { ...SHIP_ADJ, ...(custom ? ic.shipAdj2 : null) };
+  // GD (PlayerObject::toggleFlyMode): the cube at 0.55 size, 5 GD units above the box's middle; a custom ship picture's
+  // pilot sits exactly there (the built-in hull keeps the seat it was drawn around)
+  drawCube(g, custom ? 0 : -h * 0.1, (custom ? -h / 3 : -h * 0.42) + A.py * 2 * h, 0, s * 0.55, ic);
   if (custom) { drawShipPic(g, h, ic); g.restore(); return; }
   g.translate(0, h * 0.278); g.scale(0.95, 0.95); // hull: 2.65 h long, 1.2 h tall, its outline's bottom on the box's bottom
   g.lineJoin = 'round';
@@ -3260,7 +3256,7 @@ function renderIcons() {
   }
   $('shipRemove').hidden = !hasS; $('shipOpts').hidden = !hasS; $('shipAdj').hidden = !hasS;
   if (hasS) { // the adjuster: sliders and a big preview with the 1-block hitbox dashed
-    const A = { ...SHIP_ADJ, ...icon.shipAdj }, v = $('shipAdjView').getContext('2d'), z = 2.2;
+    const A = { ...SHIP_ADJ, ...icon.shipAdj2 }, v = $('shipAdjView').getContext('2d'), z = 2.2;
     document.querySelectorAll('[data-sadj]').forEach(el => { el.value = A[el.dataset.sadj]; });
     document.querySelectorAll('[data-sadjout]').forEach(el => { const k = el.dataset.sadjout, n = A[k]; el.textContent = 'xys'.includes(k) && k.length === 1 ? n.toFixed(2) + 'x' : (n > 0 ? '+' : '') + n.toFixed(2); });
     v.clearRect(0, 0, 300, 200); drawShip(v, 150, 100, 0, z, { ...icon, useShipCustom: true });
@@ -3383,17 +3379,17 @@ $('shipTile').onclick = () => {
   icon.useShipCustom = true; store.set('zd-icon', icon); renderIcons();
 };
 $('shipRemove').onclick = () => {
-  delete icon.shipAdj; delete icon.shipBaked; delete icon.shipCustom; icon.useShipCustom = false; shipImg.removeAttribute('src'); store.set('zd-icon', icon); shipMsg(''); renderIcons();
+  delete icon.shipAdj2; delete icon.shipBaked; delete icon.shipCustom; icon.useShipCustom = false; shipImg.removeAttribute('src'); store.set('zd-icon', icon); shipMsg(''); renderIcons();
 };
 $('shipFile').addEventListener('change', async () => {
   const { url, err } = await readIconFile($('shipFile'), 256, true); if (err) return shipMsg(err); if (!url) return;
-  icon.shipCustom = url; icon.useShipCustom = true; delete icon.shipAdj; delete icon.shipBaked; shipImg.src = url;
+  icon.shipCustom = url; icon.useShipCustom = true; delete icon.shipAdj2; delete icon.shipBaked; shipImg.src = url;
   shipMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
 });
 document.querySelectorAll('[data-sadj]').forEach(el => el.addEventListener('input', () => {
-  icon.shipAdj = { ...SHIP_ADJ, ...icon.shipAdj, [el.dataset.sadj]: +el.value }; store.set('zd-icon', icon); renderIcons();
+  icon.shipAdj2 = { ...SHIP_ADJ, ...icon.shipAdj2, [el.dataset.sadj]: +el.value }; store.set('zd-icon', icon); renderIcons();
 }));
-$('shipAdjReset').onclick = () => { delete icon.shipAdj; store.set('zd-icon', icon); renderIcons(); };
+$('shipAdjReset').onclick = () => { delete icon.shipAdj2; store.set('zd-icon', icon); renderIcons(); };
 for (const k of ['shipMirror', 'shipTint']) $(k).onchange = e => { icon[k] = e.target.checked; store.set('zd-icon', icon); renderIcons(); };
 // A new level starts empty, like GD's: just the ground.
 $('newLevel').onclick = () => openEditor({ id: 'c' + Date.now(), name: 'Untitled level', code: 'ICA2;' });
