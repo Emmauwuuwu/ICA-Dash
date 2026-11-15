@@ -992,10 +992,11 @@ function cubeBody(wd, s, k, gs, h, dt, v) {
   const sy = surfaceNear(wd, s.x, ny + gs * h, h, gs, Math.abs(ny - y) + 2.5 * v * dt + 1, was ? (2.5 * v + Math.max(0, rise)) * dt + 1 : 0);
   const offTip = sy !== null && SURF_TIP === 2 && (s[LV] || 0) > 0; // carried up a slope and now past its tip: it flies off
   if (sy !== null && withG && !offTip) {
-    ny = sy - gs * h; if (s.dash == null) vy = SURF_K * v; s[SV] = SURF_K * v; gnd = true;
+    ny = sy - gs * h; if (s.dash == null) vy = SURF_K * v; s[SV] = SURF_K * v; gnd = true; if (k === 1) s.pu = null;
     if (!SURF_TIP) s[LV] = Math.max(0, -gs * SURF_K * v); // uphill speed, kept while sliding over a tip
   } else {
     if (sy !== null && !offTip) ny = sy - gs * h; // pushed up by a slope while rising
+    if (k === 1) s.pu = sy !== null && !offTip ? SURF_K * v : null; // drawing only: a pushed cube lines up with the slope instead of spinning
     s[SV] = 0;
     if (was && (s[LV] || 0) > 0 && s.dash == null) vy = -gs * (SLOPE_LAUNCH * s[LV] - GD_STEP_LOSS); // ran off a rising slope: launch
     s[LV] = 0;
@@ -1174,7 +1175,7 @@ const FX = {
 };
 function reset() {
   p = { x: 0, y: VH / 2, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
-    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0 };
+    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null };
   trail = []; trail2 = []; parts = [];
   const cp = hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
@@ -1500,11 +1501,12 @@ function draw(t, dt) {
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7; ctx.stroke();
     }
     if (alive && p.cube) { // GD's cube: turns 180° per full jump in the air (backwards upside down), squares up on the ground
-      const air = 2 * (p.mini ? CUBE_JUMP_MINI : CUBE_JUMP) / CUBE_G;
-      if (!p.gnd || p.dash != null) p.rot += (p.flip ? -1 : 1) * Math.PI / air * dt;
-      else { // on the ground: square to the surface (tilted along a slope)
-        const tilt = Math.atan((p.sv || 0) / (SPEEDS[p.speedI] * B)), q = Math.round((p.rot - tilt) / (Math.PI / 2)) * (Math.PI / 2) + tilt;
-        p.rot += (q - p.rot) * Math.min(1, dt * 30);
+      // the spin runs on game time: it stops while paused or waiting at a spawn, and slows with the speedhack
+      const air = 2 * (p.mini ? CUBE_JUMP_MINI : CUBE_JUMP) / CUBE_G, gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0;
+      if ((!p.gnd && p.pu == null) || p.dash != null) p.rot += (p.flip ? -1 : 1) * Math.PI / air * gdt; // only truly in the air
+      else { // on the ground or pushed along a slope: square to the surface (tilted along a slope)
+        const tilt = Math.atan(((p.gnd ? p.sv : p.pu) || 0) / (SPEEDS[p.speedI] * B)), q = Math.round((p.rot - tilt) / (Math.PI / 2)) * (Math.PI / 2) + tilt;
+        p.rot += (q - p.rot) * Math.min(1, gdt * 30);
       }
       const s = p.mini ? CUBE_MINI : 1;
       drawCube(ctx, p.x, p.y, p.rot, s, icon);
