@@ -1141,6 +1141,26 @@ function surfaceNear(wd, x, foot, h, gs, into, below) {
   }
   return best;
 }
+// GD's slope push (collidedWithSlopeInternal): a body at (x, y) of half-size h overlapping a slope that rises toward it (on side
+// g: 1 below it, -1 above it) goes onto the slope's surface under its centre (its low edge if the centre is before the slope),
+// however deep it was. Returns [new y, steepness] clear of every such slope, or null.
+function slopeLift(wd, x, y, h, g) {
+  let best = null;
+  for (const o of nearObjs(wd, (x - h) / B, (x + h) / B)) {
+    if (o.t !== 't' || o.o !== (g > 0 ? 1 : 2)) continue;
+    const x0 = o.x * B, x1 = (o.x + o.w) * B, y0 = o.y * B, y1 = (o.y + o.h) * B;
+    if (x + h <= x0 || x - h >= x1 || y + h <= y0 || y - h >= y1) continue;
+    const a = (Math.min(x1, Math.max(x0, x)) - x0) / (x1 - x0), k = (y1 - y0) / (x1 - x0);
+    const sy = g > 0 ? y1 - a * (y1 - y0) : y0 + a * (y1 - y0);
+    // out onto the slope, or back out past its flat side (when it's under that side): whichever is the shorter move, so it
+    // never jumps through a slope
+    const up = sy - g * h, flat = g > 0 ? y1 + h : y0 - h, under = g > 0 ? y > y1 : y < y0; // centre past the flat side
+    const c = (up - y) * g < 0 && (!under || Math.abs(up - y) <= Math.abs(flat - y)) ? [up, g > 0 ? -k : k, false]
+      : under ? [flat, 0, true] : null;
+    if (c && (best === null || Math.abs(c[0] - y) > Math.abs(best[0] - y))) best = c; // clear of all of them
+  }
+  return best;
+}
 let SURF_K = 0, SURF_TIP = 0; // what surfaceNear last picked: steepness (dy/dx, screen y down) and tip state
 // One cube body (the dual twin has the opposite gravity). Returns false if it dies.
 // On the ground the cube moves with the surface: on a slope its vertical speed is the slope's (kept in sv), and the uphill
@@ -1232,6 +1252,17 @@ function shipBody(wd, s, k, gs, h, dt, v, hold) {
       const fy = surfaceNear(wd, s.x, ny + gs * h, h, gs, reach, 0);
       if (fy !== null) { ny = fy - gs * h; if (s.dash == null && -gs * vy < -gs * SURF_K * v) vy = SURF_K * v; gnd = true; }
     }
+  }
+  // GD (collidedWithSlopeInternal) pushes a ship that runs into a slope rising toward it onto the slope, measured under its centre,
+  // however deep it got (the low tip of a slope, the top of a steep one it's lagging behind); only block sides and hazards kill.
+  for (const sg of [gs, -gs]) { // its floor side, then its ceiling side
+    const L = slopeLift(wd, s.x, ny, h, sg); if (!L) continue;
+    ny = L[0];
+    if (s.dash == null) {
+      if (L[2]) { if (vy * sg < 0) vy = 0; } // pushed back out past the slope's flat side: stops moving into it
+      else if (sg === gs) { if (-gs * vy < -gs * L[1] * v) vy = L[1] * v; gnd = true; } else if (vy * gs < 0) vy = L[1] * v;
+    }
+    break;
   }
   const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges are floor and ceiling
   if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null && vy * gs > 0) vy = 0; gnd = true; }
