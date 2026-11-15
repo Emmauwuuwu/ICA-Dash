@@ -1172,9 +1172,14 @@ function shipBody(wd, s, k, gs, h, dt, v, hold) {
   if ((ny - y) * gs >= 0) { // moving down (with gravity): land on floors and slide; stay on what it was sliding on
     const sy = surfaceNear(wd, s.x, ny + gs * h, h, gs, reach, was ? 2.5 * v * dt + 1 : 0);
     if (sy !== null) { ny = sy - gs * h; if (s.dash == null) vy = SURF_K * v; gnd = true; }
-  } else { // moving up: slide along ceilings
+  } else { // moving up: slide along ceilings; a floor it's sinking into (riding up a slope) pushes it up and carries it,
+    // unless it's already rising faster than the slope (holding lifts off)
     const sy = surfaceNear(wd, s.x, ny - gs * h, h, -gs, reach, 0);
     if (sy !== null) { ny = sy + gs * h; if (s.dash == null) vy = SURF_K * v; }
+    else {
+      const fy = surfaceNear(wd, s.x, ny + gs * h, h, gs, reach, 0);
+      if (fy !== null) { ny = fy - gs * h; if (s.dash == null && -gs * vy < -gs * SURF_K * v) vy = SURF_K * v; gnd = true; }
+    }
   }
   const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges are floor and ceiling
   if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null && vy * gs > 0) vy = 0; gnd = true; }
@@ -1676,7 +1681,8 @@ function visibleObjs(wd, a, b) { const set = new Set(); for (let c = Math.floor(
 function draw(t, dt) {
   const ed = mode === 'edit', z = ed ? edZoom : 1, k = S * z, viewW = W / k, viewH = H / k;
   const inGame = mode === 'play' || mode === 'dead' || mode === 'win' || mode === 'pause';
-  const alive = mode === 'play' || (mode === 'pause' && pausedFrom === 'play'); // icon is on screen (not mid-death)
+  const alive = mode === 'play' || (mode === 'pause' && pausedFrom === 'play'); // not mid-death
+  const seen = alive || mode === 'dead' || (mode === 'pause' && pausedFrom === 'dead'); // the icon stays where it died, frozen
   if (inGame) { camX = p.x - viewW * 0.3; camY = 0; }
   else if (ed) { camX = editCam; camY = edCamY; }
   else { camX += 150 * dt; if (camX > world.end) camX = -viewW * 0.3; camY = 0; }
@@ -1819,13 +1825,13 @@ function draw(t, dt) {
       if (alive && on && !p.cube && !p.ship && !gap) ctx.lineTo(p.x, py);
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7; ctx.stroke();
     }
-    if (alive && p.ship) { // GD's ship turns toward the way it's moving, easing 0.15 of the way per frame (updateShipRotation)
+    if (seen && p.ship) { // GD's ship turns toward the way it's moving, easing 0.15 of the way per frame (updateShipRotation)
       const v = SPEEDS[p.speedI] * B, gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0, tgt = Math.atan2(p.vy || 0, v);
       p.sa += (tgt - p.sa) * Math.min(1, gdt * 0.15 * 54);
       const s = p.mini ? CUBE_MINI : 1;
       drawShip(ctx, p.x, p.y, p.sa, s, icon, p.flip);
       if (p.dual) drawShip(ctx, p.x, p.y2, -p.sa, s, icon, !p.flip);
-    } else if (alive && p.cube) { // GD's cube: turns 180° per full jump in the air (backwards upside down), squares up on the ground
+    } else if (seen && p.cube) { // GD's cube: turns 180° per full jump in the air (backwards upside down), squares up on the ground
       // the spin runs on game time: it stops while paused or waiting at a spawn, and slows with the speedhack
       const air = 2 * (p.mini ? CUBE_JUMP_MINI : CUBE_JUMP) / CUBE_G, gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0;
       if ((!p.gnd && p.pu == null) || p.dash != null) p.rot += (p.flip ? -1 : 1) * Math.PI / air * gdt; // only truly in the air
@@ -1836,7 +1842,7 @@ function draw(t, dt) {
       const s = p.mini ? CUBE_MINI : 1;
       drawCube(ctx, p.x, p.y, p.rot, s, icon);
       if (p.dual) drawCube(ctx, p.x, p.y2, -p.rot, s, icon);
-    } else if (alive) { // two-step turn: 70% of the way on the first frame, the rest ~20 ms later
+    } else if (seen) { // two-step turn: 70% of the way on the first frame, the rest ~20 ms later
       const full = p.mini ? Math.atan(2) : Math.PI / 4, tgt = p.slid ? 0 : p.dash != null ? -Math.atan(p.dash) : p.dir * full; p.turnT += dt;
       p.ang = p.turnT < 0.02 ? p.from + (tgt - p.from) * 0.7 : tgt;
       const s = p.mini ? 0.7 : 1.1;
@@ -1871,7 +1877,7 @@ function draw(t, dt) {
     ctx.strokeStyle = '#3fd8ff'; for (const o of world.orbs) ctx.strokeRect((o.x - ORB_HIT) * B, (o.y - ORB_HIT) * B, ORB_HIT * 2 * B, ORB_HIT * 2 * B);
     for (const o of world.pads) { const [l, tp, r, b] = padBox(o); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
     ctx.strokeStyle = '#ff3355'; for (const k of spikes) { const [l, tp, r, b] = spikeBox(k); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
-    if (inGame && mode !== 'dead') {
+    if (inGame) { // also on death, so you can see what you hit
       const box = p.cube || p.ship, r = box ? cubeHalf(p) : p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
       for (const y of p.dual ? [p.y, p.y2] : [p.y]) {
         ctx.strokeRect(p.x - r, y - r, r * 2, r * 2);
