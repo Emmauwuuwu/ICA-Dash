@@ -2174,6 +2174,29 @@ function shipHull(g, h) {
 // Custom ship picture: fitted to the box's bottom (up to 2.8 h long, 1.2 h tall), or, for a shared one (shipBaked), the
 // 6 h square it was baked into; then the player's size, width, height and position (and the pilot's height), in box sizes.
 const SHIP_ADJ = { s: 1, x: 1, y: 1, ox: 0, oy: 0, py: 0 };
+// Where a custom ship picture's top edge is, under the pilot (x -0.1 h, +-0.15 h), as drawn by drawShipPic; null if it's
+// see-through there. Each picture's per-column top rows are worked out once.
+let picTopsCache = { key: null, tops: null };
+function picTops(pic) {
+  const key = shipImg.src.length + '|' + shipImg.src.slice(-60) + '|' + (pic === shipImg ? '' : shipTintCache.key);
+  if (picTopsCache.key === key) return picTopsCache.tops;
+  const W = pic.width, H = pic.height, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'); g.drawImage(pic, 0, 0); const d = g.getImageData(0, 0, W, H).data, tops = new Float32Array(W).fill(-1);
+  for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) if (d[(y * W + x) * 4 + 3] > 60) { tops[x] = y; break; }
+  picTopsCache = { key, tops }; return tops;
+}
+function shipSeat(ic, h) {
+  const pic = shipPicture(ic), A = { ...SHIP_ADJ, ...ic.shipAdj }, tops = picTops(pic);
+  const k = ic.shipBaked ? 6 * h / pic.width : Math.min(2.8 * h / pic.width, 1.2 * h / pic.height), w = pic.width * k * A.s * A.x, ih = pic.height * k * A.s * A.y;
+  const ox = A.ox * 2 * h, y0 = A.oy * 2 * h + (ic.shipBaked ? -ih / 2 : h - ih);
+  let top = Infinity;
+  for (let X = -0.25 * h; X <= 0.05 * h; X += h / 30) {
+    const u = ic.shipMirror ? (ox + w / 2 - X) / w : (X - ox + w / 2) / w, col = Math.floor(u * pic.width);
+    if (col < 0 || col >= pic.width || tops[col] < 0) continue;
+    top = Math.min(top, y0 + tops[col] / pic.height * ih);
+  }
+  return top === Infinity ? null : top;
+}
 function drawShipPic(g, h, ic) {
   const pic = shipPicture(ic), A = { ...SHIP_ADJ, ...ic.shipAdj };
   const k = ic.shipBaked ? 6 * h / pic.width : Math.min(2.8 * h / pic.width, 1.2 * h / pic.height), w = pic.width * k * A.s * A.x, ih = pic.height * k * A.s * A.y;
@@ -2186,7 +2209,8 @@ function drawShip(g, x, y, a, s, ic, flip) {
   // GD's proportions inside the 1-block hitbox: a big ship (up to 1.4 blocks long, 0.6 tall) on the box's bottom, and a
   // small cube (0.55 of a block) riding in it with its top at the box's top.
   const custom = ic.useShipCustom && shipImg.naturalWidth, A = { ...SHIP_ADJ, ...(custom ? ic.shipAdj : null) };
-  drawCube(g, -h * 0.1, -h * 0.42 + A.py * 2 * h, 0, s * 0.55, ic); // the pilot: your cube (or your cube picture), its bottom inside the hull
+  const seat = custom ? shipSeat(ic, h) : null; // a custom ship: the pilot sinks 40% into the picture's top edge under it
+  drawCube(g, -h * 0.1, (seat == null ? -h * 0.42 : seat - 0.11 * h) + A.py * 2 * h, 0, s * 0.55, ic); // the pilot: your cube (or your cube picture), its bottom inside the hull
   if (custom) { drawShipPic(g, h, ic); g.restore(); return; }
   g.translate(0, h * 0.278); g.scale(0.95, 0.95); // hull: 2.65 h long, 1.2 h tall, its outline's bottom on the box's bottom
   g.lineJoin = 'round';
