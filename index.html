@@ -1482,7 +1482,9 @@ function tick1(wd, s, hold, dt, fx, fresh) {
   };
   if (s.cube || s.ship) {
     const gs = s.flip ? -1 : 1, h = cubeHalf(s);
-    if (hold && !s.spent) { // an orb takes the press before a jump
+    // an orb takes the press before a jump. The cube may hold into an orb (a buffered click); the ship has to click while
+    // touching it, as in GD, since holding is how it flies
+    if (hold && !s.spent && (s.cube || press)) {
       const oi = orbAt(wd, s, h);
       if (oi >= 0) { if (wd.orbs[oi].t === 'd') { dashStart(wd, s, oi); s.gnd = s.gnd2 = false; } else ringUse(wd, s, oi); fx?.orb(); }
     }
@@ -1518,7 +1520,7 @@ function tick1(wd, s, hold, dt, fx, fresh) {
   if (s.cube || s.ship) return; // switched to cube or ship: it takes over next tick
   // The band's ceiling and floor: the wave slides along them, and along D blocks.
   const bt = bandTop(s) ?? 0, bb = bandBot(s), cy = Math.min(bb - r, Math.max(bt + r, s.y)), cy2 = Math.min(bb - r, Math.max(bt + r, s.y2));
-  if (hold && !s.spent) {
+  if (press && !s.spent) { // the wave has to click while touching an orb (no holding into it), as in GD
     const oi = orbAt(wd, { ...s, y: cy, y2: cy2 }, r);
     if (oi >= 0) { if (wd.orbs[oi].t === 'd') dashStart(wd, s, oi); else { orbTaken(wd, s, oi); s.flip = !s.flip; } fx?.corner(); fx?.orb(); } // a gravity orb flips the wave
   }
