@@ -157,6 +157,12 @@ input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
 .shapes canvas { width: 64%; height: auto; aspect-ratio: 1; display: block; }
 .shapes [aria-pressed=true] { background: var(--sun); color: var(--ink); }
 .custom { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; }
+.commGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin: 6px 0 12px; }
+.commTile { background: var(--ink-2); padding: 8px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; min-width: 0; }
+.commTile img { width: 56px; height: 56px; object-fit: contain; }
+.commTile small { opacity: .7; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commTile .btnrow { gap: 4px; } .commTile .btnrow button { padding: 3px 7px; font-size: 10px; }
+#comm h4 { margin: 10px 0 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
 .swatches { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
 .swatches button { aspect-ratio: 1; padding: 0; background: var(--sw); }
 .swatches button:hover { background: var(--sw); filter: brightness(1.1); }
@@ -511,6 +517,19 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
         </div>
         <h3>Main colour · trail</h3><div class="swatches" id="c1"></div>
         <h3>Outline · detail</h3><div class="swatches" id="c2"></div>
+        <h3>Community icons</h3>
+        <div id="comm">
+          <p class="note" id="commNote"></p>
+          <div id="commShare" hidden>
+            <label class="prop"><span>Name for your icon</span><input class="field" id="commName" maxlength="24" placeholder="My icon" spellcheck="false"></label>
+            <div class="btnrow"><button class="ghost" data-cshare="wave">Share my wave</button><button class="ghost" data-cshare="cube">Share my cube</button><button class="ghost" data-cshare="ship">Share my ship</button></div>
+            <p class="note">Shared icons wait for a moderator to approve them before anyone else sees them.</p>
+          </div>
+          <p class="warn" id="commMsg"></p>
+          <div id="commReview"></div>
+          <div id="commMine"></div>
+          <div id="commList"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1228,6 +1247,61 @@ function drawIcon(g, x, y, a, s, ic) {
 }
 // Visual-only easing for the icon on the Icons screen preview.
 const turn = (a, target, dt) => a + (target - a) * (1 - Math.exp(-dt * 120));
+
+// ---------- community icons ----------
+// Players share their custom wave, cube or ship image; a moderator approves it before anyone else sees it. Lives in the
+// community_icons table (supabase/icons.sql), whose Row Level Security does the gatekeeping: everyone reads approved icons,
+// you read your own, moderators read and approve or reject all. So it's on the public (Supabase) version only.
+const IMG_OK = /^data:image\/(png|webp|jpeg);base64,[A-Za-z0-9+/=]+$/;
+const KIND_SLOT = { wave: ['custom', 'useCustom', () => customImg], cube: ['cubeCustom', 'useCubeCustom', () => cubeImg], ship: ['shipCustom', 'useShipCustom', () => shipImg] };
+const KIND_NAME = { wave: 'wave', cube: 'cube', ship: 'ship' };
+const COMM = { items: [], names: {}, err: '', busy: false };
+async function loadComm() {
+  if (!(NET.ready && NET.supa && NET.sb)) return renderComm();
+  const r = await NET.sb.from('community_icons').select('id,author,kind,name,image,status,created_at').order('created_at', { ascending: false }).limit(400);
+  COMM.err = r.error ? (/community_icons/.test(r.error.message) ? 'Community icons aren’t set up on the server yet.' : r.error.message) : '';
+  COMM.items = (r.data || []).filter(it => IMG_OK.test(it.image) && KIND_SLOT[it.kind]);
+  const ids = [...new Set(COMM.items.map(it => it.author))].filter(id => !COMM.names[id]);
+  if (ids.length) { const q = await NET.sb.from('profiles').select('id,username').in('id', ids); for (const pr of q.data || []) COMM.names[pr.id] = pr.username; }
+  renderComm();
+}
+function renderComm() {
+  const on = NET.ready && NET.supa && NET.sb, signed = on && !!NET.uid;
+  $('commNote').textContent = !on ? 'Community icons are on the public version of the game (the GitHub Pages site).'
+    : COMM.err || (signed ? 'Tap an icon to use it. It goes in your custom slot for that mode.' : 'Tap an icon to use it. Sign in under Settings → Account to share your own.');
+  $('commShare').hidden = !signed || !!COMM.err;
+  const by = it => esc(COMM.names[it.author] || 'Player'), tile = (it, acts) => `<div class="commTile"><img alt="" src="${it.image}"><span>${esc(it.name)}</span><small>${KIND_NAME[it.kind]} · by ${by(it)}</small>${acts}</div>`;
+  const mod = !!NET.owner, pend = COMM.items.filter(it => it.status === 'pending'), mine = COMM.items.filter(it => it.author === NET.uid);
+  $('commReview').innerHTML = mod && pend.length ? `<h4>Waiting for your approval (${pend.length})</h4><div class="commGrid">${pend.map(it => tile(it,
+    `<div class="btnrow"><button class="primary" data-cok="${it.id}">Approve</button><button class="danger" data-cno="${it.id}">Reject</button></div>`)).join('')}</div>` : '';
+  const label = { pending: 'Waiting for approval', approved: 'Approved', rejected: 'Not approved' };
+  $('commMine').innerHTML = mine.length ? `<h4>Your shared icons</h4><div class="commGrid">${mine.map(it => tile(it,
+    `<small>${label[it.status]}</small><div class="btnrow"><button class="ghost" data-cdel="${it.id}">Remove</button></div>`)).join('')}</div>` : '';
+  const ok = COMM.items.filter(it => it.status === 'approved');
+  $('commList').innerHTML = !on || COMM.err ? '' : ['wave', 'cube', 'ship'].map(k => { const list = ok.filter(it => it.kind === k);
+    return `<h4>${KIND_NAME[k]}s</h4>` + (list.length ? `<div class="commGrid">${list.map(it => tile(it, `<div class="btnrow"><button class="ghost" data-cuse="${it.id}">Use</button>${mod ? `<button class="danger" data-cdel="${it.id}">Remove</button>` : ''}</div>`)).join('')}</div>` : '<p class="note">None yet.</p>'); }).join('');
+}
+async function commDo(fn, done) {
+  if (COMM.busy) return; COMM.busy = true; $('commMsg').textContent = '';
+  try { const r = await fn(); if (r?.error) throw r.error; if (done) toast(done); } catch (e) { $('commMsg').textContent = e.message || String(e); }
+  COMM.busy = false; loadComm();
+}
+$('comm').addEventListener('click', e => {
+  const d = e.target.closest('button')?.dataset; if (!d) return;
+  const item = id => COMM.items.find(it => it.id === id);
+  if (d.cshare) {
+    const kind = d.cshare, img = icon[KIND_SLOT[kind][0]], name = $('commName').value.trim().slice(0, 24);
+    if (!img) return void ($('commMsg').textContent = `Upload a custom ${kind} image above first, then share it.`);
+    if (!name) return void ($('commMsg').textContent = 'Give your icon a name first.');
+    if (!IMG_OK.test(img) || img.length >= 120000) return void ($('commMsg').textContent = 'That image is too big to share. Upload a smaller one.');
+    commDo(() => NET.sb.from('community_icons').insert({ kind, name, image: img }), `Sent "${name}" for approval`);
+  } else if (d.cuse) {
+    const it = item(d.cuse); if (!it) return; const [key, use, imgOf] = KIND_SLOT[it.kind];
+    icon[key] = it.image; icon[use] = true; imgOf().src = it.image; store.set('zd-icon', icon); renderIcons(); toast(`Using "${it.name}" as your ${it.kind}`);
+  } else if (d.cok) commDo(() => NET.sb.from('community_icons').update({ status: 'approved' }).eq('id', d.cok), 'Approved: everyone can see it now');
+  else if (d.cno) commDo(() => NET.sb.from('community_icons').update({ status: 'rejected' }).eq('id', d.cno), 'Rejected');
+  else if (d.cdel && confirm('Remove this icon from the community list?')) commDo(() => NET.sb.from('community_icons').delete().eq('id', d.cdel), 'Removed');
+});
 
 // ---------- game state ----------
 const worldCache = new Map(); // level code -> built world (converting a path level takes a few ms, so do it once)
@@ -2594,7 +2668,7 @@ function go(id) {
   mode = 'menu'; show(id);
   if (id === 'levels') renderBoard();
   if (id === 'create') renderCustoms();
-  if (id === 'icons') renderIcons();
+  if (id === 'icons') { renderIcons(); loadComm(); }
   if (id === 'settings') { listening = null; renderBinds(); $('hackNote').hidden = !unlocked; renderAccount(); }
   if (id === 'online') renderOnline();
   if (id === 'home') renderHome();
