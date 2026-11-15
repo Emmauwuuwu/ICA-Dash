@@ -499,7 +499,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
           <div style="display:flex;flex-direction:column;gap:8px">
             <div class="btnrow"><button id="cubeUpload">Upload cube image</button><button class="ghost" id="cubeRemove">Remove</button></div>
             <input type="file" id="cubeFile" accept="image/*" class="sr" tabindex="-1" aria-hidden="true">
-            <p class="note">Used in cube mode. It fills the cube's square and spins with it; the hitbox stays the same. Saved in this browser.</p>
+            <p class="note">Used in cube mode. It fills the cube's whole square (see-through edges are trimmed and it's stretched to square) and spins with it; the hitbox stays the same. Saved in this browser.</p>
             <p class="warn" id="cubeMsg"></p>
           </div>
         </div>
@@ -2167,13 +2167,23 @@ function drawShip(g, x, y, a, s, ic, flip) {
 }
 // Cube icon (original design): your colours, a square with an inset square and a core. Or your own cube picture, fitted
 // inside the square (the wave's custom image is a wave icon, so the cube never uses that one).
+// A cube picture fills its whole square, as GD's cube fills its 1-block hitbox: see-through margins are trimmed off and the
+// rest is stretched to square (worked out once per picture, so saved and community cubes get it too).
+let cubeFit = null;
+function cubeSquare() {
+  if (cubeFit?.src === cubeImg.src) return cubeFit.c;
+  const w = cubeImg.naturalWidth, h = cubeImg.naturalHeight, c0 = document.createElement('canvas'); c0.width = w; c0.height = h;
+  const g0 = c0.getContext('2d'); g0.drawImage(cubeImg, 0, 0); const d = g0.getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) { x0 = y0 = 0; x1 = w - 1; y1 = h - 1; }
+  const c = document.createElement('canvas'); c.width = c.height = 128; c.getContext('2d').drawImage(cubeImg, x0, y0, x1 - x0 + 1, y1 - y0 + 1, 0, 0, 128, 128);
+  cubeFit = { src: cubeImg.src, c }; return c;
+}
 function drawCube(g, x, y, a, s, ic) {
   const h = CUBE_H * s;
   g.save(); g.translate(x, y); g.rotate(a);
-  if (ic.useCubeCustom && cubeImg.naturalWidth) {
-    const k = 2 * h / Math.max(cubeImg.naturalWidth, cubeImg.naturalHeight), w = cubeImg.naturalWidth * k, ih = cubeImg.naturalHeight * k;
-    g.drawImage(cubeImg, -w / 2, -ih / 2, w, ih); g.restore(); return;
-  }
+  if (ic.useCubeCustom && cubeImg.naturalWidth) { g.drawImage(cubeSquare(), -h, -h, 2 * h, 2 * h); g.restore(); return; }
   g.fillStyle = '#0c0e1c'; g.fillRect(-h, -h, h * 2, h * 2);
   g.fillStyle = COLORS[ic.c1]; g.fillRect(-h + 3 * s, -h + 3 * s, h * 2 - 6 * s, h * 2 - 6 * s);
   g.fillStyle = '#0c0e1c'; g.fillRect(-h * 0.55, -h * 0.55, h * 1.1, h * 1.1);
