@@ -395,6 +395,18 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
             <p class="warn" id="cubeMsg"></p>
           </div>
         </div>
+        <h3>Ship</h3>
+        <div class="custom" style="grid-template-columns:minmax(0,1fr)">
+          <div class="shapes" style="grid-template-columns:136px 136px"><button id="shipTileDef"><canvas width="160" height="100"></canvas>Standard</button><button id="shipTile"><canvas width="160" height="100"></canvas>Custom</button></div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="btnrow"><button id="shipUpload">Upload ship image</button><button class="ghost" id="shipRemove">Remove</button></div>
+            <input type="file" id="shipFile" accept="image/*" class="sr" tabindex="-1" aria-hidden="true">
+            <div id="shipOpts"><label class="hrow"><input type="checkbox" class="sr" id="shipMirror"><span class="hchk"></span>Mirror (face the other way)</label>
+            <label class="hrow"><input type="checkbox" class="sr" id="shipTint"><span class="hchk"></span>Use my colours (grey &rarr; main, white &rarr; second, black stays)</label></div>
+            <p class="note">Used in ship mode, with your cube riding in it; the hitbox stays the same. A plain white background is removed. Saved in this browser.</p>
+            <p class="warn" id="shipMsg"></p>
+          </div>
+        </div>
         <h3>Main colour · trail</h3><div class="swatches" id="c1"></div>
         <h3>Outline · detail</h3><div class="swatches" id="c2"></div>
       </div>
@@ -968,6 +980,28 @@ if (icon.custom) customImg.src = icon.custom;
 const cubeImg = new Image(); // player's uploaded cube picture, same format
 cubeImg.onload = customImg.onload;
 if (icon.cubeCustom) cubeImg.src = icon.cubeCustom;
+const shipImg = new Image(); // player's uploaded ship picture
+shipImg.onload = customImg.onload;
+if (icon.shipCustom) shipImg.src = icon.shipCustom;
+let shipTintCache = { key: '', cv: null };
+// The ship picture in the player's colours: near-black stays, near-white becomes the second colour, grey becomes the main
+// colour shaded by its brightness, and coloured pixels are left alone.
+function shipPicture(ic) {
+  if (!ic.shipTint) return shipImg;
+  const key = shipImg.src.length + '|' + shipImg.src.slice(-40) + '|' + ic.c1 + '|' + ic.c2;
+  if (shipTintCache.key === key) return shipTintCache.cv;
+  const cv = document.createElement('canvas'), w = cv.width = shipImg.naturalWidth, h = cv.height = shipImg.naturalHeight, g = cv.getContext('2d');
+  g.drawImage(shipImg, 0, 0); const im = g.getImageData(0, 0, w, h), d = im.data;
+  const rgb = c => [1, 3, 5].map(i => parseInt(COLORS[c].slice(i, i + 2), 16)), m = rgb(ic.c1), sc = rgb(ic.c2);
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 8) continue;
+    const r = d[i], gg = d[i + 1], b = d[i + 2], L = (r + gg + b) / 3;
+    if (Math.max(r, gg, b) - Math.min(r, gg, b) > 40 || L < 70) continue;
+    const t = L > 225 ? sc : m, k = L > 225 ? 1 : Math.min(1.2, L / 185);
+    d[i] = Math.min(255, t[0] * k); d[i + 1] = Math.min(255, t[1] * k); d[i + 2] = Math.min(255, t[2] * k);
+  }
+  g.putImageData(im, 0, 0); shipTintCache = { key, cv }; return cv;
+}
 let keys = store.get('zd-keys', DEFAULT_KEYS);
 if (!Array.isArray(keys.climb) || typeof keys.exit !== 'string') keys = structuredClone(DEFAULT_KEYS);
 if (typeof keys.restart !== 'string') keys.restart = DEFAULT_KEYS.restart; // saved before the restart key existed
@@ -1483,6 +1517,11 @@ function drawShip(g, x, y, a, s, ic, flip) {
   const h = CUBE_H * s, c1 = COLORS[ic.c1], c2 = COLORS[ic.c2];
   g.save(); g.translate(x, y); g.rotate(a); if (flip) g.scale(1, -1);
   drawCube(g, -h * 0.08, -h * 0.3, 0, s * 0.62, ic); // the pilot: your cube (or your cube picture), half inside the hull
+  if (ic.useShipCustom && shipImg.naturalWidth) { // your own ship picture, fitted over the hull's box
+    const pic = shipPicture(ic), k = Math.min(2.6 * h / pic.width, 1.15 * h / pic.height), w = pic.width * k, ih = pic.height * k;
+    if (ic.shipMirror) g.scale(-1, 1);
+    g.drawImage(pic, -w / 2, h * 0.66 - ih, w, ih); g.restore(); return;
+  }
   g.lineJoin = 'round';
   shipHull(g, h); g.lineWidth = h * 0.24; g.strokeStyle = '#0c0e1c'; g.stroke(); // thick dark outline
   g.fillStyle = c1; g.fill();
@@ -2293,6 +2332,15 @@ function renderIcons() {
     else { g.strokeStyle = 'rgba(233,237,247,.4)'; g.lineWidth = 4; g.setLineDash([10, 8]); g.strokeRect(20, 20, 80, 80); g.setLineDash([]); g.fillStyle = 'rgba(233,237,247,.6)'; g.fillRect(56, 40, 8, 40); g.fillRect(40, 56, 40, 8); }
   }
   $('cubeRemove').hidden = !hasC;
+  const hasS = !!shipImg.naturalWidth, onS = !!icon.useShipCustom && hasS;
+  for (const [id, custom] of [['shipTileDef', false], ['shipTile', true]]) {
+    const tile = $(id), g = tile.querySelector('canvas').getContext('2d');
+    tile.setAttribute('aria-pressed', String(custom === onS)); g.clearRect(0, 0, 160, 100);
+    if (!custom || hasS) drawShip(g, 80, 50, 0, 1.2, { ...icon, useShipCustom: custom });
+    else { g.strokeStyle = 'rgba(233,237,247,.4)'; g.lineWidth = 4; g.setLineDash([10, 8]); g.strokeRect(30, 20, 100, 60); g.setLineDash([]); g.fillStyle = 'rgba(233,237,247,.6)'; g.fillRect(76, 30, 8, 40); g.fillRect(60, 46, 40, 8); }
+  }
+  $('shipRemove').hidden = !hasS; $('shipOpts').hidden = !hasS;
+  $('shipMirror').checked = !!icon.shipMirror; $('shipTint').checked = !!icon.shipTint;
 }
 
 document.addEventListener('click', e => {
@@ -2341,18 +2389,39 @@ $('customTile').onclick = () => {
 $('customRemove').onclick = () => {
   delete icon.custom; icon.useCustom = false; customImg.removeAttribute('src'); store.set('zd-icon', icon); customMsg(''); renderIcons();
 };
-// Read a picked file as a PNG data URL of at most 128 px; returns { url } or { err } with a message for the player.
-async function readIconFile(input) {
+// Read a picked file as a PNG data URL of at most `max` px; returns { url } or { err } with a message for the player.
+// clearBg makes a plain white background (white pixels joined to the edge) transparent.
+async function readIconFile(input, max = 128, clearBg = false) {
   const f = input.files[0]; input.value = '';
   if (!f) return {};
   if (!f.type.startsWith('image/')) return { err: 'That file isn\'t an image. Pick a PNG, JPG, GIF or WebP.' };
   if (f.size > 5e6) return { err: 'That image is over 5 MB. Pick a smaller one.' };
   try {
-    const bmp = await createImageBitmap(f), k = Math.min(1, 128 / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+    const bmp = await createImageBitmap(f), k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
     c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    if (clearBg) clearWhiteBg(c);
     return { url: c.toDataURL('image/png') };
   } catch (e) { return { err: 'Couldn\'t read that image. Try saving it as a PNG first.' }; }
+}
+function clearWhiteBg(c) {
+  const g = c.getContext('2d'), w = c.width, h = c.height, im = g.getImageData(0, 0, w, h), d = im.data, seen = new Uint8Array(w * h), stack = [];
+  const white = p => d[p * 4 + 3] > 0 && Math.min(d[p * 4], d[p * 4 + 1], d[p * 4 + 2]) > 225;
+  for (let x = 0; x < w; x++) stack.push(x, (h - 1) * w + x);
+  for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
+  while (stack.length) {
+    const p = stack.pop(); if (seen[p] || !white(p)) continue;
+    seen[p] = 1; d[p * 4 + 3] = 0; const x = p % w;
+    if (x > 0) stack.push(p - 1); if (x < w - 1) stack.push(p + 1); if (p >= w) stack.push(p - w); if (p < w * (h - 1)) stack.push(p + w);
+  }
+  // Grey edge pixels next to the removed background are dark outline blended with white: make them see-through dark instead.
+  for (let p = 0; p < w * h; p++) {
+    if (seen[p]) continue; const x = p % w, i = p * 4;
+    if (!((x > 0 && seen[p - 1]) || (x < w - 1 && seen[p + 1]) || (p >= w && seen[p - w]) || (p < w * (h - 1) && seen[p + w]))) continue;
+    const mn = Math.min(d[i], d[i + 1], d[i + 2]); if (Math.max(d[i], d[i + 1], d[i + 2]) - mn > 40) continue;
+    d[i + 3] = Math.round(d[i + 3] * (255 - mn) / 255); d[i] = d[i + 1] = d[i + 2] = 12;
+  }
+  g.putImageData(im, 0, 0);
 }
 const NOT_SAVED = 'Your browser wouldn\'t save the image, so it will be gone after a reload.';
 $('iconFile').addEventListener('change', async () => {
@@ -2375,6 +2444,22 @@ $('cubeFile').addEventListener('change', async () => {
   icon.cubeCustom = url; icon.useCubeCustom = true; cubeImg.src = url;
   cubeMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
 });
+const shipMsg = t => { $('shipMsg').textContent = t; };
+$('shipUpload').onclick = () => $('shipFile').click();
+$('shipTileDef').onclick = () => { icon.useShipCustom = false; store.set('zd-icon', icon); renderIcons(); };
+$('shipTile').onclick = () => {
+  if (!shipImg.naturalWidth) return $('shipFile').click();
+  icon.useShipCustom = true; store.set('zd-icon', icon); renderIcons();
+};
+$('shipRemove').onclick = () => {
+  delete icon.shipCustom; icon.useShipCustom = false; shipImg.removeAttribute('src'); store.set('zd-icon', icon); shipMsg(''); renderIcons();
+};
+$('shipFile').addEventListener('change', async () => {
+  const { url, err } = await readIconFile($('shipFile'), 256, true); if (err) return shipMsg(err); if (!url) return;
+  icon.shipCustom = url; icon.useShipCustom = true; shipImg.src = url;
+  shipMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
+});
+for (const k of ['shipMirror', 'shipTint']) $(k).onchange = e => { icon[k] = e.target.checked; store.set('zd-icon', icon); renderIcons(); };
 // A new level starts with a floor and a ceiling so there's something to build between.
 $('newLevel').onclick = () => openEditor({ id: 'c' + Date.now(), name: 'Untitled level', code: 'ICA2;r,-12,0,42,1;r,-12,9,42,1' });
 $('edDone').onclick = () => { if (editing.main) { saveMain(); go('levels'); } else { saveEditing(); go('create'); } };
@@ -2466,7 +2551,7 @@ function pushProfile(name) { // public profile: player name + icon colours, debo
 }
 function savePayload() {
   const p = { v: 1, bests, ach, stats, customs, icon: { ...icon }, coins: savedCoins };
-  for (const k of ['cubeCustom', 'custom']) if (JSON.stringify(p).length > 180000) delete p.icon[k]; // uploaded pictures are the first things dropped from a too-big save
+  for (const k of ['shipCustom', 'cubeCustom', 'custom']) if (JSON.stringify(p).length > 180000) delete p.icon[k]; // uploaded pictures are the first things dropped from a too-big save
   return p;
 }
 function cloudSave(manual) {
@@ -2503,9 +2588,11 @@ function mergeSave(s) {
   if (s.icon && !localStorage.getItem('zd-icon')) { // a device that never picked an icon takes the saved one
     const i = s.icon, png = u => typeof u === 'string' && u.startsWith('data:image/png');
     if (SHAPES[i.shape] && COLORS[i.c1] && COLORS[i.c2]) icon = { shape: i.shape, c1: i.c1, c2: i.c2, ...(png(i.custom) ? { custom: i.custom, useCustom: !!i.useCustom } : {}),
-      ...(png(i.cubeCustom) ? { cubeCustom: i.cubeCustom, useCubeCustom: !!i.useCubeCustom } : {}) };
+      ...(png(i.cubeCustom) ? { cubeCustom: i.cubeCustom, useCubeCustom: !!i.useCubeCustom } : {}),
+      ...(png(i.shipCustom) ? { shipCustom: i.shipCustom, useShipCustom: !!i.useShipCustom, shipMirror: !!i.shipMirror, shipTint: !!i.shipTint } : {}) };
     if (icon.custom) customImg.src = icon.custom;
     if (icon.cubeCustom) cubeImg.src = icon.cubeCustom;
+    if (icon.shipCustom) shipImg.src = icon.shipCustom;
   }
   store.set('zd-best', bests); store.set('zd-ach', ach); store.set('zd-stats', stats); store.set('zd-levels', customs); store.set('zd-icon', icon);
   renderHome();
