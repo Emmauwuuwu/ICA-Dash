@@ -1670,7 +1670,7 @@ const FX = {
     if (o.k === 'S') { if (p.speedI !== o.v && !calm) flash = 0.45; }
     else if (o.k === 'm') { if (!!o.v !== p.mini && !p.cube) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } }
     else if (o.k === 'w') { if (o.v && !p.dual) trail2 = p.cube ? [] : [[p.x, mirrorY(p, p.y)]]; } // second icon appears mirrored
-    else if (o.k === 'g' && o.v !== (p.cube ? 1 : p.ship ? 2 : 0)) { // only the wave leaves a trail (the ship has its exhaust)
+    else if (o.k === 'g' && o.v !== (p.cube ? 1 : p.ship ? 2 : 0)) { // only the wave leaves a trail
       if (o.v) { trail.push([p.x, p.y], null); if (p.dual) trail2.push([p.x, p.y2], null); p.rot = 0; p.sa = 0; } // into cube or ship: the trail stops here
       else { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang = 0; p.turnT = 0; p.sa = 0; } // a trail starts (or carries on)
       if (!calm) flash = 0.3;
@@ -1986,15 +1986,6 @@ function step(dt) {
     speedI = p.speedI;
     if (res === 'win') return win();
     if (res === 'dead') { if (hacks.noclip) hitFlash = 0.3; else return die(); }
-    if (p.ship && !calm && !hacks.layout && ++p.tk % 3 === 0) { // the ship's exhaust: a stream of fire particles out the back
-      const h = cubeHalf(p), m = p.mini ? 0.7 : 1;
-      for (const [y, f] of p.dual ? [[p.y, 1], [p.y2, -1]] : [[p.y, 1]]) {
-        const a = (p.sa || 0) * f, d = (p.flip === (f < 0) ? 1 : -1) * h * 0.5; // the stern: 1.2 h back, 0.5 h toward the keel
-        const cx = p.x - Math.cos(a) * h * 1.2 - Math.sin(a) * d, cy = y - Math.sin(a) * h * 1.2 + Math.cos(a) * d;
-        parts.push({ x: cx, y: cy, vx: -(80 + Math.random() * 120) * m, vy: (Math.random() - 0.5) * 70 * m, life: 0.18 + Math.random() * 0.14, sz: (8 + Math.random() * 5) * m, col: ['#fff3a8', '#ffcc1a', '#ff9f43', '#ff5a2e'][Math.random() * 4 | 0] });
-      }
-      if (parts.length > 400) parts = parts.filter(q => q.life > 0);
-    }
     // checkpoint objects: in practice mode, passing one saves a checkpoint right there
     while ((p.ci || 0) < world.cps.length && world.cps[p.ci || 0].x * B <= p.x) { p.ci = (p.ci || 0) + 1; if (hacks.practice) { checkpoints.push(stateOf(p)); SFX.checkpoint(); toast(`Checkpoint ${checkpoints.length}`); } }
     // practice: drop a checkpoint every 1.5 s, but only where there's a way to keep going for at least half a second
@@ -2033,7 +2024,7 @@ function spikePath(g, o, u) { // a spike filling its cell (a small one 0.45 tall
 }
 // Ship (drawn here, not copied from any game's art): your cube riding low in a swept hull with a curled nose and a tail fin,
 // thick dark outline, your main colour with your second colour on the keel band and fin. Upside down it's drawn flipped so
-// the cockpit faces away from gravity. The exhaust is particles (see step).
+// the cockpit faces away from gravity.
 function shipHull(g, h) {
   g.beginPath();
   g.moveTo(-h * 1.22, -h * 0.5); // tail fin tip
