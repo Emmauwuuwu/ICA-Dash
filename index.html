@@ -606,7 +606,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
 </section>
 
 <script>
-const B = 60, VH = 600, R = 7, RM = 4.5, TOP = -60 * B; // 1 block = 60 units; the screen is 10 blocks tall; R / RM = half-size of the square hitbox (normal / mini)
+const B = 60, VH = 600, R = 10, RM = 6, TOP = -60 * B; // 1 block = 60 units; the screen is 10 blocks tall; R / RM = half-size of the square hitbox (normal / mini): GD's wave is 10 x 10 GD units, mini x 0.6 (toggleDartMode)
 // --- course ---
 const SPEEDS = [8.37, 10.386, 12.91, 15.6, 19.2]; // blocks/s for 0.5x, 1x, 2x, 3x, 4x (tokens s0..s4)
 // Main levels are built from short sections that each start and end in the middle of the screen.
@@ -1821,6 +1821,7 @@ function audioCtx() {
     const C = window.AudioContext || window.webkitAudioContext; if (!C) return null;
     try { SND.ctx = new C(); } catch (e) { return null; }
     SND.music = SND.ctx.createGain(); SND.sfx = SND.ctx.createGain();
+    SND.an = SND.ctx.createAnalyser(); SND.an.fftSize = 512; SND.buf = new Float32Array(512); SND.music.connect(SND.an);
     SND.music.connect(SND.ctx.destination); SND.sfx.connect(SND.ctx.destination); applyVol();
   }
   if (SND.ctx.state === 'suspended') SND.ctx.resume().catch(() => {});
@@ -1913,6 +1914,7 @@ function songStart(level, offset) { // level: { song, bpm } ; offset: seconds in
     const have = SONGS.get(sg.n);
     if (!have) { if (songStart.warned !== sg.n) { songStart.warned = sg.n; toast(`This level uses Newgrounds song #${sg.n}. Load it in Settings → Songs to hear it.`); } return; }
     const el = new Audio(); el.src = have.url; el.preload = 'auto'; el.volume = Math.min(1, SND.vol.music); SND.el = el;
+    try { const src = c.createMediaElementSource(el); src.connect(c.destination); src.connect(SND.an); } catch (e) { /* plays, just without the pulse */ }
     const at = (sg.off || 0) + offset; const go = () => { try { el.currentTime = at; } catch (e) {} el.play().catch(() => {}); };
     if (el.readyState >= 1) go(); else el.addEventListener('loadedmetadata', go, { once: true });
     return;
@@ -1923,6 +1925,20 @@ function songStart(level, offset) { // level: { song, bpm } ; offset: seconds in
 }
 function songStop() { if (SND.sc) { SND.sc = null; SCP.w?.pause(); } if (SND.seq) { clearInterval(SND.seq); SND.seq = null; } if (SND.el) { SND.el.pause(); SND.el.removeAttribute('src'); SND.el = null; } }
 function songPause() { if (SND.sc) { SND.sc = null; SCP.w?.pause(); SND.paused = true; } if (SND.seq) { clearInterval(SND.seq); SND.seq = null; SND.paused = true; } if (SND.el) SND.el.pause(); }
+// GD's audio pulse (PlayLayer::updateVisibility): audioScale follows the music's level from 0.1 to 1, and sits at 0.5 in
+// practice mode or with no music to read. The level here is the frame's peak, jumping up at once and fading over ~0.15 s,
+// divided by the loudest recent peak so it doesn't depend on the volume slider or the song's mastering.
+// shortcut: GD reads FMOD's meter, whose exact curve isn't in the decompiles; SoundCloud songs can't be read (their player is
+// another site's), so they sit at 0.5. Tune the fade or the scaling here if the pulse looks off next to GD.
+const PULSE = { lvl: 0, max: 0.05 };
+function audioScale(dt) {
+  const playing = SND.an && (SND.seq || SND.el && !SND.el.paused);
+  if (!playing || hacks.practice || mode !== 'play') { PULSE.lvl = 0; return 0.5; }
+  SND.an.getFloatTimeDomainData(SND.buf); let pk = 0; for (const v of SND.buf) pk = Math.max(pk, Math.abs(v));
+  PULSE.max = Math.max(pk, PULSE.max * Math.exp(-dt / 8), 0.02);
+  PULSE.lvl = Math.max(pk / PULSE.max, PULSE.lvl * Math.exp(-dt / 0.15));
+  return 0.1 + 0.9 * Math.min(1, PULSE.lvl);
+}
 // Seconds from the level's start to x (game units), following its speed portals.
 function timeAt(wd, xu) {
   let t = 0, i = 1, x = 0;
@@ -2385,12 +2401,13 @@ function draw(t, dt) {
   }
   // trail + player
   if (inGame) {
+    const pulse = ((audioScale(dt) - 0.1) * 2.1 + 0.4) / 1.24; // 1 = GD's still width (audioScale 0.5)
     for (const [tr, py, on] of [[trail, p.y, true], [trail2, p.y2, p.dual]]) { // solid trail, no glow band; null breaks it (cube stretches)
       if (!tr.length) continue;
       ctx.beginPath(); let gap = true;
       for (const q of tr) { if (!q) { gap = true; continue; } if (gap) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); gap = false; }
       if (alive && on && !p.cube && !p.ship && !gap) ctx.lineTo(p.x, py);
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7; ctx.stroke();
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7 * pulse * (p.mini ? 0.6 : 1); ctx.stroke();
     }
     if (seen && p.ship) { // GD's ship turns toward the way it's moving, easing 0.15 of the way per frame (updateShipRotation)
       const v = SPEEDS[p.speedI] * B, gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0, tgt = Math.atan2(p.vy || 0, v);
@@ -2412,7 +2429,7 @@ function draw(t, dt) {
     } else if (seen) { // two-step turn: 70% of the way on the first frame, the rest ~20 ms later
       const full = p.mini ? Math.atan(2) : Math.PI / 4, tgt = p.slid ? 0 : p.dash != null ? -Math.atan(p.dash) : p.dir * full; p.turnT += dt;
       p.ang = p.turnT < 0.02 ? p.from + (tgt - p.from) * 0.7 : tgt;
-      const s = p.mini ? 0.7 : 1.1;
+      const s = p.mini ? 0.66 : 1.1; // mini is 0.6x, as GD scales it (updatePlayerScale)
       drawIcon(ctx, p.x, p.y, p.ang, s, icon);
       if (p.dual) drawIcon(ctx, p.x, p.y2, -p.ang, s, icon);
     }
