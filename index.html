@@ -177,11 +177,11 @@ input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
 /* editor, laid out like Geometry Dash's: undo / redo / delete and the menu at the top, zoom and playtest down the left, edit
    shortcuts down the right, and a bottom bar with the mode buttons, object tabs and pages of objects, and the swipe / free /
    grid toggles */
-#editor { justify-content: space-between; background: none; pointer-events: none; padding-block: calc(8px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)); }
+#editor { justify-content: space-between; background: none; pointer-events: none; padding-inline: calc(10px + env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-right, 0px)); padding-block: calc(8px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)); }
 #editor > * { pointer-events: auto; }
-#editor .edmid { pointer-events: none; flex: 1; display: flex; justify-content: space-between; align-items: center; width: min(1180px, 100%); margin-inline: auto; }
+#editor .edmid { pointer-events: none; flex: 1; display: flex; justify-content: space-between; align-items: center; width: 100%; }
 #editor .edmid > * { pointer-events: auto; }
-.edtop { display: flex; gap: 8px; align-items: center; justify-content: space-between; width: min(1180px, 100%); margin-inline: auto; }
+.edtop { display: flex; gap: 8px; align-items: center; justify-content: space-between; width: 100%; }
 .edgroup { display: flex; gap: 6px; }
 .edcount { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 12px; text-shadow: 0 1px 2px #000; color: #fff; opacity: .85; }
 .eico { clip-path: none; width: 46px; height: 46px; padding: 0; display: grid; place-items: center; font-size: 20px; font-weight: 800; background: rgba(12,14,28,.82);
@@ -191,7 +191,7 @@ input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
 .edleft, .edright { display: flex; flex-direction: column; gap: 6px; }
 .edright button { clip-path: none; min-width: 92px; padding: 8px 10px; background: rgba(12,14,28,.82); border: 2px solid var(--hair); border-radius: 10px; font-size: 12px; }
 .edright button:disabled { opacity: .35; cursor: not-allowed; }
-.edbottom { display: flex; flex-direction: column; gap: 6px; width: min(1180px, 100%); margin-inline: auto; }
+.edbottom { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 .edbar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 10px; padding: 10px; }
 .edbar::before { flex: 0 0 calc(100% + 44px); }
 .edtabs { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
@@ -199,8 +199,8 @@ input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
 .edtabs [aria-pressed=true], .edside [aria-pressed=true], .edcats [aria-selected=true], .edpane [aria-pressed=true] { background: var(--sun); color: var(--ink); }
 .edmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .edcats { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
-.edcats button { clip-path: none; flex: none; width: 40px; height: 32px; padding: 0; background: var(--ink-2); border-radius: 7px; display: grid; place-items: center; }
-.edcats canvas { width: 26px; height: 26px; pointer-events: none; }
+.edcats button { clip-path: none; flex: 1 1 0; min-width: 0; height: 38px; padding: 0 10px; background: var(--ink-2); border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; }
+.edcats canvas { width: 28px; height: 28px; flex: none; pointer-events: none; }
 .edpage { display: flex; align-items: stretch; gap: 5px; }
 .edarrow { clip-path: none; width: 30px; padding: 0; background: var(--ink-2); border-radius: 8px; font-size: 14px; }
 .edarrow:disabled { opacity: .25; cursor: default; }
@@ -559,7 +559,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
 </section>
 
 <script>
-const B = 60, VH = 600, R = 7, RM = 4.5; // 1 block = 60 units; the screen is 10 blocks tall; R / RM = half-size of the square hitbox (normal / mini)
+const B = 60, VH = 600, R = 7, RM = 4.5, TOP = -60 * B; // 1 block = 60 units; the screen is 10 blocks tall; R / RM = half-size of the square hitbox (normal / mini)
 // --- course ---
 const SPEEDS = [8.37, 10.386, 12.91, 15.6, 19.2]; // blocks/s for 0.5x, 1x, 2x, 3x, 4x (tokens s0..s4)
 // Main levels are built from short sections that each start and end in the middle of the screen.
@@ -739,7 +739,7 @@ function encodeLevel(objs) {
 // Pasted codes are untrusted: every field is checked, sizes are capped, and anything malformed is skipped.
 function decodeLevel(code) {
   const objs = [], num = s => { const v = Number(s); return Number.isFinite(v) ? v : NaN; };
-  const okPos = (x, y) => Math.abs(x) <= 1e5 && y >= -20 && y <= 30;
+  const okPos = (x, y) => Math.abs(x) <= 1e5 && y >= -60 && y <= 30;
   const grp = s => { const g = Math.round(num(s)); return g >= 1 && g <= 999 ? g : 0; };
   for (const whole of String(code).trim().split(';').slice(1)) {
     if (objs.length >= 20000) break; // keeps a huge pasted code from freezing the page
@@ -992,8 +992,8 @@ function padUse(wd, s, i, h) {
   if (k.spider) { // flip, and snap straight to the surface on the other side (or the screen edge)
     s.flip = !s.flip; const gs = s.flip ? -1 : 1;
     const sy = surfaceNear(wd, s.x, s.y + gs * h, h, gs, 0, Infinity);
-    s.y = (sy ?? (gs > 0 ? VH : 0)) - gs * h; s.vy = 0; s.gnd = true; s.dash = null;
-    if (s.dual) { s.y2 = VH - s.y; s.vy2 = 0; s.gnd2 = false; }
+    s.y = (sy ?? (gs > 0 ? bandBot(s) : bandTop(s) ?? TOP)) - gs * h; s.vy = 0; s.gnd = true; s.dash = null;
+    if (s.dual) { s.y2 = mirrorY(s, s.y); s.vy2 = 0; s.gnd2 = false; }
     return;
   }
   if (k.flip) s.flip = !s.flip;
@@ -1157,14 +1157,14 @@ function worldFor(code) { let w = worldCache.get(code); if (!w) { w = buildWorld
 let mode = 'menu', from = 'levels', cur = LEVELS[0], world = worldFor(cur.code);
 const BOOM_T = 0.5; // seconds a death shockwave lasts
 let held = false, attempt = 1, p, trail = [], trail2 = [], parts = [], booms = [], deadT = 0, shake = 0, flash = 0, hitFlash = 0, speedI = 1;
-let camX = 0, camY = 0, editCam = 0, hue = LEVELS[0].hue, baseHue = LEVELS[0].hue, editing = null, usedHacks = false, lvIndex = 0, testFrom = null;
+let camSnap = true, camX = 0, camY = 0, editCam = 0, hue = LEVELS[0].hue, baseHue = LEVELS[0].hue, editing = null, usedHacks = false, lvIndex = 0, testFrom = null;
 const inputs = []; // [timestamp, held] queued so each press lands on the exact sub-step it happened in
 
 // ---------- look-ahead simulation (safe spawns, show path, practice checkpoints, autoplay) ----------
 // simulate() runs the exact same physics as step() on a copy of the wave's state, without touching the real game.
 const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
 let checkpoints = [], spawnCache = null, plan = [];
-const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
+const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, bt: q.bt, bb: q.bb, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
   used: q.used, lastPad: q.lastPad, cube: q.cube, ship: q.ship, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2, acc: q.acc, acc2: q.acc2, ph: q.ph, ss: q.ss, ss2: q.ss2,
   t: q.t, tf: q.tf, coins: q.coins, ci: q.ci });
 // ---------- cube ----------
@@ -1296,9 +1296,11 @@ function cubeBody(wd, s, k, gs, h, dt, v) {
       else if (letterHit(wd, 'H', bx, by, bh)) { ny = cy + gs * h; if (vy * gs < 0) vy = 0; } // bumps it and falls back
     }
   }
-  const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges: floor with gravity, a ceiling against it
+  const bt = bandTop(s) ?? -Infinity, bb = bandBot(s); // the band's ceiling (none for a lone cube) and floor (the ground)
+  const floor = gs > 0 ? bb - h : bt + h, ceil = gs > 0 ? bt + h : bb - h;
   if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null) vy = 0; s[SV] = 0; s[LV] = 0; gnd = true; }
   if ((ny - ceil) * gs < 0) { ny = ceil; if (vy * gs < 0) vy = 0; }
+  if (ny < TOP) return false; // fell up out of the world
   s[Y] = ny; s[VY] = vy; s[G] = gnd;
   return survives(wd, s.x, ny, h);
 }
@@ -1380,12 +1382,23 @@ function shipBody(wd, s, k, gs, h, dt, v, hold) {
     vy = SHIP_SLOPE_EXIT * s[SS]; s[ACC2] = !!hold; // (one that flew off faster on its own, or onto flat ground, just carries on)
   }
   s[SS] = carried;
-  const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges are floor and ceiling
+  const bt = bandTop(s) ?? 0, bb = bandBot(s), floor = gs > 0 ? bb - h : bt + h, ceil = gs > 0 ? bt + h : bb - h; // the band's floor and ceiling
   if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null && vy * gs > 0) vy = 0; gnd = true; }
   if ((ny - ceil) * gs <= 0) { ny = ceil; if (s.dash == null && vy * gs < 0) vy = 0; }
   s[Y] = ny; s[VY] = vy; s[G] = gnd;
   return survives(wd, s.x, ny, h);
 }
+// GD's floors and ceilings (official wiki, Portals): the ground (y = VH) is always there. The cube has no ceiling. The ship and
+// the wave fly in a band 10 blocks tall with a floor and a ceiling, lined up on the portal that made them, never below the
+// ground; a dual cube gets a 9-block band. s.bt / s.bb are that band's ceiling and floor (bt null: no ceiling).
+// shortcut: GD's exact rounding of the band to the portal isn't documented; it's centred on the portal, rounded to whole blocks.
+function setBand(s, cy) {
+  if (s.cube && !s.dual) { s.bt = null; s.bb = VH; return; }
+  const h = (s.cube ? 9 : 10) * B, bb = Math.min(VH, Math.round((cy + h / 2) / B) * B);
+  s.bt = bb - h; s.bb = bb;
+}
+const bandTop = s => s.bt === undefined ? 0 : s.bt, bandBot = s => s.bb === undefined ? VH : s.bb;
+const mirrorY = (s, y) => (bandTop(s) ?? 0) + bandBot(s) - y; // the dual twin's height: mirrored in the band
 // Portals change the state; fx (the real game only) adds the effects first.
 function portalState(s, o) {
   if (o.k === 'S') s.speedI = o.v;
@@ -1398,13 +1411,19 @@ function portalState(s, o) {
     const d = teleportShift(s.wd, o); if (!d) return;
     s.y += d; s.y2 -= d; if (s.cube || s.ship) { s.gnd = s.gnd2 = false; s.sv = s.sv2 = s.lv = s.lv2 = 0; }
   }
-  else if (o.k === 'w') { if (o.v && !s.dual) { s.y2 = VH - s.y; s.vy2 = -(s.vy || 0); s.gnd2 = false; } s.dual = !!o.v; }
+  else if (o.k === 'w') {
+    const was = s.dual; s.dual = !!o.v;
+    if (s.cube && s.dual !== was) setBand(s, (o.y + o.h / 2) * B); // a dual cube gets a 9-block band; leaving dual removes it
+    if (o.v && !was) { s.y2 = mirrorY(s, s.y); s.vy2 = -(s.vy || 0); s.gnd2 = false; }
+  }
   else if (o.k === 'g') { // gamemode: v 0 wave, 1 cube, 2 ship
     if (o.v && !s.cube && !s.ship) { // from the wave: keeps half of the wave's vertical speed
       const v = SPEEDS[s.speedI] * B, dy = s.dash != null ? -s.dash * v : s.dir * v * (s.mini ? 2 : 1);
       s.vy = dy / 2; s.vy2 = -dy / 2; s.gnd = s.gnd2 = false;
     } else if (o.v === 2 && s.cube) { s.vy = (s.vy || 0) / 2; s.vy2 = (s.vy2 || 0) / 2; s.gnd = s.gnd2 = false; } // cube -> ship: half its speed
+    const same = (o.v === 1) === !!s.cube && (o.v === 2) === !!s.ship;
     s.cube = o.v === 1; s.ship = o.v === 2;
+    if (!same || !s.cube) setBand(s, (o.y + o.h / 2) * B); // a ship or wave portal (even of the same form) lines the band up on itself
   }
 }
 // How far (game units, down positive) a teleport entrance moves you: to the exit nearest it along the level. 0 if none.
@@ -1482,8 +1501,8 @@ function tick1(wd, s, hold, dt, fx, fresh) {
   // Portals apply after the move and before collisions, so a wave never spends a step in a corridor that just closed.
   portals();
   if (s.cube || s.ship) return; // switched to cube or ship: it takes over next tick
-  // The top and bottom of the screen act as ceiling and floor: the wave slides along them, and along D blocks.
-  const cy = Math.min(VH - r, Math.max(r, s.y)), cy2 = Math.min(VH - r, Math.max(r, s.y2));
+  // The band's ceiling and floor: the wave slides along them, and along D blocks.
+  const bt = bandTop(s) ?? 0, bb = bandBot(s), cy = Math.min(bb - r, Math.max(bt + r, s.y)), cy2 = Math.min(bb - r, Math.max(bt + r, s.y2));
   if (hold && !s.spent) {
     const oi = orbAt(wd, { ...s, y: cy, y2: cy2 }, r);
     if (oi >= 0) { if (wd.orbs[oi].t === 'd') dashStart(wd, s, oi); else { orbTaken(wd, s, oi); s.flip = !s.flip; } fx?.corner(); fx?.orb(); } // a gravity orb flips the wave
@@ -1531,7 +1550,7 @@ function survival(s, hold, cap = 192) {
 }
 // Middles of the open gaps at x, with every portal before x applied.
 function gapMiddles(x) {
-  const base = { x, y: VH / 2, y2: VH / 2, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0 };
+  const base = { x, y: VH / 2, y2: VH / 2, bt: 0, bb: VH, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0 };
   while (base.pi < world.portals.length && world.portals[base.pi].x * B <= x) portalState(base, world.portals[base.pi++]);
   if (base.cube) return []; // a cube spawn comes from the real route instead (a cube in mid-gap would just fall)
   const r = base.mini ? RM : R, out = [];
@@ -1548,7 +1567,7 @@ function gapMiddles(x) {
 // lasts longest (a mid-level spawn waits for your first press, so the run always begins with a hold), nearest to where you asked
 // to start, and with a way to keep going.
 function spawnState(x) {
-  const start = { x: 0, y: VH / 2, y2: VH / 2, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0 }, cands = [];
+  const start = { x: 0, y: VH / 2, y2: VH / 2, bt: 0, bb: VH, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0 }, cands = [];
   const route = findPath(world, start, Infinity, 300000, false, x);
   if (route) { let s = start; for (const h of route) { s = simulate(world, s, h, K_DEC); if (!s) break; if (s.x >= x - 4 * B) cands.push(s); } }
   for (let cx = x - 4 * B; cx <= x + 1; cx += B / 2) cands.push(...gapMiddles(cx));
@@ -1574,7 +1593,7 @@ const FX = {
     if (o.k === 'T' && !o.v && !p.cube) { const d = teleportShift(world, o); if (d) { trail.push([p.x, p.y], null, [p.x, p.y + d]); if (p.dual) trail2.push([p.x, p.y2], null, [p.x, p.y2 - d]); } }
     if (o.k === 'S') { if (p.speedI !== o.v && !calm) flash = 0.45; }
     else if (o.k === 'm') { if (!!o.v !== p.mini && !p.cube) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } }
-    else if (o.k === 'w') { if (o.v && !p.dual) trail2 = p.cube ? [] : [[p.x, VH - p.y]]; } // second icon appears mirrored
+    else if (o.k === 'w') { if (o.v && !p.dual) trail2 = p.cube ? [] : [[p.x, mirrorY(p, p.y)]]; } // second icon appears mirrored
     else if (o.k === 'g' && o.v !== (p.cube ? 1 : p.ship ? 2 : 0)) { // only the wave leaves a trail (the ship has its exhaust)
       if (o.v) { trail.push([p.x, p.y], null); if (p.dual) trail2.push([p.x, p.y2], null); p.rot = 0; p.sa = 0; } // into cube or ship: the trail stops here
       else { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang = 0; p.turnT = 0; p.sa = 0; } // a trail starts (or carries on)
@@ -1583,9 +1602,9 @@ const FX = {
   },
 };
 function reset() {
-  p = { x: 0, y: VH / 2, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
+  p = { x: 0, y: VH / 2, bt: 0, bb: VH, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
     dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 };
-  trail = []; trail2 = []; parts = []; booms = [];
+  trail = []; trail2 = []; parts = []; booms = []; camSnap = true;
   const cp =hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
   // an editor playtest starts at the rightmost start position that's on (unless you chose "playtest from here")
@@ -1605,8 +1624,9 @@ function reset() {
 // The state a start position sets: its place, speed, gamemode, size, gravity and dual; portals behind it are skipped.
 function startPosState(o) {
   const x = (o.x + 0.5) * B, y = (o.y + 0.5) * B, f = o.f || 0;
-  return { x, y, y2: VH - y, dir: 1, speedI: o.sp, mini: !!(f & 1), flip: !!(f & 2), dual: !!(f & 4), cube: o.m === 1, ship: o.m === 2,
+  const s = { x, y, dir: 1, speedI: o.sp, mini: !!(f & 1), flip: !!(f & 2), dual: !!(f & 4), cube: o.m === 1, ship: o.m === 2,
     pi: world.portals.filter(q => q.x * B <= x).length, vy: 0, vy2: 0, gnd: false, gnd2: false, dash: null };
+  setBand(s, y); s.y2 = mirrorY(s, y); return s; // its band lines up on it, like a portal's
 }
 function show(id) { document.querySelectorAll('.screen').forEach(s => s.hidden = s.id !== id); }
 
@@ -1935,7 +1955,15 @@ function draw(t, dt) {
   const inGame = mode === 'play' || mode === 'dead' || mode === 'win' || mode === 'pause';
   const alive = mode === 'play' || (mode === 'pause' && pausedFrom === 'play'); // not mid-death
   const seen = alive || mode === 'dead' || (mode === 'pause' && pausedFrom === 'dead'); // the icon stays where it died, frozen
-  if (inGame) { camX = p.x - viewW * 0.3; camY = 0; }
+  if (inGame) { // GD: a band (ship, wave, dual) fills the screen; a lone cube is followed up and down, never showing below the ground
+    camX = p.x - viewW * 0.3;
+    const bt = bandTop(p);
+    let ty = camY;
+    if (bt !== null) ty = (bt + bandBot(p)) / 2 - viewH / 2;
+    else { if (p.y < ty + viewH * 0.3) ty = p.y - viewH * 0.3; if (p.y > ty + viewH * 0.62) ty = p.y - viewH * 0.62; }
+    ty = Math.min(ty, VH - viewH);
+    camY = camSnap ? ty : camY + (ty - camY) * Math.min(1, dt * 6); camSnap = false;
+  }
   else if (ed) { camX = editCam; camY = edCamY; }
   else { camX += 150 * dt; if (camX > world.end) camX = -viewW * 0.3; camY = 0; }
   const target = inGame ? triggerHue(world, p, baseHue) + (speedI - 1) * 35 : baseHue; // colour triggers shift the hue
@@ -1965,8 +1993,8 @@ function draw(t, dt) {
     ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.stroke();
     ctx.beginPath(); for (let x = Math.floor(camX / B / 5) * 5 * B; x < x1; x += 5 * B) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
     ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.stroke();
-    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x0, y0, x1 - x0, -y0); ctx.fillRect(x0, VH, x1 - x0, y1 - VH);
-    ctx.strokeStyle = 'rgba(255,204,26,.5)'; ctx.lineWidth = 2 / z; ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x1, 0); ctx.moveTo(x0, VH); ctx.lineTo(x1, VH); ctx.stroke();
+    if (y1 > VH) { ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(x0, VH, x1 - x0, y1 - VH); } // the ground (no ceiling: GD levels have none)
+    ctx.strokeStyle = 'rgba(255,204,26,.6)'; ctx.lineWidth = 2 / z; ctx.beginPath(); ctx.moveTo(x0, VH); ctx.lineTo(x1, VH); ctx.stroke();
   }
 
   // solids: bright outline drawn first, then the fill covers its inner half and every seam between neighbouring pieces,
@@ -1997,9 +2025,15 @@ function draw(t, dt) {
     for (const o of solids) { ctx.beginPath(); addSolid(ctx, o, B); ctx.stroke(); }
   }
 
+  if (!ed) { // the ground, and the band's ceiling and raised floor (only seen when they're on screen)
+    const gx0 = camX - 20, gw = viewW + 40, edge = layout ? '#5a6080' : `hsl(${hue},100%,72%)`, fill = layout ? '#0d0f1c' : `hsl(${hue},60%,9%)`;
+    const bar = (yy, down) => { ctx.fillStyle = fill; ctx.fillRect(gx0, down ? yy : yy - 40 * B, gw, 40 * B); ctx.fillStyle = edge; ctx.fillRect(gx0, yy - 1.5, gw, 3); };
+    if (camY + viewH > VH - 1) bar(VH, true);
+    if (inGame) { const bt = bandTop(p), bb = bandBot(p); if (bt !== null && bt > camY - 2) bar(bt, false); if (bb < VH && bb < camY + viewH + 2) bar(bb, true); }
+  }
   // finish gate
   if (world.end > camX - 40 && world.end < camX + viewW + 40) {
-    for (let y = 0; y < VH; y += 30) { ctx.fillStyle = (y / 30) % 2 ? '#fff' : `hsl(${hue},80%,20%)`; ctx.fillRect(world.end - 8, y, 16, 30); }
+    for (let y = Math.floor(camY / 30) * 30; y < Math.min(VH, camY + viewH); y += 30) { ctx.fillStyle = (y / 30) % 2 ? '#fff' : `hsl(${hue},80%,20%)`; ctx.fillRect(world.end - 8, y, 16, 30); }
   }
   if (spikes.length) { // spikes: wall-coloured with the same bright edge as the walls
     ctx.beginPath(); for (const k of spikes) spikePath(ctx, k, B);
@@ -2348,10 +2382,10 @@ const HELP = {
   all: 'Mouse wheel scrolls up and down, Shift+wheel left and right, Ctrl+wheel zooms · 1 / 2 / 3 Build, Edit, Delete · Enter playtests · Ctrl+Z / Ctrl+Shift+Z undo and redo · Esc this menu',
 };
 // Build tabs, like GD's object tabs (anything not listed lands in the last one).
-const ED_CATS = [['Blocks', ['block', 'half']], ['Slopes', ['slope', 'steep']], ['Hazards', ['spike', 'spikeS', 'saw']],
-  ['Orbs', ['ringy', 'ringp', 'ringr', 'ringb', 'ringg', 'ringk', 'dash0', 'dash1']], ['Pads', ['pady', 'padp', 'padr', 'padb', 'pads']],
-  ['Portals', ['start', 'g1', 'g0', 'g2', 'v1', 'v0', 'v2', 'm1', 'm0', 'w1', 'w0', 'T0', 'T1', 'spd0', 'spd1', 'spd2', 'spd3', 'spd4']],
-  ['Collectibles', ['coin', 'cp']], ['Triggers', ['trm', 'trr', 'trf', 'trc']], ['Special', ['LD', 'LJ', 'LS', 'LH', 'LF', 'text']]];
+const ED_CATS = [['Blocks', ['block', 'half', 'slope', 'steep', 'spike', 'spikeS', 'saw']],
+  ['Gameplay', ['start', 'g1', 'g0', 'g2', 'spd0', 'spd1', 'spd2', 'spd3', 'spd4', 'v1', 'v0', 'v2', 'm1', 'm0', 'w1', 'w0', 'T0', 'T1',
+    'pady', 'padp', 'padr', 'padb', 'pads', 'ringy', 'ringp', 'ringr', 'ringb', 'ringg', 'ringk', 'dash0', 'dash1']],
+  ['Special', ['coin', 'cp', 'trm', 'trr', 'trf', 'trc', 'LD', 'LJ', 'LS', 'LH', 'LF', 'text']]];
 for (const q of PALETTE) if (!ED_CATS.some(([, ids]) => ids.includes(q.id))) ED_CATS[ED_CATS.length - 1][1].push(q.id);
 // Edit tab buttons, as in GD's edit pages: moves by a block, half a block, a small step (2 GD units) and 5 blocks, turns and flips.
 const ED_ACTS = [['up', 'Up'], ['down', 'Down'], ['left', 'Left'], ['right', 'Right'], ['upH', 'Up ½'], ['downH', 'Down ½'], ['leftH', 'Left ½'], ['rightH', 'Right ½'],
@@ -2368,7 +2402,7 @@ function toBlocks(e) { const r = cv.getBoundingClientRect(), k = S * edZoom; ret
 function clampEd() {
   const k = S * edZoom, viewW = W / k, viewH = H / k;
   editCam = Math.min(Math.max(-15 * B, editCam), Math.max(-15 * B, world.end + 5 * B - viewW * 0.5));
-  edCamY = viewH >= VH + 2 * B ? (VH - viewH) / 2 : Math.min(Math.max(-B, edCamY), VH + B - viewH);
+  edCamY = Math.min(Math.max(TOP - B, edCamY), VH + 3 * B - viewH); // up to the top of the world, down to just below the ground
 }
 function zoomBy(f, sx = W / 2, sy = H / 2) { // keeps the point under (sx, sy) in place
   const k0 = S * edZoom, wx = editCam + sx / k0, wy = edCamY + sy / k0;
@@ -2481,8 +2515,9 @@ function renderPane() {
   let items = [], per = 1, html = '';
   if (edTool === 'build') {
     if (!cats.childElementCount) { // the tab icons: the first object of each tab
-      cats.innerHTML = ED_CATS.map(([name], i) => `<button role="tab" data-cat="${i}" title="${name} (F1 / F2)" aria-label="${name}"><canvas width="52" height="52"></canvas></button>`).join('');
-      cats.querySelectorAll('canvas').forEach((c, i) => drawPaletteIcon(c, PALETTE.find(q => q.id === ED_CATS[i][1][0])));
+      const iconOf = ['block', 'g2', 'trm'];
+      cats.innerHTML = ED_CATS.map(([name], i) => `<button role="tab" data-cat="${i}" title="${name} (F1 / F2)"><canvas width="56" height="56"></canvas>${name}</button>`).join('');
+      cats.querySelectorAll('canvas').forEach((c, i) => drawPaletteIcon(c, PALETTE.find(q => q.id === (iconOf[i] || ED_CATS[i][1][0]))));
     }
     cats.querySelectorAll('[data-cat]').forEach(b => b.setAttribute('aria-selected', String(+b.dataset.cat === edCat)));
     items = ED_CATS[edCat][1].map(id => PALETTE.find(q => q.id === id)).filter(Boolean);
@@ -2574,7 +2609,7 @@ function updateEdInfo() {
 }
 function openEditor(l) {
   editing = l; edObjs = levelObjects(l.code); sel = new Set(); undoS = []; redoS = []; edTool = 'build'; clearArmed = false;
-  edZoom = 1; edCamY = 0; editCam = -3 * B; testFrom = null;
+  edZoom = 1; edCamY = VH - 0.68 * (H / S); editCam = -3 * B; testFrom = null; // the ground just above the bottom bar, room above
   $('lvName').value = l.name; $('lvName').readOnly = !!l.main; $('edReset').hidden = !l.main; // main levels keep their names
   $('codeMsg').textContent = '';
   resumeEditor();
@@ -2875,8 +2910,8 @@ $('shipFile').addEventListener('change', async () => {
   shipMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
 });
 for (const k of ['shipMirror', 'shipTint']) $(k).onchange = e => { icon[k] = e.target.checked; store.set('zd-icon', icon); renderIcons(); };
-// A new level starts with a floor and a ceiling so there's something to build between.
-$('newLevel').onclick = () => openEditor({ id: 'c' + Date.now(), name: 'Untitled level', code: 'ICA2;r,-12,0,42,1;r,-12,9,42,1' });
+// A new level starts empty, like GD's: just the ground.
+$('newLevel').onclick = () => openEditor({ id: 'c' + Date.now(), name: 'Untitled level', code: 'ICA2;' });
 $('edDone').onclick = () => { if (editing.main) { saveMain(); go('levels'); } else { saveEditing(); go('create'); } };
 $('edReset').onclick = () => {
   const before = JSON.stringify(edObjs); edObjs = levelObjects(LEVELS.find(l => l.id === editing.id).orig);
