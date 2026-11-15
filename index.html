@@ -861,11 +861,13 @@ function launch(s, v) {
 function ringUse(wd, s, i) { // a jump orb: uses up the press
   const o = wd.orbs[i], k = RING[o.c]; orbTaken(wd, s, i);
   if (k.flip) s.flip = !s.flip;
-  launch(s, k.v * (s.ship ? SHIP_ORB : 1));
+  launch(s, s.ship ? SHIP_RING[o.c] : k.v);
 }
-// The ship takes orbs at 0.93x the cube's launch: a recorded GD ship yellow orb launched at 10.40 (cube 11.18).
-// shortcut: only the yellow orb was measured on the ship; the others assume the same ratio. Ship pads still use the cube's.
-const SHIP_ORB = 10.40 / JMP;
+// The ship's own orb launches (GD units per frame, away from the ground), measured from recorded GD ship paths: not one
+// ratio of the cube's (yellow 0.93x, red only 0.75x).
+// shortcut: blue couldn't be measured (its launch is hidden behind the orb's box), so it uses yellow's 0.93x of the cube's
+// -4.437; ship pads still use the cube's values. A recording of those would settle them.
+const SHIP_RING = { y: 10.42, p: 7.37, r: 11.56, b: -4.13, g: 10.36, k: -13.53 };
 // Pads: the index of a pad the cube's main box touches (not the one it just used), or -1.
 function padAt(wd, s, h) {
   const bx = s.x / B, bh = h / B;
