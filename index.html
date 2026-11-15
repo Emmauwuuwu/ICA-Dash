@@ -2440,9 +2440,13 @@ function draw(t, dt) {
       const s = p.mini ? CUBE_MINI : 1;
       drawCube(ctx, p.x, p.y, p.rot, s, icon);
       if (p.dual) drawCube(ctx, p.x, p.y2, -p.rot, s, icon);
-    } else if (seen) { // two-step turn: 70% of the way on the first frame, the rest ~20 ms later
-      const full = p.mini ? Math.atan(2) : Math.PI / 4, tgt = p.slid ? 0 : p.dash != null ? -Math.atan(p.dash) : p.dir * full; p.turnT += dt;
-      p.ang = p.turnT < 0.02 ? p.from + (tgt - p.from) * 0.7 : tgt;
+    } else if (seen) {
+      // GD's wave tilt (updateShipRotation): eases toward the way it's moving, 0.25 of the way per GD frame (mini 0.4), run each
+      // 240 Hz step (0.225 GD frames), so it swings over in ~0.1 s. Sliding on a floor or ceiling it eases to flat at 1/4 the
+      // rate; dashing it doesn't ease (GD skips it), it points along the dash.
+      const full = p.mini ? Math.atan(2) : Math.PI / 4, tgt = p.slid ? 0 : p.dash != null ? -Math.atan(p.dash) : p.dir * full;
+      const gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0, k = (p.mini ? 0.4 : 0.25) * (p.slid ? 0.25 : 1);
+      p.ang = p.dash != null ? tgt : tgt + (p.ang - tgt) * Math.exp(gdt * 240 * Math.log(1 - k * 0.225));
       const s = WAVE_S * (p.mini ? 0.6 : 1); // mini is 0.6x, as GD scales it (updatePlayerScale)
       drawIcon(ctx, p.x, p.y, p.ang, s, icon);
       if (p.dual) drawIcon(ctx, p.x, p.y2, -p.ang, s, icon);
