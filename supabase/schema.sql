@@ -87,3 +87,21 @@ create view public.level_list with (security_invoker = true) as
   select l.id, l.name, l.code, l.created_at, l.author, p.username, p.icon,
          (select count(*) from public.likes k where k.level_id = l.id) as likes
   from public.levels l join public.profiles p on p.id = l.author;
+
+
+-- Song files that come with uploaded levels (also in songs.sql, for databases set up before it existed).
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('songs', 'songs', true, 15728640,
+        array['audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/webm'])
+on conflict (id) do nothing;
+
+create policy "songs are public" on storage.objects for select using (bucket_id = 'songs');
+create policy "upload songs to your own folder" on storage.objects for insert to authenticated
+  with check (bucket_id = 'songs' and (storage.foldername(name))[1] = auth.uid()::text
+    and (select count(*) from storage.objects o where o.bucket_id = 'songs' and (storage.foldername(o.name))[1] = auth.uid()::text) < 25);
+create policy "replace your own songs" on storage.objects for update to authenticated
+  using (bucket_id = 'songs' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'songs' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "delete own songs or moderate" on storage.objects for delete to authenticated
+  using (bucket_id = 'songs' and ((storage.foldername(name))[1] = auth.uid()::text
+    or exists (select 1 from public.admins a where a.user_id = auth.uid())));

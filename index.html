@@ -436,6 +436,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
       <label class="prop" id="songIdBox"><span>Newgrounds ID</span><input class="field" type="number" id="songId" min="1" step="1"></label>
       <span id="songNgBox" class="btnrow"><a class="ghost btnlink" id="songPage" target="_blank" rel="noopener">Open on Newgrounds</a><button class="ghost" id="songLoad">Load song file</button></span>
       <input type="file" id="songFile" accept="audio/*,.mp3,.ogg,.wav,.m4a" class="sr" tabindex="-1" aria-hidden="true">
+      <label class="hrow" id="songShareRow"><input type="checkbox" class="sr" id="songShare"><span class="hchk"></span><span>Upload the song with this level so players get it automatically. <small>Only if the artist allows it, e.g. a Creative Commons licence on its Newgrounds page.</small></span></label>
       <label class="prop"><span>Start at (s)</span><input class="field" type="number" id="songOff" min="0" step="0.1"></label>
       <button class="ghost" id="songTest">▶ Listen</button>
     </div>
@@ -786,7 +787,7 @@ function encodeLevel(objs) {
     : o.t === 's' ? `s,${n(o.x)},${n(o.y)}` : o.t === 'd' ? `d,${n(o.x)},${n(o.y)},${o.a},${o.f}${o.m ? ',1' : ''}` : o.t === 'k' ? `k,${n(o.x)},${n(o.y)},${o.o}${o.z ? ',1' : ''}`
     : o.t === 'q' ? `q,${n(o.x)},${n(o.y)},${o.c}${o.m ? ',1' : ''}` : o.t === 'j' ? `j,${n(o.x)},${n(o.y)},${o.o},${o.c}`
     : o.t === 'c' || o.t === 'h' ? `${o.t},${n(o.x)},${n(o.y)}` : o.t === 'x' ? `x,${n(o.x)},${n(o.y)},${o.k},${o.g},${n(o.dur)},${n(o.a)},${n(o.b || 0)}`
-    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : o.t === 'a' ? `a,${n(o.x)},${n(o.y)},${n(o.s)},${encodeURIComponent(o.txt)}` : o.t === 'P' ? `P,${n(o.x)},${n(o.y)},${o.sp},${o.m},${o.f}` : o.t === 'M' ? `M,${o.k},${o.n},${n(o.off || 0)}` : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
+    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : o.t === 'a' ? `a,${n(o.x)},${n(o.y)},${n(o.s)},${encodeURIComponent(o.txt)}` : o.t === 'P' ? `P,${n(o.x)},${n(o.y)},${o.sp},${o.m},${o.f}` : o.t === 'M' ? `M,${o.k},${o.n},${n(o.off || 0)}${o.k && o.s ? ',1' : ''}` : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
 }
 // Pasted codes are untrusted: every field is checked, sizes are capped, and anything malformed is skipped.
 function decodeLevel(code) {
@@ -818,7 +819,7 @@ function decodeLevel(code) {
     else if (t === 'M') { // the song: one per level (the last one wins)
       const k = a === 1 ? 1 : 0, nn = Math.max(1, Math.min(k ? 1e8 : SONG_COUNT, Math.round(b) || 1));
       for (let i = objs.length - 1; i >= 0; i--) if (objs[i].t === 'M') objs.splice(i, 1);
-      objs.push({ t, k, n: nn, off: Math.max(0, Math.min(600, c || 0)) });
+      objs.push({ t, k, n: nn, off: Math.max(0, Math.min(600, c || 0)), ...(k && f[4] === '1' ? { s: 1 } : {}) });
     }
     else if (t === 'P' && okPos(a, b)) objs.push({ t, x: a, y: b, sp: Math.min(4, Math.max(0, Math.round(c) || 0)), m: Math.min(2, Math.max(0, Math.round(d) || 0)), f: (Math.round(num(f[5])) || 0) & 15 });
     else if (t === 'a' && okPos(a, b)) { let txt = ''; try { txt = cleanText(decodeURIComponent(f[4] || '')); } catch (e) {} if (txt) objs.push({ t, x: a, y: b, s: Math.min(4, Math.max(0.25, c || 1)), txt }); }
@@ -1707,6 +1708,19 @@ function missingSong(level) {
   const m = /;M,1,(\d+)/.exec(';' + String(level.code || '').split(';').slice(1).join(';'));
   const id = m ? +m[1] : 0; return id && !SONGS.has(id) ? id : 0;
 }
+const sharedSong = (code, id) => new RegExp(`;M,1,${id},[^;]*,1(;|$)`).test(String(code));
+async function getSong(level, origin, id) {
+  if (level.author && NET.sb && sharedSong(level.code, id)) {
+    if (getSong.busy) return; getSong.busy = true; toast(`Loading song #${id}…`);
+    try {
+      const r = await fetch(NET.sb.storage.from('songs').getPublicUrl(`${level.author}/${id}`).data.publicUrl);
+      if (r.ok) { const b = await r.blob(); await addSong(id, new File([b], `${id}.mp3`, { type: b.type || 'audio/mpeg' })); }
+    } catch (e) { /* not reachable: ask instead */ }
+    getSong.busy = false;
+    if (SONGS.has(id)) return play(level, origin, true);
+  }
+  songGate(level, origin, id);
+}
 let gate = null;
 function songGate(level, origin, id) {
   gate = { level, origin, id };
@@ -1715,7 +1729,7 @@ function songGate(level, origin, id) {
 }
 function closeGate(go) { $('songGate').hidden = true; const g = gate; gate = null; if (go && g) play(g.level, g.origin, true); }
 function play(level, origin, songOk) {
-  if (!songOk) { const id = missingSong(level); if (id) return songGate(level, origin, id); }
+  if (!songOk) { const id = missingSong(level); if (id) return getSong(level, origin, id); }
   cur = level; from = origin; world = level.id === 'test' ? buildWorld(edObjs) : worldFor(level.code); baseHue = level.hue ?? 200;
   if (level.id === 'test') { testPath = []; testPath2 = []; testClicks = []; testPrevHeld = false; testTick = 0; }
   attempt = 1; usedHacks = cheating(); checkpoints = []; spawnCache = null; held = false;
@@ -3063,8 +3077,8 @@ document.addEventListener('click', e => {
   else if (d.bind !== undefined) { listening = d.bind; renderBinds(); }
   else if (d.up) uploadLevel(d.up);
   else if (d.sort) { onSort = d.sort; renderOnline(); }
-  else if (d.oget) { const it = findOnline(d.oget); if (it) { const id = missingSong({ id: 'o', code: it.code }); if (id) songGate({ id: 'o:' + it.key, name: it.name, code: it.code, hue: 200 }, 'online', id); } }
-  else if (d.oplay) { const it = findOnline(d.oplay); if (it) play({ id: 'o:' + it.key, name: it.name, code: it.code, hue: 200 }, 'online'); }
+  else if (d.oget) { const it = findOnline(d.oget); if (it) { const id = missingSong({ id: 'o', code: it.code }); if (id) songGate({ id: 'o:' + it.key, name: it.name, code: it.code, hue: 200, author: it.author }, 'online', id); } }
+  else if (d.oplay) { const it = findOnline(d.oplay); if (it) play({ id: 'o:' + it.key, name: it.name, code: it.code, hue: 200, author: it.author }, 'online'); }
   else if (d.olike) toggleLike(d.olike);
   else if (d.ocopy) {
     const it = findOnline(d.ocopy);
@@ -3198,6 +3212,7 @@ function renderSong() {
   const sg = edSong() || { k: 0, n: 1, off: 0 };
   $('songKind').value = sg.k; $('songNum').value = sg.k ? 1 : sg.n; $('songId').value = sg.k ? sg.n : ''; $('songOff').value = sg.off || 0;
   $('songNumBox').hidden = !!sg.k; $('songIdBox').hidden = !sg.k; $('songNgBox').hidden = !sg.k;
+  $('songShareRow').hidden = !sg.k || !NET.supa; $('songShare').checked = !!sg.s; // song files are stored on Supabase, so only that version offers it
   if (sg.k) { $('songPage').href = ngPage(sg.n); const h = SONGS.get(sg.n); $('songMsg').textContent = h ? `Song #${sg.n} is loaded on this device (${h.name}).` : `Song #${sg.n} isn't on this device yet: open it on Newgrounds, download it, then press Load song file.`; }
 }
 function setSong(patch) {
@@ -3206,6 +3221,7 @@ function setSong(patch) {
 }
 $('songKind').onchange = () => { $('songMsg').textContent = ''; const k = +$('songKind').value; setSong({ k, n: k ? Math.max(1, Math.round(+$('songId').value) || 1) : 1 }); };
 $('songNum').onchange = () => setSong({ n: +$('songNum').value });
+$('songShare').onchange = () => setSong({ s: $('songShare').checked ? 1 : 0 });
 $('songId').onchange = () => setSong({ n: Math.max(1, Math.round(+$('songId').value) || 1) });
 $('songOff').onchange = () => setSong({ off: Math.max(0, Math.min(600, +$('songOff').value || 0)) });
 $('songLoad').onclick = () => $('songFile').click();
@@ -3507,7 +3523,7 @@ function renderOnline() {
     let facts;
     try { const w = worldFor(it.code); facts = `<span>${Math.round(w.end / B)} blk</span><span>${Math.round(duration(w))} s</span>`;
       const sg = w.song; // its song: a built-in track, or a Newgrounds one (on this device or not)
-      facts += sg?.k === 1 ? `<span>♪ <a href="${ngPage(sg.n)}" target="_blank" rel="noopener">Newgrounds #${sg.n}</a> ${SONGS.has(sg.n) ? '✓ on this device' : `<button class="ghost mini" data-oget="${esc(it.key)}">Get song</button>`}</span>` : `<span>♪ Track ${sg?.n || 1}</span>`;
+      facts += sg?.k === 1 ? `<span>♪ <a href="${ngPage(sg.n)}" target="_blank" rel="noopener">Newgrounds #${sg.n}</a> ${SONGS.has(sg.n) ? '✓ on this device' : sg.s && NET.sb ? 'comes with the level' : `<button class="ghost mini" data-oget="${esc(it.key)}">Get song</button>`}</span>` : `<span>♪ Track ${sg?.n || 1}</span>`;
     } catch (e) { facts = '<span>Unreadable level</span>'; }
     const own = it.author === NET.uid, key = esc(it.key), liked = mine.has(it.key);
     return `<div class="row"><div><div class="name">${esc(it.name)}</div><div class="facts"><span>by ${esc(playerName(it.author))}${own ? ' (you)' : ''}</span>${facts}<span>♥ ${it.likes}</span><span>Best ${bests['o:' + it.key] || 0}%</span></div></div>
@@ -3553,7 +3569,21 @@ async function uploadLevel(id) {
   const old = (prev?.levels || []).find(x => x.id === l.id);
   levels.push({ id: l.id, name: l.name.slice(0, 40), code, created: old?.created || Date.now() });
   if (JSON.stringify({ levels }).length > 250000) return toast('Your online space is full. Unpublish a level first.');
-  try { await NET.db.doc('uploads/' + NET.uid).set({ levels, updated: Date.now() }); toast(`${old ? 'Updated' : 'Uploaded'} "${l.name}"`); } catch (e) { netWriteFailed(e); }
+  try { await NET.db.doc('uploads/' + NET.uid).set({ levels, updated: Date.now() }); toast(`${old ? 'Updated' : 'Uploaded'} "${l.name}"`); } catch (e) { return netWriteFailed(e); }
+  const sg = objs.find(o => o.t === 'M'); if (sg?.k === 1 && sg.s) await shareSong(sg.n);
+}
+// A level's Newgrounds song goes to Supabase Storage at songs/<your id>/<song id>; players of the level download it from there.
+async function shareSong(id) {
+  if (!NET.sb || !NET.uid) return;
+  const h = SONGS.get(id), sent = store.get('zd-shared', {});
+  if (!h) return toast(`Song #${id} isn't on this device, so it didn't upload. Load it in the editor's Song menu, then upload the level again.`);
+  if (sent[NET.uid + '/' + id] === h.size) return; // this file is already up
+  try {
+    const blob = await (await fetch(h.url)).blob();
+    const { error } = await NET.sb.storage.from('songs').upload(`${NET.uid}/${id}`, blob, { upsert: true, contentType: blob.type || 'audio/mpeg' });
+    if (error) throw error;
+    sent[NET.uid + '/' + id] = h.size; store.set('zd-shared', sent); toast(`Uploaded song #${id} with the level`);
+  } catch (e) { toast(`The song didn't upload (${e.message || e}). The level is online; players can still load the song themselves.`); }
 }
 async function toggleLike(key) {
   const ids = Array.isArray(NET.likes[NET.uid]?.ids) ? NET.likes[NET.uid].ids.filter(k => typeof k === 'string') : [], i = ids.indexOf(key);
