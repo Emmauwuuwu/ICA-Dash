@@ -2406,13 +2406,22 @@ function draw(t, dt) {
   }
   // trail + player
   if (inGame) {
-    const pulse = (hacks.noPulse ? 1 : ((audioScale(dt) - 0.1) * 2.1 + 0.4) / 1.24) * hacks.trail; // 1 = GD's still width (audioScale 0.5); hacks: no pulse, trail size
-    for (const [tr, py, on] of [[trail, p.y, true], [trail2, p.y2, p.dual]]) { // solid trail, no glow band; null breaks it (cube stretches)
+    // GD's wave trail (HardStreak): a band 12 x pulseSize GD units wide with a core 4 x pulseSize wide, in the icon's colour 2;
+    // pulseSize = (audioScale - 0.1) x 2.1 + 0.4 (1 with No wave pulse, as GD's own no-pulse mods set it), x0.6 for mini.
+    // Measured on a GD screenshot: band (0,100,150) and core (165,255,255) for a cyan colour 2, widths 3:1 as here. The band
+    // is drawn solid (colour 2 darkened), not see-through, so it reads the same on our lighter backgrounds.
+    const pulse = (hacks.noPulse ? 1 : (audioScale(dt) - 0.1) * 2.1 + 0.4) * hacks.trail * (p.mini ? 0.6 : 1) * 2; // GD units -> px
+    // (GD: updatePlayerColors sets the wave trail to colour 2. Our default colour 2 is the dark outline navy, which would hide
+    // the trail, so that one falls back to colour 1.)
+    const tc = COLORS[icon.c2 === 11 ? icon.c1 : icon.c2], mixc = (k, w) => '#' + [1, 3, 5].map(i => Math.round(parseInt(tc.slice(i, i + 2), 16) * k + 255 * w).toString(16).padStart(2, '0')).join('');
+    for (const [tr, py, on] of [[trail, p.y, true], [trail2, p.y2, p.dual]]) { // null breaks it (cube stretches)
       if (!tr.length || pulse <= 0) continue; // trail size 0x: no trail (canvas ignores a 0 line width)
       ctx.beginPath(); let gap = true;
       for (const q of tr) { if (!q) { gap = true; continue; } if (gap) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); gap = false; }
       if (alive && on && !p.cube && !p.ship && !gap) ctx.lineTo(p.x, py);
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7 * pulse * (p.mini ? 0.6 : 1); ctx.stroke();
+      ctx.lineJoin = 'miter'; ctx.miterLimit = 2; ctx.lineCap = 'butt';
+      ctx.strokeStyle = mixc(0.55, 0); ctx.lineWidth = 12 * pulse; ctx.stroke(); // band
+      ctx.strokeStyle = mixc(0.35, 0.65); ctx.lineWidth = 4 * pulse; ctx.stroke(); // core
     }
     if (seen && p.ship) { // GD's ship turns toward the way it's moving, easing 0.15 of the way per frame (updateShipRotation)
       const v = SPEEDS[p.speedI] * B, gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0, tgt = Math.atan2(p.vy || 0, v);
