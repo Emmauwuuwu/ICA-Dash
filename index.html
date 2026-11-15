@@ -680,6 +680,9 @@ const PORTALS = { m: ['#ff6bd6', 'MINI', 'BIG'], v: ['#4dff9a', 'FLIP', 'UPRIGHT
 //      does while you overlap them. k: D (the wave can touch blocks), J (standing on it, only a new press jumps, not a held
 //      one), S (ends a dash orb's dash), H (the cube can hit its head on blocks), F (hitting your head on a block flips
 //      gravity). Shown only in the editor, and in play with Show hitboxes on.
+//   P  start position {x, y, sp, m, f}: the cell at (x, y) where an editor playtest starts (GD's Start Pos), at speed sp
+//      (0..4 = 0.5x..4x), as m (0 wave, 1 cube, 2 ship), with flags f: 1 mini, 2 upside down, 4 dual, 8 switched off.
+//      The rightmost one that's on is used; normal play always starts at the beginning.
 //   a  text {x, y, s, txt} (centre): decoration only, s its size (1 = half a block tall letters); txt is URI-encoded in codes.
 // Share codes are "ICA2;" plus one comma-separated object per ";". Older path codes (u/d/f tokens) are converted on load.
 const SAW_R = 0.6, SAW_HIT = SAW_R * 0.9; // saws are drawn at SAW_R; their hitbox is 10% smaller
@@ -731,7 +734,7 @@ function encodeLevel(objs) {
     : o.t === 's' ? `s,${n(o.x)},${n(o.y)}` : o.t === 'd' ? `d,${n(o.x)},${n(o.y)},${o.a},${o.f}${o.m ? ',1' : ''}` : o.t === 'k' ? `k,${n(o.x)},${n(o.y)},${o.o}${o.z ? ',1' : ''}`
     : o.t === 'q' ? `q,${n(o.x)},${n(o.y)},${o.c}${o.m ? ',1' : ''}` : o.t === 'j' ? `j,${n(o.x)},${n(o.y)},${o.o},${o.c}`
     : o.t === 'c' || o.t === 'h' ? `${o.t},${n(o.x)},${n(o.y)}` : o.t === 'x' ? `x,${n(o.x)},${n(o.y)},${o.k},${o.g},${n(o.dur)},${n(o.a)},${n(o.b || 0)}`
-    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : o.t === 'a' ? `a,${n(o.x)},${n(o.y)},${n(o.s)},${encodeURIComponent(o.txt)}` : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
+    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : o.t === 'a' ? `a,${n(o.x)},${n(o.y)},${n(o.s)},${encodeURIComponent(o.txt)}` : o.t === 'P' ? `P,${n(o.x)},${n(o.y)},${o.sp},${o.m},${o.f}` : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
 }
 // Pasted codes are untrusted: every field is checked, sizes are capped, and anything malformed is skipped.
 function decodeLevel(code) {
@@ -760,6 +763,7 @@ function decodeLevel(code) {
     else if (t === 'k' && okPos(a, b)) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4, ...(f[4] === '1' ? { z: 1 } : {}) });
     else if (t === 'q' && okPos(a, b) && RING[f[3]]) objs.push({ t, x: a, y: b, c: f[3], ...(f[4] === '1' ? { m: 1 } : {}) });
     else if (t === 'L' && okPos(a, b) && LETTERS[f[3]]) objs.push({ t, x: a, y: b, k: f[3] });
+    else if (t === 'P' && okPos(a, b)) objs.push({ t, x: a, y: b, sp: Math.min(4, Math.max(0, Math.round(c) || 0)), m: Math.min(2, Math.max(0, Math.round(d) || 0)), f: (Math.round(num(f[5])) || 0) & 15 });
     else if (t === 'a' && okPos(a, b)) { let txt = ''; try { txt = cleanText(decodeURIComponent(f[4] || '')); } catch (e) {} if (txt) objs.push({ t, x: a, y: b, s: Math.min(4, Math.max(0.25, c || 1)), txt }); }
     else if (t === 'j' && okPos(a, b) && PAD[f[4]]) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4, c: f[4] });
     else if (t === 'p' && okPos(a, b) && c > 0 && c <= 40 && ['S', 'm', 'v', 'w', 'g', 'T'].includes(f[4])) {
@@ -819,7 +823,7 @@ function buildWorld(objs) {
   let right = -Infinity;
   for (const o of objs) {
     if (o.t === 'p' || o.t === 'x') continue;
-    if ('dqjchLa'.includes(o.t)) { right = Math.max(right, o.x + 1); continue; }
+    if ('dqjchLaP'.includes(o.t)) { right = Math.max(right, o.x + 1); continue; }
     const l = o.t === 's' ? o.x - SAW_R : o.x, r = o.t === 's' ? o.x + SAW_R : o.t === 'k' ? o.x + 1 : o.x + o.w;
     right = Math.max(right, r);
     if (o.g && movingG.has(o.g)) { moving.push(o); continue; }
@@ -833,7 +837,7 @@ function buildWorld(objs) {
     if (x0 < Infinity) pivots.set(g, [(x0 + x1) / 2, (y0 + y1) / 2]);
   }
   const portals = byX('p'), orbs = byX('dq'), pads = byX('j'); // orbs: dash orbs and jump orbs share one list (one press, one orb)
-  return { objs, cols, portals, orbs, pads, letters: byX('L'), texts: byX('a'), coins: byX('c'), cps: byX('h'), trig, moving, pivots, fadeG: new Set(trig.filter(o => o.k === 'f').map(o => o.g)),
+  return { objs, cols, portals, orbs, pads, letters: byX('L'), texts: byX('a'), starts: byX('P'), coins: byX('c'), cps: byX('h'), trig, moving, pivots, fadeG: new Set(trig.filter(o => o.k === 'f').map(o => o.g)),
     end: ((Number.isFinite(right) ? right : 7) + 3) * B };
 }
 // Centre and half-size of an object, in blocks.
@@ -1584,16 +1588,25 @@ function reset() {
   trail = []; trail2 = []; parts = []; booms = [];
   const cp =hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
+  // an editor playtest starts at the rightmost start position that's on (unless you chose "playtest from here")
+  const st = cur.id === 'test' && testFrom === null ? world.starts.filter(o => !(o.f & 8)).at(-1) : null;
   if (cp) Object.assign(p, cp); // practice: back to the newest checkpoint
+  else if (st) Object.assign(p, startPosState(st));
   else if (sx > 0) Object.assign(p, spawnCache ??= spawnState(sx)); // start partway in at a safe spot (worked out once per level)
   else p.y2 = VH - p.y;
   p.ci = world.cps.filter(c => c.x * B <= p.x).length; // checkpoint objects behind a mid-level spawn don't count again
   // A mid-level spawn (start %, From here, practice checkpoint) waits for your first press instead of moving straight away.
-  p.wait = !hacks.auto && (!!cp || sx > 0);
+  p.wait = !hacks.auto && (!!cp || (sx > 0 && !st)); // (a start position goes straight away, as in GD)
   if (p.wait) p.dir = p.flip ? 1 : -1; // facing the way a press will send it
   p.ang = p.from = p.dir * (p.mini ? Math.atan(2) : Math.PI / 4); p.cpT = 0; p.sub = 0; speedI = p.speedI;
   trail = p.cube || p.ship ? [] : [[p.x, p.y]]; trail2 = p.dual && !p.cube && !p.ship ? [[p.x, p.y2]] : [];
   plan = hacks.auto ? findPath(world, stateOf(p), Infinity, 300000, false) || [] : []; // autoplay: route to the end, worked out now
+}
+// The state a start position sets: its place, speed, gamemode, size, gravity and dual; portals behind it are skipped.
+function startPosState(o) {
+  const x = (o.x + 0.5) * B, y = (o.y + 0.5) * B, f = o.f || 0;
+  return { x, y, y2: VH - y, dir: 1, speedI: o.sp, mini: !!(f & 1), flip: !!(f & 2), dual: !!(f & 4), cube: o.m === 1, ship: o.m === 2,
+    pi: world.portals.filter(q => q.x * B <= x).length, vy: 0, vy2: 0, gnd: false, gnd2: false, dash: null };
 }
 function show(id) { document.querySelectorAll('.screen').forEach(s => s.hidden = s.id !== id); }
 
@@ -1877,6 +1890,17 @@ function drawOrb(g, o, u, t, used) {
   g.strokeStyle = '#fff'; g.lineWidth = Math.max(1.5, u / 14); g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke();
   g.globalAlpha = 1;
 }
+// Start position (editor only): a tile with a play arrow, the speed and the gamemode, dimmed when switched off.
+function drawStartPos(g, o, u) {
+  const x = o.x * u, y = o.y * u, m = u * 0.06, off = o.f & 8;
+  g.save(); if (off) g.globalAlpha *= 0.4;
+  g.fillStyle = 'rgba(77,255,94,.16)'; g.fillRect(x + m, y + m, u - 2 * m, u - 2 * m);
+  g.strokeStyle = '#4dff5e'; g.lineWidth = Math.max(1.5, u / 18); g.setLineDash([u / 8, u / 12]); g.strokeRect(x + m, y + m, u - 2 * m, u - 2 * m); g.setLineDash([]);
+  g.beginPath(); g.moveTo(x + u * 0.36, y + u * 0.22); g.lineTo(x + u * 0.7, y + u * 0.42); g.lineTo(x + u * 0.36, y + u * 0.62); g.closePath(); g.fillStyle = '#4dff5e'; g.fill();
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = `700 ${Math.round(u * 0.17)}px "Space Mono", monospace`;
+  g.fillText(SPD_LABELS[o.sp] + ' ' + ['WAVE', 'CUBE', 'SHIP'][o.m] + (o.f & 1 ? ' M' : '') + (o.f & 2 ? ' ↕' : '') + (o.f & 4 ? ' ×2' : ''), x + u / 2, y + u * 0.86);
+  g.restore();
+}
 // Letter block: a white-edged tile with its letter (GD shows these only in the editor).
 function drawLetter(g, o, u) {
   const L = LETTERS[o.k], x = o.x * u, y = o.y * u, m = u * 0.06;
@@ -1896,6 +1920,7 @@ function renderObj(g, o, u, t) { // one object in its editor colours (palette ic
   else if (o.t === 'x') drawTrigger(g, o, u);
   else if (o.t === 'L') drawLetter(g, o, u);
   else if (o.t === 'a') drawText(g, o, u);
+  else if (o.t === 'P') drawStartPos(g, o, u);
   else drawPortal(g, o, u, u >= 30);
 }
 // Cheap glow: a wide faint stroke under a thin bright one (shadowBlur costs frames, and dropped frames feel like input lag).
@@ -2007,6 +2032,7 @@ function draw(t, dt) {
   if (ed) { // editor only: triggers as labelled tiles, and each grouped object's group number
     for (const o of world.trig) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawTrigger(ctx, o, B);
     for (const o of world.letters) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawLetter(ctx, o, B);
+    for (const o of world.starts) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawStartPos(ctx, o, B);
     ctx.font = '700 13px "Space Mono", monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#ffcc1a';
     for (const o of world.objs) if (o.g && o.t !== 'x' && o.x * B > camX - 60 && o.x * B < camX + viewW + 60) { const [cx, cy, hw, hh] = centreOf(o.t === 'r' || o.t === 't' || o.t === 's' || o.t === 'k' ? o : { t: 's', x: o.x, y: o.y }); ctx.fillText('g' + o.g, (cx - hw) * B + 3, (cy - hh) * B + 14); }
   }
@@ -2043,7 +2069,7 @@ function draw(t, dt) {
     for (const o of sel) {
       ctx.beginPath();
       if (o.t === 's' || o.t === 'd' || o.t === 'q' || o.t === 'c') ctx.arc(o.x * B, o.y * B, (o.t === 's' ? SAW_R : o.t === 'c' ? COIN_R : ORB_R * 1.45) * B + 4, 0, 7);
-      else if (o.t === 'h' || o.t === 'x') ctx.rect(o.x * B - B * 0.45, o.y * B - B * 0.5, B * 0.9, B); else if (o.t === 'k' || o.t === 'j' || o.t === 'L') ctx.rect(o.x * B, o.y * B, B, B); else if (o.t === 'a') { const [cx, cy, hw, hh] = textBox(o); ctx.rect((cx - hw) * B, (cy - hh) * B, hw * 2 * B, hh * 2 * B); } else if (o.t === 'p') ctx.rect(o.x * B - 10, o.y * B, 20, o.h * B); else addSolid(ctx, o, B);
+      else if (o.t === 'h' || o.t === 'x') ctx.rect(o.x * B - B * 0.45, o.y * B - B * 0.5, B * 0.9, B); else if (o.t === 'k' || o.t === 'j' || o.t === 'L' || o.t === 'P') ctx.rect(o.x * B, o.y * B, B, B); else if (o.t === 'a') { const [cx, cy, hw, hh] = textBox(o); ctx.rect((cx - hw) * B, (cy - hh) * B, hw * 2 * B, hh * 2 * B); } else if (o.t === 'p') ctx.rect(o.x * B - 10, o.y * B, 20, o.h * B); else addSolid(ctx, o, B);
       ctx.stroke();
     }
     if (hoverCell && edTool === 'build' && !pdrag) {
@@ -2304,6 +2330,7 @@ const PALETTE = [
   { id: 'g1', label: 'Cube', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 1 }) },
   { id: 'g0', label: 'Wave', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 0 }) },
   { id: 'g2', label: 'Ship', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 2 }) },
+  { id: 'start', label: 'Start pos', make: (x, y) => ({ t: 'P', x, y, sp: 1, m: 0, f: 0 }) },
   { id: 'text', label: 'Text', make: (x, y) => ({ t: 'a', x: x + 0.5, y: y + 0.5, s: 1, txt: 'Text' }) },
   ...Object.entries(LETTERS).map(([k, L]) => ({ id: 'L' + k, label: L.name, make: (x, y) => ({ t: 'L', x, y, k }) })),
   ...Object.entries(PAD).map(([c, k]) => ({ id: 'pad' + c, label: k.name, make: (x, y) => ({ t: 'j', x, y, o: edRot, c }) })),
@@ -2323,7 +2350,7 @@ const HELP = {
 // Build tabs, like GD's object tabs (anything not listed lands in the last one).
 const ED_CATS = [['Blocks', ['block', 'half']], ['Slopes', ['slope', 'steep']], ['Hazards', ['spike', 'spikeS', 'saw']],
   ['Orbs', ['ringy', 'ringp', 'ringr', 'ringb', 'ringg', 'ringk', 'dash0', 'dash1']], ['Pads', ['pady', 'padp', 'padr', 'padb', 'pads']],
-  ['Portals', ['g1', 'g0', 'g2', 'v1', 'v0', 'v2', 'm1', 'm0', 'w1', 'w0', 'T0', 'T1', 'spd0', 'spd1', 'spd2', 'spd3', 'spd4']],
+  ['Portals', ['start', 'g1', 'g0', 'g2', 'v1', 'v0', 'v2', 'm1', 'm0', 'w1', 'w0', 'T0', 'T1', 'spd0', 'spd1', 'spd2', 'spd3', 'spd4']],
   ['Collectibles', ['coin', 'cp']], ['Triggers', ['trm', 'trr', 'trf', 'trc']], ['Special', ['LD', 'LJ', 'LS', 'LH', 'LF', 'text']]];
 for (const q of PALETTE) if (!ED_CATS.some(([, ids]) => ids.includes(q.id))) ED_CATS[ED_CATS.length - 1][1].push(q.id);
 // Edit tab buttons, as in GD's edit pages: moves by a block, half a block, a small step (2 GD units) and 5 blocks, turns and flips.
@@ -2364,7 +2391,7 @@ function objectAt(bx, by) { // portals over saws over solids; within a kind, the
   for (const o of world.portals) if (Math.abs(o.x - bx) < 0.3 && by >= o.y && by <= o.y + o.h) consider(o, 3);
   for (const o of world.orbs) if (Math.hypot(o.x - bx, o.y - by) < ORB_R * 1.35) consider(o, 3);
   for (const o of world.pads) if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 3);
-  for (const o of world.letters) if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 2);
+  for (const o of [...world.letters, ...world.starts]) if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 2);
   for (const o of world.texts) { const [cx, cy, hw, hh] = textBox(o); if (Math.abs(bx - cx) <= hw && Math.abs(by - cy) <= hh) consider(o, 4); }
   for (const o of [...world.coins, ...world.cps, ...world.trig]) if (Math.abs(o.x - bx) < 0.45 && Math.abs(o.y - by) < 0.5) consider(o, 4);
   for (const o of [...(world.cols.get(Math.floor(bx)) || []), ...world.moving]) { // moving objects sit where they start in the editor
@@ -2377,10 +2404,10 @@ function objectAt(bx, by) { // portals over saws over solids; within a kind, the
 function removeAt(bx, by) { const o = objectAt(bx, by); if (!o) return false; edObjs = edObjs.filter(q => q !== o); sel.delete(o); edChanged(); return true; }
 // Centre of an object in blocks, and putting it back by its centre.
 function objCenter(o) {
-  return o.t === 'r' || o.t === 't' ? [o.x + o.w / 2, o.y + o.h / 2] : o.t === 'k' || o.t === 'j' || o.t === 'L' ? [o.x + 0.5, o.y + 0.5] : o.t === 'p' ? [o.x, o.y + o.h / 2] : [o.x, o.y];
+  return o.t === 'r' || o.t === 't' ? [o.x + o.w / 2, o.y + o.h / 2] : 'kjLP'.includes(o.t) ? [o.x + 0.5, o.y + 0.5] : o.t === 'p' ? [o.x, o.y + o.h / 2] : [o.x, o.y];
 }
 function setCenter(o, cx, cy) {
-  if (o.t === 'r' || o.t === 't') { o.x = cx - o.w / 2; o.y = cy - o.h / 2; } else if (o.t === 'k' || o.t === 'j' || o.t === 'L') { o.x = cx - 0.5; o.y = cy - 0.5; }
+  if (o.t === 'r' || o.t === 't') { o.x = cx - o.w / 2; o.y = cy - o.h / 2; } else if ('kjLP'.includes(o.t)) { o.x = cx - 0.5; o.y = cy - 0.5; }
   else if (o.t === 'p') { o.x = cx; o.y = cy - o.h / 2; } else { o.x = cx; o.y = cy; }
   o.x = tidy(o.x); o.y = tidy(o.y);
 }
@@ -2438,7 +2465,7 @@ function edAction(a, fine) {
 function drawPaletteIcon(c, item) {
   const g = c.getContext('2d'), o = item.make(0, 0);
   g.clearRect(0, 0, c.width, c.height); g.save();
-  const box = o.t === 's' || o.t === 'd' || o.t === 'q' || o.t === 'c' || o.t === 'h' || o.t === 'x' || o.t === 'a' ? [o.x, o.y, 1.4, 1.4] : o.t === 'k' || o.t === 'j' || o.t === 'L' ? [o.x + 0.5, o.y + 0.5, 1, 1] : o.t === 'p' ? [o.x, o.y + o.h / 2, 0.6, o.h] : [o.x + o.w / 2, o.y + o.h / 2, o.w, o.h];
+  const box = o.t === 's' || o.t === 'd' || o.t === 'q' || o.t === 'c' || o.t === 'h' || o.t === 'x' || o.t === 'a' ? [o.x, o.y, 1.4, 1.4] : o.t === 'k' || o.t === 'j' || o.t === 'L' || o.t === 'P' ? [o.x + 0.5, o.y + 0.5, 1, 1] : o.t === 'p' ? [o.x, o.y + o.h / 2, 0.6, o.h] : [o.x + o.w / 2, o.y + o.h / 2, o.w, o.h];
   const u = Math.min(c.width / (box[2] + 0.6), c.height / (box[3] + 0.6));
   g.translate(c.width / 2 - box[0] * u, c.height / 2 - box[1] * u);
   renderObj(g, o, u, 0); g.restore();
@@ -2480,7 +2507,7 @@ function renderPane() {
   $('edPrev').disabled = edPage <= 0; $('edNext').disabled = edPage >= pages - 1;
   $('edDots').innerHTML = pages > 1 ? Array.from({ length: pages }, (_, i) => `<i class="${i === edPage ? 'on' : ''}"></i>`).join('') : '';
   // GD's buttons down the right while something is selected (or something is copied)
-  const one = n === 1 ? [...sel][0] : null, special = one && (one.t === 'x' || one.t === 'a');
+  const one = n === 1 ? [...sel][0] : null, special = one && (one.t === 'x' || one.t === 'a' || one.t === 'P');
   $('edQuick').innerHTML = n || edClip ? [['copy', 'Copy', !n], ['paste', 'Paste', !edClip], ['dupe', 'Copy + Paste', !n], ['group', 'Edit Group', !n],
     ['special', 'Edit Special', !special], ['none', 'Deselect', !n]].map(([a, txt, dis]) => `<button data-q="${a}" ${dis ? 'disabled' : ''}>${txt}</button>`).join('') : '';
   $('edHelp').textContent = HELP[edTool] + ' · ' + HELP.all;
@@ -2494,6 +2521,14 @@ function propFields(kind = 'group') {
   const trig = objs.length === 1 && objs[0].t === 'x' ? objs[0] : null, plain = objs.filter(o => o.t !== 'x');
   let html = '';
   if (kind === 'group') { if (!plain.length) return '<p class="note">Triggers act on a group; set it in Edit Special.</p>'; const gs = new Set(plain.map(o => o.g || '')); return field('g', 'Group ID (blank = none)', gs.size === 1 ? [...gs][0] : '', 1); }
+  const sp = objs.length === 1 && objs[0].t === 'P' ? objs[0] : null;
+  if (sp) { // GD's Start Pos settings (the ones this game has)
+    const pick = (prop, label, opts, val) => `<label class="prop"><span>${label}</span><select class="field" data-prop="${prop}">${opts.map((t, i) => `<option value="${i}"${i === val ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
+    const tick = (prop, label, bit) => `<label class="hrow"><input type="checkbox" class="sr" data-prop="${prop}"${sp.f & bit ? ' checked' : ''}><span class="hchk"></span>${label}</label>`;
+    return pick('sp_speed', 'Speed', SPD_LABELS, sp.sp) + pick('sp_mode', 'Gamemode', ['Wave', 'Cube', 'Ship'], sp.m)
+      + `<div style="width:100%">${tick('sp_mini', 'Mini', 1) + tick('sp_flip', 'Upside down', 2) + tick('sp_dual', 'Dual', 4) + tick('sp_off', 'Switched off', 8)}</div>`
+      + '<p class="note" style="width:100%">Playtest (Enter) starts from the rightmost start position that\'s on. Normal play always starts at the beginning.</p>';
+  }
   const tx = objs.length === 1 && objs[0].t === 'a' ? objs[0] : null;
   if (tx) html += `<label class="prop" style="flex:1 1 220px"><span>Text</span><input class="field" type="text" maxlength="${TEXT_MAX}" data-prop="txt" value="${esc(tx.txt)}"></label>` + field('ts', 'Size', tx.s);
   if (trig) html += `<span class="label" style="width:100%">${TRIG[trig.k].name} trigger · fires when you pass it</span>`
@@ -2503,7 +2538,12 @@ function propFields(kind = 'group') {
 $('edPropBody').addEventListener('change', e => {
   const inp = e.target.closest('[data-prop]'); if (!inp) return;
   const prop = inp.dataset.prop, raw = inp.value.trim(), v = Number(raw), before = JSON.stringify(edObjs), objs = [...sel];
-  if (prop === 'txt' || prop === 'ts') {
+  if (prop.startsWith('sp_')) {
+    const o = objs[0]; if (!o || o.t !== 'P') return renderPane();
+    if (prop === 'sp_speed') o.sp = Math.min(4, Math.max(0, Math.round(v) || 0));
+    else if (prop === 'sp_mode') o.m = Math.min(2, Math.max(0, Math.round(v) || 0));
+    else { const bit = { sp_mini: 1, sp_flip: 2, sp_dual: 4, sp_off: 8 }[prop]; o.f = inp.checked ? o.f | bit : o.f & ~bit; }
+  } else if (prop === 'txt' || prop === 'ts') {
     const o = objs[0]; if (!o || o.t !== 'a') return renderPane();
     if (prop === 'txt') { const t = cleanText(raw); if (!t) return renderPane(); o.txt = t; }
     else if (Number.isFinite(v)) o.s = Math.min(4, Math.max(0.25, v)); else return renderPane();
@@ -2519,7 +2559,7 @@ $('edPropBody').addEventListener('change', e => {
 let propKind = 'group';
 function renderProps() {
   const objs = [...sel]; if (!objs.length) { $('edProps').hidden = true; return; }
-  $('edPropsTitle').textContent = propKind === 'special' ? (objs[0].t === 'x' ? TRIG[objs[0].k].name + ' trigger' : 'Text') : `Edit Group · ${objs.length} object${objs.length === 1 ? '' : 's'}`;
+  $('edPropsTitle').textContent = propKind === 'special' ? (objs[0].t === 'x' ? TRIG[objs[0].k].name + ' trigger' : objs[0].t === 'P' ? 'Start position' : 'Text') : `Edit Group · ${objs.length} object${objs.length === 1 ? '' : 's'}`;
   $('edPropBody').innerHTML = propFields(propKind);
 }
 function openProps(kind) { propKind = kind; $('edMenu').hidden = true; $('sharePop').hidden = true; $('edProps').hidden = false; renderProps(); }
