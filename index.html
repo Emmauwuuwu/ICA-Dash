@@ -599,7 +599,11 @@ const PORTALS = { m: ['#ff6bd6', 'MINI', 'BIG'], v: ['#4dff9a', 'FLIP', 'UPRIGHT
 //      (its hitbox is a 0.2 x 0.4 block box in the middle, turned with it)
 //   d  dash orb {x, y, a, f} (centre): holding while touching it dashes straight at angle a (degrees, up is positive, -75 to 75)
 //      until you let go; f 1 is the pink orb, which also flips gravity
-// Solids (r, t) with d: 1 are D blocks: the wave slides along them instead of crashing (their sides still kill).
+// Solids (r, t) with d: 1 are old-style D blocks (still played; the editor now places D letter blocks instead).
+//   L  letter block {x, y, k}: GD's invisible 1 x 1 helpers, filling the cell at (x, y), that change what touching blocks
+//      does while you overlap them. k: D (the wave can touch blocks), J (standing on it, only a new press jumps, not a held
+//      one), S (ends a dash orb's dash), H (the cube can hit its head on blocks), F (hitting your head on a block flips
+//      gravity). Shown only in the editor, and in play with Show hitboxes on.
 // Share codes are "ICA2;" plus one comma-separated object per ";". Older path codes (u/d/f tokens) are converted on load.
 const SAW_R = 0.6, SAW_HIT = SAW_R * 0.9; // saws are drawn at SAW_R; their hitbox is 10% smaller
 const ORB_R = 0.45, ORB_HIT = 0.6, ORB_MAX = 75; // orbs: drawn radius, half-size of the square hitbox (1.2 blocks across), steepest dash
@@ -627,6 +631,8 @@ const padBox = o => [[o.x + 0.1, o.y + 0.8, o.x + 0.9, o.y + 1], [o.x, o.y + 0.1
 //   any object may end in "|g": its group number (1-999) for triggers
 // Spikes (k) may end in ",1": a small spike. Portals: 'v' with v 2 swaps gravity whichever way it is; 'T' teleport (v 0 the
 // blue entrance, 1 the orange exit: entering moves you up or down to the nearest exit's height).
+const LETTERS = { D: { name: 'D block', col: '#5dffc4' }, J: { name: 'J block', col: '#ffd84a' }, S: { name: 'S block', col: '#ff6b6b' },
+  H: { name: 'H block', col: '#9ab0ff' }, F: { name: 'F block', col: '#ff9f43' } };
 const TRIG = { m: { name: 'Move', col: '#3fd8ff' }, r: { name: 'Rotate', col: '#ffd84a' }, f: { name: 'Fade', col: '#c9cfe8' }, c: { name: 'Colour', col: '#ff6bd6' } };
 function encodeLevel(objs) {
   const n = v => +v.toFixed(3), D = o => o.d ? ',1' : '';
@@ -635,7 +641,7 @@ function encodeLevel(objs) {
     : o.t === 's' ? `s,${n(o.x)},${n(o.y)}` : o.t === 'd' ? `d,${n(o.x)},${n(o.y)},${o.a},${o.f}${o.m ? ',1' : ''}` : o.t === 'k' ? `k,${n(o.x)},${n(o.y)},${o.o}${o.z ? ',1' : ''}`
     : o.t === 'q' ? `q,${n(o.x)},${n(o.y)},${o.c}${o.m ? ',1' : ''}` : o.t === 'j' ? `j,${n(o.x)},${n(o.y)},${o.o},${o.c}`
     : o.t === 'c' || o.t === 'h' ? `${o.t},${n(o.x)},${n(o.y)}` : o.t === 'x' ? `x,${n(o.x)},${n(o.y)},${o.k},${o.g},${n(o.dur)},${n(o.a)},${n(o.b || 0)}`
-    : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
+    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
 }
 // Pasted codes are untrusted: every field is checked, sizes are capped, and anything malformed is skipped.
 function decodeLevel(code) {
@@ -663,6 +669,7 @@ function decodeLevel(code) {
     else if (t === 'd' && okPos(a, b)) objs.push({ t, x: a, y: b, a: Math.max(-ORB_MAX, Math.min(ORB_MAX, Math.round(c) || 0)), f: d ? 1 : 0, ...(f[5] === '1' ? { m: 1 } : {}) });
     else if (t === 'k' && okPos(a, b)) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4, ...(f[4] === '1' ? { z: 1 } : {}) });
     else if (t === 'q' && okPos(a, b) && RING[f[3]]) objs.push({ t, x: a, y: b, c: f[3], ...(f[4] === '1' ? { m: 1 } : {}) });
+    else if (t === 'L' && okPos(a, b) && LETTERS[f[3]]) objs.push({ t, x: a, y: b, k: f[3] });
     else if (t === 'j' && okPos(a, b) && PAD[f[4]]) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4, c: f[4] });
     else if (t === 'p' && okPos(a, b) && c > 0 && c <= 40 && ['S', 'm', 'v', 'w', 'g', 'T'].includes(f[4])) {
       const v = Math.round(num(f[5])) || 0;
@@ -721,7 +728,7 @@ function buildWorld(objs) {
   let right = -Infinity;
   for (const o of objs) {
     if (o.t === 'p' || o.t === 'x') continue;
-    if ('dqjch'.includes(o.t)) { right = Math.max(right, o.x + 1); continue; }
+    if ('dqjchL'.includes(o.t)) { right = Math.max(right, o.x + 1); continue; }
     const l = o.t === 's' ? o.x - SAW_R : o.x, r = o.t === 's' ? o.x + SAW_R : o.t === 'k' ? o.x + 1 : o.x + o.w;
     right = Math.max(right, r);
     if (o.g && movingG.has(o.g)) { moving.push(o); continue; }
@@ -735,7 +742,7 @@ function buildWorld(objs) {
     if (x0 < Infinity) pivots.set(g, [(x0 + x1) / 2, (y0 + y1) / 2]);
   }
   const portals = byX('p'), orbs = byX('dq'), pads = byX('j'); // orbs: dash orbs and jump orbs share one list (one press, one orb)
-  return { objs, cols, portals, orbs, pads, coins: byX('c'), cps: byX('h'), trig, moving, pivots, fadeG: new Set(trig.filter(o => o.k === 'f').map(o => o.g)),
+  return { objs, cols, portals, orbs, pads, letters: byX('L'), coins: byX('c'), cps: byX('h'), trig, moving, pivots, fadeG: new Set(trig.filter(o => o.k === 'f').map(o => o.g)),
     end: ((Number.isFinite(right) ? right : 7) + 3) * B };
 }
 // Centre and half-size of an object, in blocks.
@@ -804,14 +811,21 @@ function hazardHit(o, bx, by, br) {
   if (o.t === 's') return Math.hypot(Math.max(0, Math.abs(o.x - bx) - br), Math.max(0, Math.abs(o.y - by) - br)) < SAW_HIT - 2 / B;
   const [l, t, r, b] = spikeBox(o); return bx + br > l && bx - br < r && by + br > t && by - br < b;
 }
-// hitKind: 0 clear, 1 deadly (a saw, a spike or a plain solid), 2 touching only D blocks.
+// Letter blocks of kind k overlapping a box of half-size br blocks at (bx, by) (touching counts).
+function letterHit(wd, k, bx, by, br) {
+  const L = wd.letters, e = br + 0.05; if (!L || !L.length) return false;
+  for (const o of L) { if (o.x > bx + e) break; if (o.k === k && o.x + 1 > bx - e && o.y < by + e && o.y + 1 > by - e) return true; }
+  return false;
+}
+// hitKind: 0 clear, 1 deadly (a saw, a spike or a plain solid), 2 touching only blocks it may slide on (old-style D blocks, or
+// any block while the wave overlaps a D letter block).
 function hitKind(wd, x, y, r) {
   const bx = x / B, by = y / B, br = r / B, pts = [];
-  let k = 0;
+  let k = 0, dz = null;
   for (const dx of [-br, 0, br]) for (const dy of [-br, 0, br]) pts.push([bx + dx, by + dy]);
   const test = o => {
     if (o.t === 's' || o.t === 'k') return hazardHit(o, bx, by, br) ? 1 : 0;
-    for (const [px, py] of pts) if (inside(o, px, py)) return o.d ? 2 : 1;
+    for (const [px, py] of pts) if (inside(o, px, py)) return o.d || (dz ??= letterHit(wd, 'D', bx, by, br)) ? 2 : 1;
     return 0;
   };
   for (const o of nearObjs(wd, bx - br, bx + br)) { const h = test(o); if (h === 1) return 1; if (h) k = 2; }
@@ -1056,7 +1070,7 @@ const inputs = []; // [timestamp, held] queued so each press lands on the exact 
 const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
 let checkpoints = [], spawnCache = null, plan = [];
 const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
-  used: q.used, lastPad: q.lastPad, cube: q.cube, ship: q.ship, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2, acc: q.acc, acc2: q.acc2,
+  used: q.used, lastPad: q.lastPad, cube: q.cube, ship: q.ship, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2, acc: q.acc, acc2: q.acc2, ph: q.ph,
   t: q.t, tf: q.tf, coins: q.coins, ci: q.ci });
 // ---------- cube ----------
 // Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), with GD's player step
@@ -1141,6 +1155,14 @@ function cubeBody(wd, s, k, gs, h, dt, v) {
     if (was && (s[LV] || 0) > 0 && s.dash == null) vy = -gs * (SLOPE_LAUNCH * s[LV] - GD_STEP_LOSS); // ran off a rising slope: launch
     s[LV] = 0;
   }
+  if ((ny - y) * gs < 0 && s.dash == null && wd.letters.length) { // H / F letter blocks: hitting your head on a block
+    const cy = surfaceNear(wd, s.x, ny - gs * h, h, -gs, Math.abs(ny - y) + 2.5 * v * dt + 1, 0);
+    if (cy !== null) {
+      const bx = s.x / B, by = ny / B, bh = h / B;
+      if (letterHit(wd, 'F', bx, by, bh)) { ny = cy + gs * h; vy = 0; s.flip = !s.flip; gnd = true; s[SV] = 0; s[LV] = 0; } // now standing on it
+      else if (letterHit(wd, 'H', bx, by, bh)) { ny = cy + gs * h; if (vy * gs < 0) vy = 0; } // bumps it and falls back
+    }
+  }
   const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges: floor with gravity, a ceiling against it
   if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null) vy = 0; s[SV] = 0; s[LV] = 0; gnd = true; }
   if ((ny - ceil) * gs < 0) { ny = ceil; if (vy * gs < 0) vy = 0; }
@@ -1188,8 +1210,10 @@ function shipBody(wd, s, k, gs, h, dt, v, hold) {
   } else { // moving up: slide along ceilings; a floor it's sinking into (riding up a slope) pushes it up and carries it,
     // unless it's already rising faster than the slope (holding lifts off)
     const sy = surfaceNear(wd, s.x, ny - gs * h, h, -gs, reach, 0);
-    if (sy !== null) { ny = sy + gs * h; if (s.dash == null) vy = SURF_K * v; }
-    else {
+    if (sy !== null) {
+      ny = sy + gs * h; if (s.dash == null) vy = SURF_K * v;
+      if (wd.letters.length && letterHit(wd, 'F', s.x / B, ny / B, h / B)) { s.flip = !s.flip; gnd = true; } // F letter block
+    } else {
       const fy = surfaceNear(wd, s.x, ny + gs * h, h, gs, reach, 0);
       if (fy !== null) { ny = fy - gs * h; if (s.dash == null && -gs * vy < -gs * SURF_K * v) vy = SURF_K * v; gnd = true; }
     }
@@ -1246,6 +1270,13 @@ function tick1(wd, s, hold, dt, fx, fresh) {
     if (s.dash != null) { if (s.cube || s.ship) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner(); }
     s.spent = false;
   }
+  const press = fresh || (hold && !s.ph); s.ph = hold; // a new press (look-ahead has no fresh flag: a release then a hold is one)
+  if (s.dash != null && wd.letters.length) { // S letter block: the dash ends there, as if you'd let go
+    const r = (s.cube || s.ship ? cubeHalf(s) : s.mini ? RM : R) / B;
+    if (letterHit(wd, 'S', s.x / B, s.y / B, r) || (s.dual && letterHit(wd, 'S', s.x / B, s.y2 / B, r))) {
+      if (s.cube || s.ship) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner();
+    }
+  }
   const portals = () => {
     while (s.pi < wd.portals.length && wd.portals[s.pi].x * B <= s.x) {
       const o = wd.portals[s.pi++], by = s.y / B;
@@ -1264,8 +1295,9 @@ function tick1(wd, s, hold, dt, fx, fresh) {
       // recorded GD slope jumps (2:1 slope at 1x: 24.73 blocks/s, three recordings within 0.3%).
       // shortcut: only measured on 2:1 slopes at 1x; "jump + 0.23x slope speed" fits those too; a 1:1 slope jump would decide.
       const jv = cubeJump(s), jumpOff = rise => Math.max(jv, 1.2 * rise - stepLoss(s));
-      if (s.gnd) { s.vy = -gs * jumpOff(-gs * (s.sv || 0)); s.gnd = false; s.spent = true; s.lv = 0; }
-      if (s.dual && s.gnd2) { s.vy2 = gs * jumpOff(gs * (s.sv2 || 0)); s.gnd2 = false; s.spent = true; s.lv2 = 0; }
+      const jOK = y => press || !letterHit(wd, 'J', s.x / B, y / B, h / B); // J letter block: a held press doesn't jump
+      if (s.gnd && jOK(s.y)) { s.vy = -gs * jumpOff(-gs * (s.sv || 0)); s.gnd = false; s.spent = true; s.lv = 0; }
+      if (s.dual && s.gnd2 && jOK(s.y2)) { s.vy2 = gs * jumpOff(gs * (s.sv2 || 0)); s.gnd2 = false; s.spent = true; s.lv2 = 0; }
     }
     s.x += v * dt;
     if (s.x >= wd.end) return 'win';
@@ -1676,6 +1708,14 @@ function drawOrb(g, o, u, t, used) {
   g.strokeStyle = '#fff'; g.lineWidth = Math.max(1.5, u / 14); g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke();
   g.globalAlpha = 1;
 }
+// Letter block: a white-edged tile with its letter (GD shows these only in the editor).
+function drawLetter(g, o, u) {
+  const L = LETTERS[o.k], x = o.x * u, y = o.y * u, m = u * 0.06;
+  g.fillStyle = 'rgba(12,14,28,.35)'; g.fillRect(x + m, y + m, u - 2 * m, u - 2 * m);
+  g.strokeStyle = '#fff'; g.lineWidth = Math.max(1.5, u / 18); g.strokeRect(x + m, y + m, u - 2 * m, u - 2 * m);
+  g.fillStyle = L.col; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 ${Math.round(u * 0.5)}px "Space Mono", monospace`;
+  g.fillText(o.k, x + u / 2, y + u / 2 + u * 0.03); g.textBaseline = 'alphabetic';
+}
 function renderObj(g, o, u, t) { // one object in its editor colours (palette icons and the build ghost)
   if (o.t === 'r' || o.t === 't') { g.beginPath(); addSolid(g, o, u); g.fillStyle = o.d ? '#0f6b55' : '#2340ff'; g.fill(); g.strokeStyle = o.d ? D_COL : '#fff'; g.lineWidth = Math.max(1.5, u / 20); g.stroke(); }
   else if (o.t === 's') { sawPath(g, o.x * u, o.y * u, SAW_R * u, t); g.fillStyle = '#ffd23f'; g.fill(); g.strokeStyle = '#ff9f43'; g.lineWidth = Math.max(1, u / 20); g.stroke(); }
@@ -1685,6 +1725,7 @@ function renderObj(g, o, u, t) { // one object in its editor colours (palette ic
   else if (o.t === 'c') drawCoin(g, o, u, t, false);
   else if (o.t === 'h') drawCheckpoint(g, o, u);
   else if (o.t === 'x') drawTrigger(g, o, u);
+  else if (o.t === 'L') drawLetter(g, o, u);
   else drawPortal(g, o, u, u >= 30);
 }
 // Cheap glow: a wide faint stroke under a thin bright one (shadowBlur costs frames, and dropped frames feel like input lag).
@@ -1794,6 +1835,7 @@ function draw(t, dt) {
   if (ed || (inGame && hacks.practice)) for (const o of world.cps) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawCheckpoint(ctx, o, B, ed ? 1 : 0.4);
   if (ed) { // editor only: triggers as labelled tiles, and each grouped object's group number
     for (const o of world.trig) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawTrigger(ctx, o, B);
+    for (const o of world.letters) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawLetter(ctx, o, B);
     ctx.font = '700 13px "Space Mono", monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#ffcc1a';
     for (const o of world.objs) if (o.g && o.t !== 'x' && o.x * B > camX - 60 && o.x * B < camX + viewW + 60) { const [cx, cy, hw, hh] = centreOf(o.t === 'r' || o.t === 't' || o.t === 's' || o.t === 'k' ? o : { t: 's', x: o.x, y: o.y }); ctx.fillText('g' + o.g, (cx - hw) * B + 3, (cy - hh) * B + 14); }
   }
@@ -1824,7 +1866,7 @@ function draw(t, dt) {
     for (const o of sel) {
       ctx.beginPath();
       if (o.t === 's' || o.t === 'd' || o.t === 'q' || o.t === 'c') ctx.arc(o.x * B, o.y * B, (o.t === 's' ? SAW_R : o.t === 'c' ? COIN_R : ORB_R * 1.45) * B + 4, 0, 7);
-      else if (o.t === 'h' || o.t === 'x') ctx.rect(o.x * B - B * 0.45, o.y * B - B * 0.5, B * 0.9, B); else if (o.t === 'k' || o.t === 'j') ctx.rect(o.x * B, o.y * B, B, B); else if (o.t === 'p') ctx.rect(o.x * B - 10, o.y * B, 20, o.h * B); else addSolid(ctx, o, B);
+      else if (o.t === 'h' || o.t === 'x') ctx.rect(o.x * B - B * 0.45, o.y * B - B * 0.5, B * 0.9, B); else if (o.t === 'k' || o.t === 'j' || o.t === 'L') ctx.rect(o.x * B, o.y * B, B, B); else if (o.t === 'p') ctx.rect(o.x * B - 10, o.y * B, 20, o.h * B); else addSolid(ctx, o, B);
       ctx.stroke();
     }
     if (hoverCell && edTool === 'build' && !pdrag) {
@@ -1892,6 +1934,7 @@ function draw(t, dt) {
     for (const s of saws) { ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_HIT * B - 2, 0, 7); ctx.stroke(); }
     ctx.strokeStyle = '#3fd8ff'; for (const o of world.orbs) ctx.strokeRect((o.x - ORB_HIT) * B, (o.y - ORB_HIT) * B, ORB_HIT * 2 * B, ORB_HIT * 2 * B);
     for (const o of world.pads) { const [l, tp, r, b] = padBox(o); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
+    if (!ed) { ctx.globalAlpha = 0.6; for (const o of world.letters) drawLetter(ctx, o, B); ctx.globalAlpha = 1; } // letter blocks (the editor draws them anyway)
     ctx.strokeStyle = '#ff3355'; for (const k of spikes) { const [l, tp, r, b] = spikeBox(k); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
     if (inGame) { // also on death, so you can see what you hit
       const box = p.cube || p.ship, r = box ? cubeHalf(p) : p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
@@ -2083,8 +2126,7 @@ const PALETTE = [
   { id: 'g1', label: 'Cube', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 1 }) },
   { id: 'g0', label: 'Wave', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 0 }) },
   { id: 'g2', label: 'Ship', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 2 }) },
-  { id: 'dblock', label: 'D block', make: (x, y) => ({ t: 'r', x, y, w: 1, h: 1, d: 1 }) },
-  { id: 'dslope', label: 'D slope', make: (x, y) => ({ t: 't', x, y, w: 1, h: 1, o: edRot, d: 1 }) },
+  ...Object.entries(LETTERS).map(([k, L]) => ({ id: 'L' + k, label: L.name, make: (x, y) => ({ t: 'L', x, y, k }) })),
   ...Object.entries(PAD).map(([c, k]) => ({ id: 'pad' + c, label: k.name, make: (x, y) => ({ t: 'j', x, y, o: edRot, c }) })),
   ...Object.entries(RING).map(([c, k]) => ({ id: 'ring' + c, label: k.name, make: (x, y) => ({ t: 'q', x: x + 0.5, y: y + 0.5, c }) })),
   { id: 'dash0', label: 'Dash orb', make: (x, y) => ({ t: 'd', x: x + 0.5, y: y + 0.5, a: 0, f: 0 }) },
@@ -2130,6 +2172,7 @@ function objectAt(bx, by) { // portals over saws over solids; within a kind, the
   for (const o of world.portals) if (Math.abs(o.x - bx) < 0.3 && by >= o.y && by <= o.y + o.h) consider(o, 3);
   for (const o of world.orbs) if (Math.hypot(o.x - bx, o.y - by) < ORB_R * 1.35) consider(o, 3);
   for (const o of world.pads) if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 3);
+  for (const o of world.letters) if (bx >= o.x && bx <= o.x + 1 && by >= o.y && by <= o.y + 1) consider(o, 2);
   for (const o of [...world.coins, ...world.cps, ...world.trig]) if (Math.abs(o.x - bx) < 0.45 && Math.abs(o.y - by) < 0.5) consider(o, 4);
   for (const o of [...(world.cols.get(Math.floor(bx)) || []), ...world.moving]) { // moving objects sit where they start in the editor
     if (o.t === 's') { if (Math.hypot(o.x - bx, o.y - by) < SAW_R) consider(o, 2); }
@@ -2170,7 +2213,7 @@ function edAction(a, fine) {
 function drawPaletteIcon(c, item) {
   const g = c.getContext('2d'), o = item.make(0, 0);
   g.clearRect(0, 0, c.width, c.height); g.save();
-  const box = o.t === 's' || o.t === 'd' || o.t === 'q' || o.t === 'c' || o.t === 'h' || o.t === 'x' ? [o.x, o.y, 1.4, 1.4] : o.t === 'k' || o.t === 'j' ? [o.x + 0.5, o.y + 0.5, 1, 1] : o.t === 'p' ? [o.x, o.y + o.h / 2, 0.6, o.h] : [o.x + o.w / 2, o.y + o.h / 2, o.w, o.h];
+  const box = o.t === 's' || o.t === 'd' || o.t === 'q' || o.t === 'c' || o.t === 'h' || o.t === 'x' ? [o.x, o.y, 1.4, 1.4] : o.t === 'k' || o.t === 'j' || o.t === 'L' ? [o.x + 0.5, o.y + 0.5, 1, 1] : o.t === 'p' ? [o.x, o.y + o.h / 2, 0.6, o.h] : [o.x + o.w / 2, o.y + o.h / 2, o.w, o.h];
   const u = Math.min(c.width / (box[2] + 0.6), c.height / (box[3] + 0.6));
   g.translate(c.width / 2 - box[0] * u, c.height / 2 - box[1] * u);
   renderObj(g, o, u, 0); g.restore();
@@ -2187,7 +2230,7 @@ function renderPane() {
   } else if (edTool === 'edit') {
     const n = sel.size, dis = n ? '' : 'disabled';
     pane.innerHTML = `<span class="label" style="width:100%">${n ? `${n} selected` : 'Nothing selected · click an object (Shift+click to add more)'}</span>`
-      + [['left', '←'], ['up', '↑'], ['down', '↓'], ['right', '→'], ['rot', 'Rotate'], ['dtog', 'D on/off'], ['multi', 'Multi activate'], ['w-', 'Width −'], ['w+', 'Width +'], ['h-', 'Height −'], ['h+', 'Height +'],
+      + [['left', '←'], ['up', '↑'], ['down', '↓'], ['right', '→'], ['rot', 'Rotate'], ['multi', 'Multi activate'], ['w-', 'Width −'], ['w+', 'Width +'], ['h-', 'Height −'], ['h+', 'Height +'],
         ['dup', 'Duplicate'], ['del', 'Delete'], ['none', 'Deselect']].map(([a, txt]) => `<button class="act" data-ed="${a}" ${dis}>${txt}</button>`).join('')
       + propFields();
   } else {
