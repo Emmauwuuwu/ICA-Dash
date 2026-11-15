@@ -7,8 +7,7 @@
 <style>:root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.min.js" integrity="sha384-EyR2P0dlmjnEGcm9xcjdAn0VedZpRHEwDLP9oSS6wYMvzHBHkUrvgonveazJ/sSx" crossorigin="anonymous"></script>
 </head>
-<body>
-<title>ICA Dash</title>
+<body><title>ICA Dash</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Space+Mono:wght@400;700&family=Archivo:wght@500;700&display=swap">
@@ -235,6 +234,7 @@ input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
 .btnlink { display: inline-flex; align-items: center; padding: 9px 14px; border: 2px solid var(--hair); color: inherit; text-decoration: none; font-family: var(--mono); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
 .facts button.mini { padding: 2px 8px; font-size: 11px; }
 #songGate { z-index: 7; }
+.scframe { position: fixed; left: -20px; top: -20px; width: 1px; height: 1px; border: 0; opacity: 0; pointer-events: none; }
 .songlist { display: flex; flex-direction: column; gap: 6px; }
 .songlist .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .vols { display: flex; flex-wrap: wrap; gap: 14px 28px; }
@@ -431,9 +431,10 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
     </div>
     <h3>Song</h3>
     <div class="edsong">
-      <label class="prop"><span>Source</span><select class="field" id="songKind"><option value="0">Built-in track</option><option value="1">Newgrounds</option></select></label>
+      <label class="prop"><span>Source</span><select class="field" id="songKind"><option value="0">Built-in track</option><option value="1">Newgrounds</option><option value="2">SoundCloud</option></select></label>
       <label class="prop" id="songNumBox"><span>Track</span><select class="field" id="songNum"></select></label>
       <label class="prop" id="songIdBox"><span>Newgrounds ID</span><input class="field" type="number" id="songId" min="1" step="1"></label>
+      <label class="prop" id="songUrlBox"><span>SoundCloud track link</span><input class="field" type="url" id="songUrl" placeholder="https://soundcloud.com/artist/track" spellcheck="false"></label>
       <span id="songNgBox" class="btnrow"><a class="ghost btnlink" id="songPage" target="_blank" rel="noopener">Open on Newgrounds</a><button class="ghost" id="songLoad">Load song file</button></span>
       <input type="file" id="songFile" accept="audio/*,.mp3,.ogg,.wav,.m4a" class="sr" tabindex="-1" aria-hidden="true">
       <label class="prop"><span>Start at (s)</span><input class="field" type="number" id="songOff" min="0" step="0.1"></label>
@@ -786,7 +787,7 @@ function encodeLevel(objs) {
     : o.t === 's' ? `s,${n(o.x)},${n(o.y)}` : o.t === 'd' ? `d,${n(o.x)},${n(o.y)},${o.a},${o.f}${o.m ? ',1' : ''}` : o.t === 'k' ? `k,${n(o.x)},${n(o.y)},${o.o}${o.z ? ',1' : ''}`
     : o.t === 'q' ? `q,${n(o.x)},${n(o.y)},${o.c}${o.m ? ',1' : ''}` : o.t === 'j' ? `j,${n(o.x)},${n(o.y)},${o.o},${o.c}`
     : o.t === 'c' || o.t === 'h' ? `${o.t},${n(o.x)},${n(o.y)}` : o.t === 'x' ? `x,${n(o.x)},${n(o.y)},${o.k},${o.g},${n(o.dur)},${n(o.a)},${n(o.b || 0)}`
-    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : o.t === 'a' ? `a,${n(o.x)},${n(o.y)},${n(o.s)},${encodeURIComponent(o.txt)}` : o.t === 'P' ? `P,${n(o.x)},${n(o.y)},${o.sp},${o.m},${o.f}` : o.t === 'M' ? `M,${o.k},${o.n},${n(o.off || 0)}` : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
+    : o.t === 'L' ? `L,${n(o.x)},${n(o.y)},${o.k}` : o.t === 'a' ? `a,${n(o.x)},${n(o.y)},${n(o.s)},${encodeURIComponent(o.txt)}` : o.t === 'P' ? `P,${n(o.x)},${n(o.y)},${o.sp},${o.m},${o.f}` : o.t === 'M' ? (o.k === 2 ? `M,2,${encodeURIComponent(o.url || '')},${n(o.off || 0)}` : `M,${o.k},${o.n},${n(o.off || 0)}`) : `p,${n(o.x)},${n(o.y)},${n(o.h)},${o.k},${o.v}`) + (o.g && o.t !== 'x' ? '|' + o.g : '')).join(';');
 }
 // Pasted codes are untrusted: every field is checked, sizes are capped, and anything malformed is skipped.
 function decodeLevel(code) {
@@ -816,9 +817,10 @@ function decodeLevel(code) {
     else if (t === 'q' && okPos(a, b) && RING[f[3]]) objs.push({ t, x: a, y: b, c: f[3], ...(f[4] === '1' ? { m: 1 } : {}) });
     else if (t === 'L' && okPos(a, b) && LETTERS[f[3]]) objs.push({ t, x: a, y: b, k: f[3] });
     else if (t === 'M') { // the song: one per level (the last one wins)
-      const k = a === 1 ? 1 : 0, nn = Math.max(1, Math.min(k ? 1e8 : SONG_COUNT, Math.round(b) || 1));
+      let url = ''; if (a === 2) try { url = decodeURIComponent(f[2] || ''); } catch (e) {}
+      const k = a === 1 ? 1 : a === 2 && SC_URL.test(url) ? 2 : 0, nn = Math.max(1, Math.min(k === 1 ? 1e8 : SONG_COUNT, Math.round(b) || 1));
       for (let i = objs.length - 1; i >= 0; i--) if (objs[i].t === 'M') objs.splice(i, 1);
-      objs.push({ t, k, n: nn, off: Math.max(0, Math.min(600, c || 0)) });
+      objs.push({ t, k, n: k === 2 ? 1 : nn, off: Math.max(0, Math.min(600, c || 0)), ...(k === 2 ? { url } : {}) });
     }
     else if (t === 'P' && okPos(a, b)) objs.push({ t, x: a, y: b, sp: Math.min(4, Math.max(0, Math.round(c) || 0)), m: Math.min(2, Math.max(0, Math.round(d) || 0)), f: (Math.round(num(f[5])) || 0) & 15 });
     else if (t === 'a' && okPos(a, b)) { let txt = ''; try { txt = cleanText(decodeURIComponent(f[4] || '')); } catch (e) {} if (txt) objs.push({ t, x: a, y: b, s: Math.min(4, Math.max(0.25, c || 1)), txt }); }
@@ -1690,7 +1692,7 @@ function reset() {
   p.ang = p.from = p.dir * (p.mini ? Math.atan(2) : Math.PI / 4); p.cpT = 0; p.sub = 0; speedI = p.speedI;
   trail = p.cube || p.ship ? [] : [[p.x, p.y]]; trail2 = p.dual && !p.cube && !p.ship ? [[p.x, p.y2]] : [];
   plan = hacks.auto ? findPath(world, stateOf(p), Infinity, 300000, false) || [] : []; // autoplay: route to the end, worked out now
-  if (!(cp && SND.seq || cp && SND.el && !SND.el.paused)) { songStop(); if (!p.wait) setTimeout(attemptMusic, 0); } // each attempt starts the song again (practice keeps it going)
+  if (!(cp && (SND.seq || SND.sc) || cp && SND.el && !SND.el.paused)) { songStop(); if (!p.wait) setTimeout(attemptMusic, 0); } // each attempt starts the song again (practice keeps it going)
 }
 // The state a start position sets: its place, speed, gamemode, size, gravity and dual; portals behind it are skipped.
 function startPosState(o) {
@@ -1824,6 +1826,7 @@ function applyVol() {
   if (SND.music) SND.music.gain.value = SND.vol.music * 0.45;
   if (SND.sfx) SND.sfx.gain.value = SND.vol.sfx * 0.55;
   if (SND.el) SND.el.volume = Math.min(1, SND.vol.music);
+  if (SND.sc) SCP.w?.setVolume(Math.round(Math.min(1, SND.vol.music) * 100));
 }
 addEventListener('pointerdown', audioCtx, { once: true }); addEventListener('keydown', audioCtx, { once: true }); // browsers start sound on a press
 function tone(type, f0, f1, dur, vol, at = 0, dest) {
@@ -1871,9 +1874,37 @@ function playStep(song, step, t) {
   const L = song.lead[(Math.floor(step / 16) % 2) * 16 + i];
   if (L !== null && step >= 64) tone('square', midi(deg(song, ch + L) + 24), 0, spb * 1.6, 0.06, t, M); // the lead comes in after 4 bars
 }
+// SoundCloud songs play through SoundCloud's official embedded player and Widget API, so nothing is downloaded or copied.
+const SC_URL = /^https:\/\/(?:www\.|m\.)?soundcloud\.com\/[\w-]+\/[\w-]+$/; // shortcut: on.soundcloud.com short links and playlists aren't accepted; paste the track's own page link
+const SCP = { w: null, url: '', ready: null };
+function scApi() {
+  return scApi.p ||= new Promise((res, rej) => {
+    const el = document.createElement('script'); el.src = 'https://w.soundcloud.com/player/api.js';
+    el.onload = res; el.onerror = () => { scApi.p = null; el.remove(); rej(new Error('SoundCloud unreachable')); }; document.head.append(el);
+  });
+}
+async function scTrack(url) { // the widget with this track loaded and ready
+  await scApi();
+  if (!SCP.w) {
+    const f = document.createElement('iframe'); f.className = 'scframe'; f.title = 'SoundCloud player'; f.allow = 'autoplay'; f.tabIndex = -1;
+    f.src = 'https://w.soundcloud.com/player/?auto_play=false&url=' + encodeURIComponent(url); document.body.append(f);
+    SCP.w = SC.Widget(f); SCP.url = url; SCP.ready = new Promise(r => SCP.w.bind(SC.Widget.Events.READY, r));
+  } else if (SCP.url !== url) { SCP.url = url; SCP.ready = new Promise(r => SCP.w.load(url, { auto_play: false, callback: r })); }
+  await Promise.race([SCP.ready, new Promise((_, rej) => setTimeout(() => rej(new Error('SoundCloud timed out')), 15000))]);
+  return SCP.w;
+}
 function songStart(level, offset) { // level: { song, bpm } ; offset: seconds into the song
   songStop(); const c = audioCtx(); if (!c || SND.vol.music <= 0) return;
   const sg = level.song;
+  if (sg && sg.k === 2) {
+    const tok = SND.sc = {}, t0 = performance.now(); // a newer start or a stop cancels this one
+    scTrack(sg.url).then(w => {
+      if (SND.sc !== tok) return;
+      w.setVolume(Math.round(Math.min(1, SND.vol.music) * 100)); w.play();
+      w.seekTo(Math.round(((sg.off || 0) + offset) * 1000 + performance.now() - t0)); // catch up on the time it took to load
+    }).catch(() => { if (songStart.warned !== sg.url) { songStart.warned = sg.url; toast('The SoundCloud song couldn’t load here. The level plays without it.'); } });
+    return;
+  }
   if (sg && sg.k === 1) {
     const have = SONGS.get(sg.n);
     if (!have) { if (songStart.warned !== sg.n) { songStart.warned = sg.n; toast(`This level uses Newgrounds song #${sg.n}. Load it in Settings → Songs to hear it.`); } return; }
@@ -1886,8 +1917,8 @@ function songStart(level, offset) { // level: { song, bpm } ; offset: seconds in
   const spb = 60 / song.bpm / 4; let step = Math.floor(((sg?.off || 0) + offset) / spb), t = c.currentTime + 0.06;
   SND.seq = setInterval(() => { while (t < SND.ctx.currentTime + 0.12) { playStep(song, step++, t); t += spb; } }, 25);
 }
-function songStop() { if (SND.seq) { clearInterval(SND.seq); SND.seq = null; } if (SND.el) { SND.el.pause(); SND.el.removeAttribute('src'); SND.el = null; } }
-function songPause() { if (SND.seq) { clearInterval(SND.seq); SND.seq = null; SND.paused = true; } if (SND.el) SND.el.pause(); }
+function songStop() { if (SND.sc) { SND.sc = null; SCP.w?.pause(); } if (SND.seq) { clearInterval(SND.seq); SND.seq = null; } if (SND.el) { SND.el.pause(); SND.el.removeAttribute('src'); SND.el = null; } }
+function songPause() { if (SND.sc) { SND.sc = null; SCP.w?.pause(); SND.paused = true; } if (SND.seq) { clearInterval(SND.seq); SND.seq = null; SND.paused = true; } if (SND.el) SND.el.pause(); }
 // Seconds from the level's start to x (game units), following its speed portals.
 function timeAt(wd, xu) {
   let t = 0, i = 1, x = 0;
@@ -1911,7 +1942,8 @@ function pauseGame() {
   songPause();
   show('pause');
   const sg = levelMusic().song;
-  $('pauseSong').innerHTML = sg.k === 1 ? `Song: <a href="https://www.newgrounds.com/audio/listen/${sg.n}" target="_blank" rel="noopener">Newgrounds #${sg.n}</a>` : `Song: built-in track ${sg.n}`;
+  $('pauseSong').innerHTML = sg.k === 2 ? `Song: <a href="${esc(sg.url)}" target="_blank" rel="noopener" id="scCredit">SoundCloud</a>` : sg.k === 1 ? `Song: <a href="https://www.newgrounds.com/audio/listen/${sg.n}" target="_blank" rel="noopener">Newgrounds #${sg.n}</a>` : `Song: built-in track ${sg.n}`;
+  if (sg.k === 2) SCP.w?.getCurrentSound(t => { if (t?.title && $('scCredit')) $('scCredit').textContent = `${t.user?.username ? t.user.username + ' – ' : ''}${t.title}`; });
   $('pauseInfo').textContent = `${Math.min(100, Math.max(0, Math.floor(p.x / world.end * 100)))}% · Attempt ${attempt}`;
   $('pauseName').textContent = cur.name + (usedHacks ? ' · hacks on' : '');
   $('pExit').textContent = from === 'editor' ? 'Back to editor' : 'Exit level';
@@ -3196,24 +3228,30 @@ $('songNum').innerHTML = Array.from({ length: SONG_COUNT }, (_, i) => `<option v
 function edSong() { return edObjs.find(o => o.t === 'M') || null; }
 function renderSong() {
   const sg = edSong() || { k: 0, n: 1, off: 0 };
-  $('songKind').value = sg.k; $('songNum').value = sg.k ? 1 : sg.n; $('songId').value = sg.k ? sg.n : ''; $('songOff').value = sg.off || 0;
-  $('songNumBox').hidden = !!sg.k; $('songIdBox').hidden = !sg.k; $('songNgBox').hidden = !sg.k;
-  if (sg.k) { $('songPage').href = ngPage(sg.n); const h = SONGS.get(sg.n); $('songMsg').textContent = h ? `Song #${sg.n} is loaded on this device (${h.name}).` : `Song #${sg.n} isn't on this device yet: open it on Newgrounds, download it, then press Load song file.`; }
+  $('songKind').value = sg.k; $('songNum').value = sg.k ? 1 : sg.n; $('songId').value = sg.k === 1 ? sg.n : ''; $('songOff').value = sg.off || 0;
+  $('songNumBox').hidden = !!sg.k; $('songIdBox').hidden = $('songNgBox').hidden = sg.k !== 1; $('songUrlBox').hidden = sg.k !== 2;
+  if (sg.k === 2) { $('songUrl').value = sg.url || ''; $('songMsg').textContent = sg.url ? 'Plays from SoundCloud for everyone; nothing to download. Press Listen to check it.' : 'Paste the link to a SoundCloud track (its page address).'; }
+  if (sg.k === 1) { $('songPage').href = ngPage(sg.n); const h = SONGS.get(sg.n); $('songMsg').textContent = h ? `Song #${sg.n} is loaded on this device (${h.name}).` : `Song #${sg.n} isn't on this device yet: open it on Newgrounds, download it, then press Load song file.`; }
 }
 function setSong(patch) {
   const before = JSON.stringify(edObjs), cur0 = edSong() || { t: 'M', k: 0, n: 1, off: 0 }, next = { ...cur0, ...patch };
   edObjs = edObjs.filter(o => o.t !== 'M'); edObjs.push(next); commit(before); edChanged(); renderSong();
 }
-$('songKind').onchange = () => { $('songMsg').textContent = ''; const k = +$('songKind').value; setSong({ k, n: k ? Math.max(1, Math.round(+$('songId').value) || 1) : 1 }); };
+$('songKind').onchange = () => { $('songMsg').textContent = ''; const k = +$('songKind').value; setSong({ k, n: k === 1 ? Math.max(1, Math.round(+$('songId').value) || 1) : 1, url: k === 2 ? edSong()?.url || '' : undefined }); };
+$('songUrl').onchange = () => {
+  const u = $('songUrl').value.trim().split(/[?#]/)[0].replace(/\/$/, '');
+  if (!SC_URL.test(u)) { $('songMsg').textContent = 'That isn’t a SoundCloud track link. Open the track on soundcloud.com and copy the address, like https://soundcloud.com/artist/track.'; return; }
+  songStop(); $('songTest').textContent = '▶ Listen'; setSong({ url: u });
+};
 $('songNum').onchange = () => setSong({ n: +$('songNum').value });
 $('songId').onchange = () => setSong({ n: Math.max(1, Math.round(+$('songId').value) || 1) });
 $('songOff').onchange = () => setSong({ off: Math.max(0, Math.min(600, +$('songOff').value || 0)) });
 $('songLoad').onclick = () => $('songFile').click();
 $('songFile').onchange = async () => { const f = $('songFile').files[0]; $('songFile').value = ''; const sg = edSong(); const err = await addSong(sg?.n, f); renderSong(); if (err) $('songMsg').textContent = err; };
 $('songTest').onclick = () => {
-  if (SND.seq || SND.el) { songStop(); $('songTest').textContent = '▶ Listen'; return; }
+  if (SND.seq || SND.el || SND.sc) { songStop(); $('songTest').textContent = '▶ Listen'; return; }
   const sg = edSong() || { k: 0, n: 1, off: 0 };
-  if (sg.k === 1 && !SONGS.get(sg.n)) { renderSong(); return; }
+  if (sg.k === 1 && !SONGS.get(sg.n) || sg.k === 2 && !sg.url) { renderSong(); return; }
   $('songTest').textContent = '■ Stop'; songStart({ song: sg, bpm: 132 }, 0);
 };
 // Settings → Songs: load a Newgrounds song for an ID, see and remove the ones kept here
@@ -3507,7 +3545,7 @@ function renderOnline() {
     let facts;
     try { const w = worldFor(it.code); facts = `<span>${Math.round(w.end / B)} blk</span><span>${Math.round(duration(w))} s</span>`;
       const sg = w.song; // its song: a built-in track, or a Newgrounds one (on this device or not)
-      facts += sg?.k === 1 ? `<span>♪ <a href="${ngPage(sg.n)}" target="_blank" rel="noopener">Newgrounds #${sg.n}</a> ${SONGS.has(sg.n) ? '✓ on this device' : `<button class="ghost mini" data-oget="${esc(it.key)}">Get song</button>`}</span>` : `<span>♪ Track ${sg?.n || 1}</span>`;
+      facts += sg?.k === 1 ? `<span>♪ <a href="${ngPage(sg.n)}" target="_blank" rel="noopener">Newgrounds #${sg.n}</a> ${SONGS.has(sg.n) ? '✓ on this device' : `<button class="ghost mini" data-oget="${esc(it.key)}">Get song</button>`}</span>` : sg?.k === 2 ? `<span>♪ <a href="${esc(sg.url)}" target="_blank" rel="noopener">SoundCloud</a></span>` : `<span>♪ Track ${sg?.n || 1}</span>`;
     } catch (e) { facts = '<span>Unreadable level</span>'; }
     const own = it.author === NET.uid, key = esc(it.key), liked = mine.has(it.key);
     return `<div class="row"><div><div class="name">${esc(it.name)}</div><div class="facts"><span>by ${esc(playerName(it.author))}${own ? ' (you)' : ''}</span>${facts}<span>♥ ${it.likes}</span><span>Best ${bests['o:' + it.key] || 0}%</span></div></div>
