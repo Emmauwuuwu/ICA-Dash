@@ -919,7 +919,7 @@ const inputs = []; // [timestamp, held] queued so each press lands on the exact 
 const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
 let checkpoints = [], spawnCache = null, plan = [];
 const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
-  used: q.used, lastPad: q.lastPad, cube: q.cube, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2 });
+  used: q.used, lastPad: q.lastPad, cube: q.cube, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2 });
 // ---------- cube ----------
 // Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), with GD's player step
 // scaled by 0.9 (so 54 "frames" per second). That makes a jump 2.17 blocks high and 0.432 s long, peaking 2.24 blocks
@@ -936,34 +936,48 @@ const CUBE_JUMP = 11.180032 * GD - GD_STEP_LOSS, CUBE_JUMP_MINI = 11.180032 * 0.
 const JUMP_AT_SPEED = [0.9574, 1, 1.0232, 1.0025, 1.005];
 const CUBE_H = B / 2, CUBE_MINI = 0.6, CUBE_INNER = 0.3; // main hitbox 1 x 1 block (mini 0.6); the inner box that dies to solids is 0.3 of it
 const cubeHalf = s => s.mini ? CUBE_H * CUBE_MINI : CUBE_H;
+// Slopes, measured from recorded GD slope runs: the slope holds the cube up at a point 1/3 block ahead of its centre (2/3 of
+// its half-size), so it rides 0.33 block lower than resting on its corner would; once that point passes a rising slope's tip
+// the cube slides over the tip for 0.069 block, then flies off at 0.918x the slope's rising speed (less GD's step loss).
+const SLOPE_CONTACT = 2 / 3, SLOPE_TIP = 0.069, SLOPE_LAUNCH = 0.918;
 // Highest surface the cube's footprint [x - h, x + h] can stand on near its foot (gravity sign gs: 1 down, -1 up). Accepts
 // surfaces it has sunk into by at most `into`, or (when it was already standing) ones up to `below` under its foot.
-// Returns the surface's y, or null.
+// Returns the surface's y, or null; SURF_K is its steepness and SURF_TIP says whether it's a slope's tip (1 sliding over it,
+// 2 past that, only standing on the tip's point).
 function surfaceNear(wd, x, foot, h, gs, into, below) {
-  const xl = x - h, xr = x + h, H = y => -gs * y, Hf = H(foot);
+  // uphill the slope holds the cube at the measured contact point; downhill (not measured) it stays on its back corner, so
+  // stepping off a flat block onto a downhill slope is seamless
+  const xl = x - h, xr = x + h, cu = x + h * SLOPE_CONTACT, cd = xl, tipLen = SLOPE_TIP * B * h / CUBE_H, H = y => -gs * y, Hf = H(foot);
   let best = null;
-  const take = (sy, k) => { const hs = H(sy); if (hs <= Hf + into && hs >= Hf - below && (best === null || hs > H(best))) { best = sy; SURF_K = k; } };
+  const take = (sy, k, tip = 0) => {
+    const hs = H(sy); if (hs > Hf + into || hs < Hf - below) return;
+    if (best === null || hs > H(best) || (hs === H(best) && SURF_TIP && !tip)) { best = sy; SURF_K = k; SURF_TIP = tip; } // a real surface beats a tip
+  };
   for (let c = Math.floor(xl / B); c <= Math.floor(xr / B); c++) for (const o of wd.cols.get(c) || []) {
     if (o.t !== 'r' && o.t !== 't') continue;
     const x0 = o.x * B, x1 = (o.x + o.w) * B, y0 = o.y * B, y1 = (o.y + o.h) * B;
     if (xr <= x0 || xl >= x1) continue;
     if (o.t === 'r') { take(gs > 0 ? y0 : y1, 0); continue; }
     const along = px => (Math.min(x1, Math.max(x0, px)) - x0) / (x1 - x0), k = (y1 - y0) / (x1 - x0); // 0..1 across; steepness
-    // the slope counts while the cube's contact corner is on it; past the tip it stands on a point (flat)
+    const tipOf = () => cu - x1 < tipLen ? 1 : 2;
     if (gs > 0) { // standing on top: slopes 0 (falling to the right) and 1 (rising), flat tops of 2 and 3
-      if (o.o === 0) take(y0 + along(xl) * (y1 - y0), xl > x0 ? k : 0); else if (o.o === 1) take(y1 - along(xr) * (y1 - y0), xr < x1 ? -k : 0); else take(y0, 0);
+      if (o.o === 0) take(y0 + along(cd) * (y1 - y0), cd > x0 ? k : 0);
+      else if (o.o === 1) { if (cu < x1) take(y1 - along(cu) * (y1 - y0), -k); else take(y0, 0, tipOf()); }
+      else take(y0, 0);
     } else { // upside down, standing under: slopes 2 and 3 from below, flat undersides of 0 and 1
-      if (o.o === 2) take(y0 + along(xr) * (y1 - y0), xr < x1 ? k : 0); else if (o.o === 3) take(y1 - along(xl) * (y1 - y0), xl > x0 ? -k : 0); else take(y1, 0);
+      if (o.o === 2) { if (cu < x1) take(y0 + along(cu) * (y1 - y0), k); else take(y1, 0, tipOf()); }
+      else if (o.o === 3) take(y1 - along(cd) * (y1 - y0), cd > x0 ? -k : 0);
+      else take(y1, 0);
     }
   }
   return best;
 }
-let SURF_K = 0; // steepness (dy/dx, screen y down) of the surface surfaceNear last picked
+let SURF_K = 0, SURF_TIP = 0; // what surfaceNear last picked: steepness (dy/dx, screen y down) and tip state
 // One cube body (the dual twin has the opposite gravity). Returns false if it dies.
-// On the ground the cube moves with the surface: on a slope its vertical speed is the slope's (kept in sv). Running off the
-// top of a rising slope launches it at 0.9x that speed (less GD's step loss), measured from a recorded GD slope launch.
+// On the ground the cube moves with the surface: on a slope its vertical speed is the slope's (kept in sv), and the uphill
+// speed is remembered (lv) through the slide over the tip, so it can fly off at SLOPE_LAUNCH x that speed.
 function cubeBody(wd, s, k, gs, h, dt, v) {
-  const Y = k === 1 ? 'y' : 'y2', VY = k === 1 ? 'vy' : 'vy2', G = k === 1 ? 'gnd' : 'gnd2', SV = k === 1 ? 'sv' : 'sv2', was = s[G], y = s[Y];
+  const Y = k === 1 ? 'y' : 'y2', VY = k === 1 ? 'vy' : 'vy2', G = k === 1 ? 'gnd' : 'gnd2', SV = k === 1 ? 'sv' : 'sv2', LV = k === 1 ? 'lv' : 'lv2', was = s[G], y = s[Y];
   const rise = was ? -gs * (s[SV] || 0) : 0; // how fast the surface it was standing on rises (against gravity)
   let ny, vy = s[VY] || 0;
   if (s.dash != null) { ny = y + (k === 1 ? -1 : 1) * s.dash * v * dt; vy = 0; }
@@ -973,14 +987,21 @@ function cubeBody(wd, s, k, gs, h, dt, v) {
   // it's being carried up. Moving against gravity: a slope can only push it up so it doesn't sink in; it keeps its own speed
   // (a cube that jumped off a slope keeps its clean arc, as recorded in GD) and lands once it comes down onto the surface.
   const withG = (ny - y) * gs >= 0 || rise > 0;
-  const sy = surfaceNear(wd, s.x, ny + gs * h, h, gs, Math.abs(ny - y) + 2.5 * v * dt + 1, was && rise <= 0 ? 2.5 * v * dt + 1 : 0);
-  if (sy !== null && withG) { ny = sy - gs * h; if (s.dash == null) vy = SURF_K * v; s[SV] = SURF_K * v; gnd = true; }
-  else {
-    if (sy !== null) ny = sy - gs * h; // pushed up by a slope while rising
-    s[SV] = 0; if (rise > 0 && s.dash == null) vy = -gs * (0.9 * rise - GD_STEP_LOSS); // ran off the top of a rising slope: launch
+  // A cube that was standing stays on what's under it (downhill, and onto a slope's tip for the slide); leaving a rising slope
+  // is decided by the tip state below, not by lifting off it.
+  const sy = surfaceNear(wd, s.x, ny + gs * h, h, gs, Math.abs(ny - y) + 2.5 * v * dt + 1, was ? (2.5 * v + Math.max(0, rise)) * dt + 1 : 0);
+  const offTip = sy !== null && SURF_TIP === 2 && (s[LV] || 0) > 0; // carried up a slope and now past its tip: it flies off
+  if (sy !== null && withG && !offTip) {
+    ny = sy - gs * h; if (s.dash == null) vy = SURF_K * v; s[SV] = SURF_K * v; gnd = true;
+    if (!SURF_TIP) s[LV] = Math.max(0, -gs * SURF_K * v); // uphill speed, kept while sliding over a tip
+  } else {
+    if (sy !== null && !offTip) ny = sy - gs * h; // pushed up by a slope while rising
+    s[SV] = 0;
+    if (was && (s[LV] || 0) > 0 && s.dash == null) vy = -gs * (SLOPE_LAUNCH * s[LV] - GD_STEP_LOSS); // ran off a rising slope: launch
+    s[LV] = 0;
   }
   const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges: floor with gravity, a ceiling against it
-  if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null) vy = 0; s[SV] = 0; gnd = true; }
+  if ((ny - floor) * gs >= 0) { ny = floor; if (s.dash == null) vy = 0; s[SV] = 0; s[LV] = 0; gnd = true; }
   if ((ny - ceil) * gs < 0) { ny = ceil; if (vy * gs < 0) vy = 0; }
   s[Y] = ny; s[VY] = vy; s[G] = gnd;
   // Death: the small inner box touching any solid (side or ceiling hits), or the main box touching a saw or spike.
@@ -1035,8 +1056,8 @@ function tick1(wd, s, hold, dt, fx, fresh) {
       // recorded GD slope jumps (2:1 slope at 1x: 24.73 blocks/s, three recordings within 0.3%).
       // shortcut: only measured on 2:1 slopes at 1x; "jump + 0.23x slope speed" fits those too; a 1:1 slope jump would decide.
       const jv = (s.mini ? CUBE_JUMP_MINI : CUBE_JUMP) * JUMP_AT_SPEED[s.speedI], jumpOff = rise => Math.max(jv, 1.2 * rise - GD_STEP_LOSS);
-      if (s.gnd) { s.vy = -gs * jumpOff(-gs * (s.sv || 0)); s.gnd = false; s.spent = true; }
-      if (s.dual && s.gnd2) { s.vy2 = gs * jumpOff(gs * (s.sv2 || 0)); s.gnd2 = false; s.spent = true; }
+      if (s.gnd) { s.vy = -gs * jumpOff(-gs * (s.sv || 0)); s.gnd = false; s.spent = true; s.lv = 0; }
+      if (s.dual && s.gnd2) { s.vy2 = gs * jumpOff(gs * (s.sv2 || 0)); s.gnd2 = false; s.spent = true; s.lv2 = 0; }
     }
     s.x += v * dt;
     if (s.x >= wd.end) return 'win';
@@ -1153,7 +1174,7 @@ const FX = {
 };
 function reset() {
   p = { x: 0, y: VH / 2, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
-    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, rot: 0 };
+    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0 };
   trail = []; trail2 = []; parts = [];
   const cp = hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
