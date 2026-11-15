@@ -1323,8 +1323,8 @@ const FX = {
     if (o.k === 'S') { if (p.speedI !== o.v && !calm) flash = 0.45; }
     else if (o.k === 'm') { if (!!o.v !== p.mini && !p.cube) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } }
     else if (o.k === 'w') { if (o.v && !p.dual) trail2 = p.cube ? [] : [[p.x, VH - p.y]]; } // second icon appears mirrored
-    else if (o.k === 'g' && o.v !== (p.cube ? 1 : p.ship ? 2 : 0)) { // the wave and ship leave a trail; the cube doesn't
-      if (o.v === 1) { trail.push([p.x, p.y], null); if (p.dual) trail2.push([p.x, p.y2], null); p.rot = 0; } // into cube: the trail stops here
+    else if (o.k === 'g' && o.v !== (p.cube ? 1 : p.ship ? 2 : 0)) { // only the wave leaves a trail (the ship has its exhaust)
+      if (o.v) { trail.push([p.x, p.y], null); if (p.dual) trail2.push([p.x, p.y2], null); p.rot = 0; p.sa = 0; } // into cube or ship: the trail stops here
       else { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang = 0; p.turnT = 0; p.sa = 0; } // a trail starts (or carries on)
       if (!calm) flash = 0.3;
     }
@@ -1344,7 +1344,7 @@ function reset() {
   p.wait = !hacks.auto && (!!cp || sx > 0);
   if (p.wait) p.dir = p.flip ? 1 : -1; // facing the way a press will send it
   p.ang = p.from = p.dir * (p.mini ? Math.atan(2) : Math.PI / 4); p.cpT = 0; p.sub = 0; speedI = p.speedI;
-  trail = p.cube ? [] : [[p.x, p.y]]; trail2 = p.dual && !p.cube ? [[p.x, p.y2]] : [];
+  trail = p.cube || p.ship ? [] : [[p.x, p.y]]; trail2 = p.dual && !p.cube && !p.ship ? [[p.x, p.y2]] : [];
   plan = hacks.auto ? findPath(world, stateOf(p), Infinity, 300000, false) || [] : []; // autoplay: route to the end, worked out now
 }
 function show(id) { document.querySelectorAll('.screen').forEach(s => s.hidden = s.id !== id); }
@@ -1428,7 +1428,14 @@ function step(dt) {
     speedI = p.speedI;
     if (res === 'win') return win();
     if (res === 'dead') { if (hacks.noclip) hitFlash = 0.3; else return die(); }
-    if (p.ship && ++p.tk % 6 === 0) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } // the ship's trail follows its curve
+    if (p.ship && !calm && !hacks.layout && ++p.tk % 3 === 0) { // the ship's exhaust: a stream of fire particles out the back
+      const h = cubeHalf(p), m = p.mini ? 0.7 : 1;
+      for (const [y, f] of p.dual ? [[p.y, 1], [p.y2, -1]] : [[p.y, 1]]) {
+        const a = (p.sa || 0) * f, cx = p.x - Math.cos(a) * h * 1.25, cy = y - Math.sin(a) * h * 1.25 + (p.flip === (f < 0) ? 1 : -1) * h * 0.25;
+        parts.push({ x: cx, y: cy, vx: -(80 + Math.random() * 120) * m, vy: (Math.random() - 0.5) * 70 * m, life: 0.18 + Math.random() * 0.14, sz: (8 + Math.random() * 5) * m, col: ['#fff3a8', '#ffcc1a', '#ff9f43', '#ff5a2e'][Math.random() * 4 | 0] });
+      }
+      if (parts.length > 400) parts = parts.filter(q => q.life > 0);
+    }
     // checkpoint objects: in practice mode, passing one saves a checkpoint right there
     while ((p.ci || 0) < world.cps.length && world.cps[p.ci || 0].x * B <= p.x) { p.ci = (p.ci || 0) + 1; if (hacks.practice) { checkpoints.push(stateOf(p)); toast(`Checkpoint ${checkpoints.length}`); } }
     // practice: drop a checkpoint every 1.5 s, but only where there's a way to keep going for at least half a second
@@ -1460,20 +1467,32 @@ function spikePath(g, o, u) { // a spike filling its cell (a small one 0.45 tall
     [[x, y], [x + u / 2, y + u * k], [x + u, y]], [[x + u, y], [x + u * (1 - k), y + u / 2], [x + u, y + u]]][o.o];
   g.moveTo(...P[0]); g.lineTo(...P[1]); g.lineTo(...P[2]); g.closePath();
 }
-// Ship (original design): a swept hull in your colours with a small cube riding in the cockpit and a flame at the back.
-// Upside down it's drawn flipped so the cockpit faces away from gravity.
+// Ship (drawn here, not copied from any game's art): your cube riding low in a swept hull with a curled nose and a tail fin,
+// thick dark outline, your main colour with your second colour on the keel band and fin. Upside down it's drawn flipped so
+// the cockpit faces away from gravity. The exhaust is particles (see step).
+function shipHull(g, h) {
+  g.beginPath();
+  g.moveTo(-h * 1.22, -h * 0.5); // tail fin tip
+  g.lineTo(-h * 0.92, -h * 0.04); g.lineTo(h * 0.42, -h * 0.04); // deck
+  g.quadraticCurveTo(h * 1.0, -h * 0.08, h * 1.28, h * 0.22); // curled nose
+  g.quadraticCurveTo(h * 1.22, h * 0.62, h * 0.72, h * 0.64); // chin
+  g.lineTo(-h * 1.06, h * 0.64); g.quadraticCurveTo(-h * 1.3, h * 0.6, -h * 1.27, h * 0.24); // keel and stern
+  g.closePath();
+}
 function drawShip(g, x, y, a, s, ic, flip) {
-  const h = CUBE_H * s;
+  const h = CUBE_H * s, c1 = COLORS[ic.c1], c2 = COLORS[ic.c2];
   g.save(); g.translate(x, y); g.rotate(a); if (flip) g.scale(1, -1);
-  g.fillStyle = '#ff9f43'; g.globalAlpha = 0.85; // flame
-  g.beginPath(); g.moveTo(-h * 1.05, h * 0.05); g.lineTo(-h * (1.5 + Math.random() * 0.25), h * 0.25); g.lineTo(-h * 1.05, h * 0.45); g.closePath(); g.fill(); g.globalAlpha = 1;
-  drawCube(g, -h * 0.05, -h * 0.35, 0, s * 0.62, { ...ic, useCubeCustom: false }); // pilot
-  g.beginPath(); // hull
-  g.moveTo(-h * 1.1, -h * 0.05); g.lineTo(h * 0.35, -h * 0.05); g.lineTo(h * 1.15, h * 0.3); g.lineTo(h * 0.55, h * 0.7); g.lineTo(-h * 1.1, h * 0.7); g.closePath();
-  g.fillStyle = '#0c0e1c'; g.fill(); g.lineJoin = 'round'; g.lineWidth = 3 * s; g.strokeStyle = '#0c0e1c'; g.stroke();
-  g.beginPath(); g.moveTo(-h * 0.98, h * 0.05); g.lineTo(h * 0.3, h * 0.05); g.lineTo(h * 0.95, h * 0.32); g.lineTo(h * 0.5, h * 0.6); g.lineTo(-h * 0.98, h * 0.6); g.closePath();
-  g.fillStyle = COLORS[ic.c1]; g.fill();
-  g.fillStyle = COLORS[ic.c2]; g.fillRect(-h * 0.85, h * 0.22, h * 1.15, h * 0.18); // stripe
+  drawCube(g, -h * 0.08, -h * 0.3, 0, s * 0.62, ic); // the pilot: your cube (or your cube picture), half inside the hull
+  g.lineJoin = 'round';
+  shipHull(g, h); g.lineWidth = h * 0.24; g.strokeStyle = '#0c0e1c'; g.stroke(); // thick dark outline
+  g.fillStyle = c1; g.fill();
+  g.save(); shipHull(g, h); g.clip();
+  g.fillStyle = c2; g.fillRect(-h * 1.4, h * 0.3, h * 2.8, h * 0.17); // keel band
+  g.beginPath(); g.moveTo(-h * 1.16, -h * 0.36); g.lineTo(-h * 0.98, -h * 0.06); g.lineTo(-h * 1.2, -h * 0.06); g.closePath(); g.fill(); // fin panel
+  g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(-h * 0.8, h * 0.02, h * 1.25, h * 0.08); // deck highlight
+  g.restore();
+  g.beginPath(); g.arc(h * 0.92, h * 0.24, h * 0.09, 0, 7); g.fillStyle = '#0c0e1c'; g.fill(); // nose light
+  g.beginPath(); g.arc(h * 0.92, h * 0.24, h * 0.05, 0, 7); g.fillStyle = c2; g.fill();
   g.restore();
 }
 // Cube icon (original design): your colours, a square with an inset square and a core. Or your own cube picture, fitted
@@ -1735,7 +1754,7 @@ function draw(t, dt) {
       if (!tr.length) continue;
       ctx.beginPath(); let gap = true;
       for (const q of tr) { if (!q) { gap = true; continue; } if (gap) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); gap = false; }
-      if (alive && on && !p.cube && !gap) ctx.lineTo(p.x, py);
+      if (alive && on && !p.cube && !p.ship && !gap) ctx.lineTo(p.x, py);
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = 7; ctx.stroke();
     }
     if (alive && p.ship) { // GD's ship turns toward the way it's moving, easing 0.15 of the way per frame (updateShipRotation)
@@ -1770,7 +1789,7 @@ function draw(t, dt) {
         ctx.fillText('Press to go', p.x, p.y < 120 ? p.y + 52 : p.y - 38);
       }
     }
-    if (!layout) for (const q of parts) if (q.life > 0) { ctx.globalAlpha = Math.min(1, q.life * 2); ctx.fillStyle = q.col || COLORS[icon.c1]; ctx.fillRect(q.x - 3, q.y - 3, 6, 6); }
+    if (!layout) for (const q of parts) if (q.life > 0) { ctx.globalAlpha = Math.min(1, q.life * 2); const z = (q.sz || 6) * (q.sz ? 0.4 + q.life * 2 : 1); ctx.fillStyle = q.col || COLORS[icon.c1]; ctx.fillRect(q.x - z / 2, q.y - z / 2, z, z); }
     ctx.globalAlpha = 1;
   }
   // hitboxes: what the game actually tests against
