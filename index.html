@@ -1479,8 +1479,8 @@ function step(dt) {
     if (p.ship && !calm && !hacks.layout && ++p.tk % 3 === 0) { // the ship's exhaust: a stream of fire particles out the back
       const h = cubeHalf(p), m = p.mini ? 0.7 : 1;
       for (const [y, f] of p.dual ? [[p.y, 1], [p.y2, -1]] : [[p.y, 1]]) {
-        const a = (p.sa || 0) * f, d = (p.flip === (f < 0) ? 1 : -1) * h * 0.55; // the stern: 1.1 h back, 0.55 h toward the keel
-        const cx = p.x - Math.cos(a) * h * 1.1 - Math.sin(a) * d, cy = y - Math.sin(a) * h * 1.1 + Math.cos(a) * d;
+        const a = (p.sa || 0) * f, d = (p.flip === (f < 0) ? 1 : -1) * h * 0.5; // the stern: 1.2 h back, 0.5 h toward the keel
+        const cx = p.x - Math.cos(a) * h * 1.2 - Math.sin(a) * d, cy = y - Math.sin(a) * h * 1.2 + Math.cos(a) * d;
         parts.push({ x: cx, y: cy, vx: -(80 + Math.random() * 120) * m, vy: (Math.random() - 0.5) * 70 * m, life: 0.18 + Math.random() * 0.14, sz: (8 + Math.random() * 5) * m, col: ['#fff3a8', '#ffcc1a', '#ff9f43', '#ff5a2e'][Math.random() * 4 | 0] });
       }
       if (parts.length > 400) parts = parts.filter(q => q.life > 0);
@@ -1536,15 +1536,15 @@ function shipHull(g, h) {
 function drawShip(g, x, y, a, s, ic, flip) {
   const h = CUBE_H * s, c1 = COLORS[ic.c1], c2 = COLORS[ic.c2];
   g.save(); g.translate(x, y); g.rotate(a); if (flip) g.scale(1, -1);
-  // Everything fits the 1-block hitbox from top to bottom (the ship is 1.2 blocks long): the pilot's top is the box's top,
-  // the hull or picture sits on the box's bottom.
-  drawCube(g, -h * 0.1, -h * 0.325, 0, s * 0.675, ic); // the pilot: your cube (or your cube picture), its lower part inside the hull
+  // GD's proportions inside the 1-block hitbox: a big ship (up to 1.4 blocks long, 0.6 tall) on the box's bottom, and a
+  // small cube (0.55 of a block) riding in it with its top at the box's top.
+  drawCube(g, -h * 0.1, -h * 0.42, 0, s * 0.55, ic); // the pilot: your cube (or your cube picture), its bottom inside the hull
   if (ic.useShipCustom && shipImg.naturalWidth) { // your own ship picture, fitted to the bottom of the box
-    const pic = shipPicture(ic), k = Math.min(2.4 * h / pic.width, 1.3 * h / pic.height), w = pic.width * k, ih = pic.height * k;
+    const pic = shipPicture(ic), k = Math.min(2.8 * h / pic.width, 1.2 * h / pic.height), w = pic.width * k, ih = pic.height * k;
     if (ic.shipMirror) g.scale(-1, 1);
     g.drawImage(pic, -w / 2, h - ih, w, ih); g.restore(); return;
   }
-  g.translate(0, h * 0.346); g.scale(0.86, 0.86); // hull: 2.4 h wide, its outline's bottom on the box's bottom
+  g.translate(0, h * 0.278); g.scale(0.95, 0.95); // hull: 2.65 h long, 1.2 h tall, its outline's bottom on the box's bottom
   g.lineJoin = 'round';
   shipHull(g, h); g.lineWidth = h * 0.24; g.strokeStyle = '#0c0e1c'; g.stroke(); // thick dark outline
   g.fillStyle = c1; g.fill();
