@@ -1256,20 +1256,21 @@ function shipBody(wd, s, k, gs, h, dt, v, hold) {
     if (!acc) vy = gs > 0 ? Math.min(capD, Math.max(-capU, vy)) : Math.max(-capD, Math.min(capU, vy));
     ny = y + (v0 + vy) / 2 * dt;
   }
-  let gnd = false, carried = 0; // carried: the vertical speed of a slope moving it this tick
+  let gnd = false, carried = 0, under = false; // carried: the vertical speed of a slope moving it this tick; under: a ceiling one
   const reach = Math.abs(ny - y) + 2.5 * v * dt + 1;
   if ((ny - y) * gs >= 0) { // moving down (with gravity): land on floors and slide; stay on what it was sliding on
     const sy = surfaceNear(wd, s.x, ny + gs * h, h, gs, reach, was ? 2.5 * v * dt + 1 : 0, true);
     if (sy !== null) { ny = sy - gs * h; if (s.dash == null) vy = SURF_K * v; gnd = true; carried = SURF_K * v; }
     else { // a ceiling slope coming down at it carries it down
       const cy = surfaceNear(wd, s.x, ny - gs * h, h, -gs, reach, 0, true);
-      if (cy !== null && SURF_K * gs > 0) { ny = cy + gs * h; if (s.dash == null && vy * gs < SURF_K * v * gs) vy = SURF_K * v; carried = SURF_K * v; }
+      // GD moves it along a ceiling slope but leaves its own speed alone (which keeps to its limits)
+      if (cy !== null && SURF_K * gs > 0) { ny = cy + gs * h; carried = SURF_K * v; under = true; }
     }
   } else { // moving up: slide along ceilings; a floor it's sinking into (riding up a slope) pushes it up and carries it,
     // unless it's already rising faster than the slope (holding lifts off)
     const sy = surfaceNear(wd, s.x, ny - gs * h, h, -gs, reach, 0, true);
     if (sy !== null) {
-      ny = sy + gs * h; if (s.dash == null) vy = SURF_K * v; carried = SURF_K * v;
+      ny = sy + gs * h; if (s.dash == null) vy = SURF_K * v; carried = SURF_K * v; under = true;
       if (wd.letters.length && letterHit(wd, 'F', s.x / B, ny / B, h / B)) { s.flip = !s.flip; gnd = true; } // F letter block
     } else {
       const fy = surfaceNear(wd, s.x, ny + gs * h, h, gs, reach, 0, true);
@@ -1284,18 +1285,19 @@ function shipBody(wd, s, k, gs, h, dt, v, hold) {
     if (s.dash == null) {
       if (L[2]) { if (vy * sg < 0) vy = 0; } // pushed back out past the slope's flat side: stops moving into it
       else if (sg === gs) { if (-gs * vy < -gs * L[1] * v) vy = L[1] * v; gnd = true; } else if (vy * gs < 0) vy = L[1] * v;
-      if (!L[2]) carried = L[1] * v;
+      if (!L[2]) { carried = L[1] * v; under = sg !== gs; }
     }
     break;
   }
-  // Leaving a slope that was carrying it (once clear of it), it drops to SHIP_SLOPE_EXIT of the slope's speed, still past its
-  // own speed limits for a moment (fitted to a recorded GD ship coming off a 2:1 floor slope and a 2:1 ceiling slope).
+  // Leaving a slope that was carrying it (once clear of it), it moves at SHIP_SLOPE_EXIT of the slope's speed; holding, that may
+  // stay past its own speed limits for a moment, letting go it's cut back to them (fitted to recorded GD ships coming off a 2:1
+  // floor slope and a 2:1 ceiling slope, holding and not).
   const SS = k === 1 ? 'ss' : 'ss2';
   const ACC2 = k === 1 ? 'acc' : 'acc2';
-  if (carried) s[ACC2] = true; // carried by a slope it moves at the slope's speed, past its own limits
-  else if (s[SS] && touchesSlope(wd, s.x, ny, h)) carried = s[SS]; // still against it: not left yet
-  else if (s[SS] && !gnd && s.dash == null && Math.sign(vy) === Math.sign(s[SS]) && Math.abs(vy) <= Math.abs(s[SS]) + 1) {
-    vy = SHIP_SLOPE_EXIT * s[SS]; s[ACC2] = true; // (one that flew off faster on its own, or onto flat ground, just carries on)
+  if (carried && !under) s[ACC2] = true; // carried up a slope it moves at the slope's speed, past its own limits
+  else if (!carried && s[SS] && touchesSlope(wd, s.x, ny, h)) carried = s[SS]; // still against it: not left yet
+  else if (!carried && s[SS] && !gnd && s.dash == null && vy * Math.sign(s[SS]) <= Math.abs(s[SS]) + 1) {
+    vy = SHIP_SLOPE_EXIT * s[SS]; s[ACC2] = !!hold; // (one that flew off faster on its own, or onto flat ground, just carries on)
   }
   s[SS] = carried;
   const floor = gs > 0 ? VH - h : h, ceil = gs > 0 ? h : VH - h; // the screen edges are floor and ceiling
