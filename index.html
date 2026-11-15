@@ -2402,7 +2402,7 @@ function toBlocks(e) { const r = cv.getBoundingClientRect(), k = S * edZoom; ret
 function clampEd() {
   const k = S * edZoom, viewW = W / k, viewH = H / k;
   editCam = Math.min(Math.max(-15 * B, editCam), Math.max(-15 * B, world.end + 5 * B - viewW * 0.5));
-  edCamY = Math.min(Math.max(TOP - B, edCamY), VH + 3 * B - viewH); // up to the top of the world, down to just below the ground
+  edCamY = Math.min(Math.max(TOP - B, edCamY), 31 * B - viewH); // up to the top of the world, down under the ground as far as objects can go (20 blocks)
 }
 function zoomBy(f, sx = W / 2, sy = H / 2) { // keeps the point under (sx, sy) in place
   const k0 = S * edZoom, wx = editCam + sx / k0, wy = edCamY + sy / k0;
