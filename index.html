@@ -1039,7 +1039,8 @@ const turn = (a, target, dt) => a + (target - a) * (1 - Math.exp(-dt * 120));
 const worldCache = new Map(); // level code -> built world (converting a path level takes a few ms, so do it once)
 function worldFor(code) { let w = worldCache.get(code); if (!w) { w = buildWorld(levelObjects(code)); worldCache.set(code, w); } return w; }
 let mode = 'menu', from = 'levels', cur = LEVELS[0], world = worldFor(cur.code);
-let held = false, attempt = 1, p, trail = [], trail2 = [], parts = [], deadT = 0, shake = 0, flash = 0, hitFlash = 0, speedI = 1;
+const BOOM_T = 0.5; // seconds a death shockwave lasts
+let held = false, attempt = 1, p, trail = [], trail2 = [], parts = [], booms = [], deadT = 0, shake = 0, flash = 0, hitFlash = 0, speedI = 1;
 let camX = 0, camY = 0, editCam = 0, hue = LEVELS[0].hue, baseHue = LEVELS[0].hue, editing = null, usedHacks = false, lvIndex = 0, testFrom = null;
 const inputs = []; // [timestamp, held] queued so each press lands on the exact sub-step it happened in
 
@@ -1369,8 +1370,8 @@ const FX = {
 function reset() {
   p = { x: 0, y: VH / 2, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
     dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 };
-  trail = []; trail2 = []; parts = [];
-  const cp = hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
+  trail = []; trail2 = []; parts = []; booms = [];
+  const cp =hacks.practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
   if (cp) Object.assign(p, cp); // practice: back to the newest checkpoint
   else if (sx > 0) Object.assign(p, spawnCache ??= spawnState(sx)); // start partway in at a safe spot (worked out once per level)
@@ -1399,8 +1400,19 @@ function exitPlay() {
 }
 function saveBest(pct) { if (cur.id !== 'test' && !usedHacks && pct > (bests[cur.id] || 0)) { bests[cur.id] = pct; store.set('zd-best', bests); } }
 function die() {
-  mode = 'dead'; deadT = hacks.respawn; shake = calm || hacks.layout ? 0 : 10; trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]);
-  for (let i = 0; i < 40; i++) { const a = Math.random() * 6.283, v = 80 + Math.random() * 320; parts.push({ x: p.x, y: p.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.4 }); }
+  mode = 'dead'; deadT = hacks.respawn; shake = calm || hacks.layout ? 0 : 16; if (!calm && !hacks.layout) flash = 0.18;
+  trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]);
+  // GD-style death: a bright flash and a shockwave ring where the icon was, and the icon blowing apart into spinning shards
+  // in its colours that fly out fast and slow down (drag per second, so it looks the same at any frame rate)
+  const r = p.cube || p.ship ? cubeHalf(p) : 20, cols = [COLORS[icon.c1], COLORS[icon.c2], '#ffffff'];
+  for (const y of p.dual ? [p.y, p.y2] : [p.y]) {
+    booms.push({ x: p.x, y, r, t: 0 });
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random() * 6.283, v = 180 + Math.random() * 520;
+      parts.push({ x: p.x + Math.cos(a) * r * 0.4, y: y + Math.sin(a) * r * 0.4, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.45 + Math.random() * 0.5,
+        shard: 5 + Math.random() * 11, rot: Math.random() * 6.283, vr: (Math.random() - 0.5) * 24, dr: 3.2, col: cols[i % 3] });
+    }
+  }
   saveBest(Math.min(99, Math.floor(p.x / world.end * 100)));
   if (!usedHacks && cur.id !== 'test') {
     stats.attempts++; store.set('zd-stats', stats);
@@ -1481,8 +1493,13 @@ function step(dt) {
     deadT -= dt;
     if (deadT <= 0) { attempt++; reset(); mode = 'play'; }
   }
-  for (const q of parts) { q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.98; q.vy *= 0.98; q.life -= dt; }
-  shake *= 0.95;
+  for (const q of parts) {
+    const k = q.dr ? Math.exp(-q.dr * dt) : 0.98; q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= k; q.vy *= k; q.life -= dt;
+    if (q.vr) q.rot += q.vr * dt;
+  }
+  for (const b of booms) b.t += dt;
+  if (booms.length && booms[0].t > BOOM_T) booms = booms.filter(b => b.t <= BOOM_T);
+  shake *= Math.exp(-14 * dt);
 }
 
 // ---------- drawing ----------
@@ -1830,7 +1847,16 @@ function draw(t, dt) {
         ctx.fillText('Press to go', p.x, p.y < 120 ? p.y + 52 : p.y - 38);
       }
     }
-    if (!layout) for (const q of parts) if (q.life > 0) { ctx.globalAlpha = Math.min(1, q.life * 2); const z = (q.sz || 6) * (q.sz ? 0.4 + q.life * 2 : 1); ctx.fillStyle = q.col || COLORS[icon.c1]; ctx.fillRect(q.x - z / 2, q.y - z / 2, z, z); }
+    if (!layout) for (const b of booms) { // death shockwave: a white flash disc and a ring that races out and thins
+      const k = b.t / BOOM_T, e = 1 - (1 - k) ** 3, r = b.r * (1 + 5 * e);
+      ctx.globalAlpha = (1 - k) ** 2 * 0.6; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * (1 + 2.2 * e), 0, 7); ctx.fill();
+      ctx.globalAlpha = 1 - k; ctx.strokeStyle = COLORS[icon.c1]; ctx.lineWidth = Math.max(1, b.r * 0.45 * (1 - k)); ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, 7); ctx.stroke();
+    }
+    if (!layout) for (const q of parts) if (q.life > 0) {
+      ctx.globalAlpha = Math.min(1, q.life * 2); ctx.fillStyle = q.col || COLORS[icon.c1];
+      if (q.shard) { const z = q.shard * Math.min(1, q.life * 1.6); ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.rot); ctx.fillRect(-z / 2, -z / 4, z, z / 2); ctx.restore(); continue; }
+      const z = (q.sz || 6) * (q.sz ? 0.4 + q.life * 2 : 1); ctx.fillRect(q.x - z / 2, q.y - z / 2, z, z);
+    }
     ctx.globalAlpha = 1;
   }
   // hitboxes: what the game actually tests against
@@ -1842,10 +1868,10 @@ function draw(t, dt) {
     for (const o of world.pads) { const [l, tp, r, b] = padBox(o); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
     ctx.strokeStyle = '#ff3355'; for (const k of spikes) { const [l, tp, r, b] = spikeBox(k); ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B); }
     if (inGame && mode !== 'dead') {
-      const r = p.cube ? cubeHalf(p) : p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
+      const box = p.cube || p.ship, r = box ? cubeHalf(p) : p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
       for (const y of p.dual ? [p.y, p.y2] : [p.y]) {
         ctx.strokeRect(p.x - r, y - r, r * 2, r * 2);
-        if (p.cube) { const ri = r * CUBE_INNER; ctx.strokeStyle = '#3f8cff'; ctx.strokeRect(p.x - ri, y - ri, ri * 2, ri * 2); ctx.strokeStyle = '#33ff88'; } // inner box (solids)
+        if (box) { const ri = r * CUBE_INNER; ctx.strokeStyle = '#3f8cff'; ctx.strokeRect(p.x - ri, y - ri, ri * 2, ri * 2); ctx.strokeStyle = '#33ff88'; } // inner box (solids)
       }
     }
   }
