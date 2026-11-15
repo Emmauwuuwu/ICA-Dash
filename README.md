@@ -24,7 +24,7 @@ Keybinds can be changed in Settings.
 - **Letter blocks** like Geometry Dash's, invisible in play: **D** (the wave can touch blocks), **J** (no held jumps), **S** (ends a dash), **H** (the cube can hit its head) and **F** (hitting your head flips gravity), and **dash orbs** (green, and pink that flips gravity) that send you straight at their angle while you hold
 - **Achievements** that unlock 14 icon shapes and 12 colours, plus custom image icons (wave, cube and ship, with mirror and recolour for the ship)
 - **Triggers** (move, rotate, fade, colour) acting on numbered groups of objects, plus **coins** to collect, **checkpoints** for practice mode, **teleport** and **gravity swap** portals and **small spikes**
-- **Level editor** with build, edit and delete tools, slopes, saws, spikes, pads, orbs, portals (including cube, ship and wave), letter blocks and dash orbs, a fine grid, undo/redo and playtesting from any point
+- **Level editor** with build, edit and delete tools, slopes, saws, spikes, pads, orbs, portals (including cube, ship and wave), letter blocks, text and dash orbs, a fine grid, undo/redo and playtesting from any point
 - **Share codes**: copy a level's code from the editor and paste someone else's to play it
 - **Practice tools** in a hidden menu: practice mode with checkpoints, show path, start position, hitboxes and more
 
