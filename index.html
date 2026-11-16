@@ -596,6 +596,9 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
         <label>Music <input type="range" id="volMusic" min="0" max="1" step="0.05"></label>
         <label>Sound effects <input type="range" id="volSfx" min="0" max="1" step="0.05"></label>
       </div>
+      <h3>Graphics</h3>
+      <label class="setrow"><span><b>Low detail</b><small>For slow computers: lower resolution, no glow, plain background</small></span><input type="checkbox" class="sr" id="gfxLow"><span class="tog"></span></label>
+      <label class="setrow"><span><b>Low latency</b><small>Shows each frame sooner, so clicks feel quicker. Turn it off if the screen tears</small></span><input type="checkbox" class="sr" id="gfxLat"><span class="tog"></span></label>
       <h3>Songs</h3>
       <p class="note">Levels can use Newgrounds songs. Newgrounds doesn't let other sites stream them, so, like GD, you download a song from Newgrounds once and load the file here; it's kept in this browser.</p>
       <div class="btnrow"><label class="prop">Newgrounds ID <input class="field" type="number" id="setSongId" min="1" step="1" style="width:130px"></label><button class="ghost" id="setSongLoad">Load song file</button></div>
@@ -1241,8 +1244,16 @@ const store = {
 const SYNCED = new Set(['zd-best', 'zd-ach', 'zd-stats', 'zd-icon', 'zd-levels', 'zd-coins']);
 const NET = { ready: false, write: false, reason: '', db: null, uid: null, owner: false, defaultName: 'Player', sync: true, key: null, salt: null,
   locked: false, cloudEnc: null, players: {}, uploads: {}, likes: {}, loaded: {}, slow: false, profileChecked: false, supa: false, sb: null };
+// Graphics settings. Low detail: 0.75x resolution, no glow, flat background, no grid inside walls. Low latency: the canvas
+// is shown straight away instead of waiting for the browser's compositor (a frame less of input delay; on by default on
+// Chromebooks, where it's well supported; elsewhere it can tear).
+const gfx = { low: false, lat: /\bCrOS\b/.test(navigator.userAgent), ...store.get('zd-gfx', {}) };
+let lowDetail = gfx.low;
 let W, H, S, dpr;
-function resize() { dpr = Math.min(devicePixelRatio || 1, 2); W = cv.clientWidth; H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr; S = H / VH; }
+function resize() {
+  dpr = lowDetail ? Math.min(devicePixelRatio || 1, 1) * 0.75 : Math.min(devicePixelRatio || 1, 2);
+  W = cv.clientWidth; H = cv.clientHeight; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); S = H / VH;
+}
 addEventListener('resize', resize); resize();
 
 const SHAPES = [
@@ -2547,6 +2558,7 @@ function renderObj(g, o, u, t) { // one object in its editor colours (palette ic
 }
 // Cheap glow: a wide faint stroke under a thin bright one (shadowBlur costs frames, and dropped frames feel like input lag).
 function glowStroke(g, color, glow, w) {
+  if (lowDetail) { g.globalAlpha = 1; g.strokeStyle = color; g.lineWidth = w; g.stroke(); return; } // low detail: just the edge
   g.strokeStyle = glow; g.globalAlpha = 0.35; g.lineWidth = w * 3.5; g.stroke();
   g.globalAlpha = 1; g.strokeStyle = color; g.lineWidth = w; g.stroke();
 }
@@ -2569,7 +2581,7 @@ function paintTile(L, id, tx, ty, kd, soft, paint, t) {
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, TILE, TILE); g.globalAlpha = 1;
   g.setTransform(kd, 0, 0, kd, -tx * TILE, -ty * TILE);
   const empty = !paint(g, tx * TILE / kd, (tx + 1) * TILE / kd, ty * TILE / kd, (ty + 1) * TILE / kd); // paint returns whether it drew
-  t = { c, soft, used: frameNo, empty }; L.tiles.set(id, t); return t;
+  t = { c, soft, used: frameNo, empty, box: [tx * TILE / kd, (tx + 1) * TILE / kd, ty * TILE / kd, (ty + 1) * TILE / kd] }; L.tiles.set(id, t); return t;
 }
 // Draws a layer's tiles for a view whose level-to-device transform is (kd, tX, tY); tX, tY are whole device pixels.
 function drawTiles(L, key, soft, kd, tX, tY, paint) {
@@ -2608,6 +2620,8 @@ function paintWalls(g, solids, hue, layout, ed, z, x0, x1, y0, y1) {
   else {
     glowStroke(g, '#fff', `hsl(${hue},100%,65%)`, 6);
     g.fillStyle = wallCol; g.fill(); g.lineWidth = 1.5; g.strokeStyle = wallCol; g.stroke();
+  }
+  if (!layout && !lowDetail) { // the block grid inside the walls
     g.save(); g.clip(); g.beginPath();
     for (let x = Math.floor(x0 / B) * B; x < x1 + B; x += B) { g.moveTo(x, y0 - B); g.lineTo(x, y1 + B); }
     for (let y = Math.floor(y0 / B) * B - B; y < y1 + B; y += B) { g.moveTo(x0 - B, y); g.lineTo(x1 + B, y); }
@@ -2658,6 +2672,7 @@ function paintSel(g, z, x0, x1, y0, y1) {
 // screen, then copied at the scroll offset.
 const BG = { c: null, key: '' };
 function drawBg(hue) {
+  if (lowDetail) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = `hsl(${Math.round(hue)},65%,17%)`; ctx.fillRect(0, 0, W, H); return; } // low detail: one flat colour
   const sz = 150 * S, hq = Math.round(hue), wd = Math.ceil((W + sz) * dpr) + 2, hd = Math.ceil(H * dpr), key = hq + ',' + wd + ',' + hd + ',' + dpr;
   if (BG.key !== key) {
     BG.key = key; const c = BG.c ??= document.createElement('canvas'); c.width = wd; c.height = hd;
@@ -2714,7 +2729,8 @@ function draw(t, dt) {
   const wallCol = layout ? '#3a4066' : `hsl(${hue},60%,8%)`;
   // Fixed walls and spikes come from the tile cache. In play, objects in a fade group can change, so while fully shown
   // they're drawn live (merged among themselves, the same way).
-  const hq = Math.round(hue), tileKey = [world.id ??= ++worldIds, kd, layout, ed, inGame].join(), isFade = o => inGame && o.g && world.fadeG.has(o.g);
+  // (in the editor the tiles last the whole session: edits drop just the tiles they touch, see tileEdits)
+  const hq = Math.round(hue), tileKey = [ed ? 'ed' + edEpoch : world.id ??= ++worldIds, kd, layout, ed, inGame, lowDetail].join(), isFade = o => inGame && o.g && world.fadeG.has(o.g);
   drawTiles(LAYERS.walls, tileKey, layout ? 0 : hq, kd, tX, tY, (g, a, b, c, d) => {
     const grid = ed && (paintEdGrid(g, z, a, b, c, d), true);
     return paintWalls(g, tileObjs(world, a, b, c, d, false, inGame), hq, layout, ed, z, a, b, c, d) || grid;
@@ -2793,7 +2809,7 @@ function draw(t, dt) {
       ctx.fillStyle = '#ff9a1a'; for (const [x, y] of testClicks) ctx.fillRect(x - 5 / z, y - 5 / z, 10 / z, 10 / z);
     }
     if (pdrag?.kind === 'box') { ctx.fillStyle = 'rgba(77,255,94,.12)'; ctx.strokeStyle = '#4dff5e'; ctx.lineWidth = 2 / z; const x0 = Math.min(pdrag.bx, pdrag.ex) * B, y0 = Math.min(pdrag.by, pdrag.ey) * B, w0 = Math.abs(pdrag.ex - pdrag.bx) * B, h0 = Math.abs(pdrag.ey - pdrag.by) * B; ctx.fillRect(x0, y0, w0, h0); ctx.strokeRect(x0, y0, w0, h0); }
-    if (sel.size) drawTiles(LAYERS.sel, [tileKey, edObjs.length, selId(sel), sel.size].join(), 0, kd, tX, tY, (g, a, b, c, d) => paintSel(g, z, a, b, c, d)); // selected: green, cached
+    if (sel.size) drawTiles(LAYERS.sel, [tileKey, edVersion, selId(sel), sel.size].join(), 0, kd, tX, tY, (g, a, b, c, d) => paintSel(g, z, a, b, c, d)); // selected: green, cached
     if (hoverCell && edTool === 'build' && !pdrag) {
       const item = PALETTE.find(q => q.id === edPal);
       ctx.globalAlpha = 0.45; renderObj(ctx, item.make(snap(hoverCell[0]), snap(hoverCell[1])), B, t); ctx.globalAlpha = 1;
@@ -2978,7 +2994,7 @@ function go(id) {
   if (id === 'levels') renderBoard();
   if (id === 'create') renderCustoms();
   if (id === 'icons') { renderIcons(); loadComm(); }
-  if (id === 'settings') { listening = null; renderBinds(); $('hackNote').hidden = !unlocked; renderAccount(); }
+  if (id === 'settings') { listening = null; renderBinds(); $('hackNote').hidden = !unlocked; renderAccount(); $('gfxLow').checked = gfx.low; $('gfxLat').checked = gfx.lat; }
   if (id === 'online') renderOnline();
   if (id === 'home') renderHome();
   if (id === 'achievements') renderAch();
@@ -3114,7 +3130,33 @@ function zoomBy(f, sx = W / 2, sy = H / 2) { // keeps the point under (sx, sy) i
   edZoom = Math.min(2.5, Math.max(0.35, edZoom * f));
   const k1 = S * edZoom; editCam = wx - sx / k1; edCamY = wy - sy / k1; clampEd();
 }
-function edChanged() { world = buildWorld(edObjs); updateEdInfo(); }
+function edChanged() { world = buildWorld(edObjs); updateEdInfo(); edVersion++; tileEdits(); }
+// Editor tiles: an edit repaints only the tiles around what changed. The fixed walls and spikes are compared before and
+// after by content (so an undo, which makes new objects, only repaints what it actually changes), and the tiles their boxes
+// touch are dropped.
+let edEpoch = 0, edVersion = 0, edSigs = new Map(); // edSigs: an object's content -> [how many, its box in blocks]
+function edTileSigs() {
+  const movingG = new Set(world.trig.filter(o => o.k === 'm' || o.k === 'r').map(o => o.g)), m = new Map();
+  for (const o of edObjs) {
+    if (o.t !== 'r' && o.t !== 't' && o.t !== 'k') continue;
+    const k = [o.t, o.x, o.y, o.w, o.h, o.o, o.ra, o.sc, o.d, o.z, o.g && movingG.has(o.g) ? 'm' : ''].join();
+    const e = m.get(k); if (e) { e[0]++; continue; }
+    const [cx, cy, hw, hh] = centreOf(o), r = Math.max(hw, hh) * (o.sc || 1) * 1.5 + 0.5; // generous: turned shapes and the glow
+    m.set(k, [1, cx - r, cy - r, cx + r, cy + r]);
+  }
+  return m;
+}
+function tileEdits() {
+  const next = edTileSigs(), boxes = [];
+  for (const [k, e] of next) if (edSigs.get(k)?.[0] !== e[0]) boxes.push(e);
+  for (const [k, e] of edSigs) if (!next.has(k)) boxes.push(e);
+  edSigs = next;
+  if (!boxes.length) return;
+  for (const L of [LAYERS.walls, LAYERS.spikes]) for (const [id, t] of L.tiles) {
+    const [x0, x1, y0, y1] = t.box;
+    if (boxes.some(b => b[1] * B < x1 && b[3] * B > x0 && b[2] * B < y1 && b[4] * B > y0)) { L.pool.push(t.c); L.tiles.delete(id); }
+  }
+}
 function commit(before) { undoS.push(before); if (undoS.length > 200) undoS.shift(); redoS = []; }
 function restore(json) { edObjs = JSON.parse(json); sel = new Set(); edChanged(); renderPane(); }
 function undo() { if (!undoS.length) return; redoS.push(JSON.stringify(edObjs)); restore(undoS.pop()); }
@@ -3249,7 +3291,12 @@ function renderPane() {
   } else items = [];
   const pages = Math.max(1, Math.ceil(items.length / per)); edPage = Math.min(Math.max(0, edPage), pages - 1);
   const shown = items.slice(edPage * per, edPage * per + per);
-  if (edTool === 'build') {
+  // Rebuilding the buttons redraws every palette icon (~20 ms), and this runs after every click in the editor, so the
+  // pane is only rebuilt when what it shows changes; otherwise just the pressed palette button is updated.
+  const paneSig = [edTool, edCat, edPage, per, edTool === 'edit' ? !!n : 0, edTool === 'delete' ? '' + edSwipe + clearArmed : 0].join();
+  if (paneSig === renderPane.sig && pane.childElementCount) {
+    if (edTool === 'build') pane.querySelectorAll('[data-pal]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pal === edPal)));
+  } else if (edTool === 'build') {
     pane.className = 'edpane';
     pane.innerHTML = shown.map(q => `<button class="pal" data-pal="${q.id}" aria-pressed="${q.id === edPal}" title="${q.label}"><canvas width="76" height="76"></canvas>${q.label}</button>`).join('');
     pane.querySelectorAll('canvas').forEach((c, i) => drawPaletteIcon(c, shown[i]));
@@ -3261,6 +3308,7 @@ function renderPane() {
     pane.innerHTML = `<p class="note">${edSwipe ? 'Click or drag over objects to delete them' : 'Click an object to delete it'}</p>`
       + `<button class="act danger" data-ed="clear">${clearArmed ? 'Confirm: delete all' : 'Delete all'}</button>`;
   }
+  renderPane.sig = paneSig;
   $('edPrev').disabled = edPage <= 0; $('edNext').disabled = edPage >= pages - 1;
   $('edDots').innerHTML = pages > 1 ? Array.from({ length: pages }, (_, i) => `<i class="${i === edPage ? 'on' : ''}"></i>`).join('') : '';
   // GD's buttons down the right while something is selected (or something is copied)
@@ -3339,6 +3387,7 @@ function openEditor(l) {
 function resumeEditor() {
   mode = 'edit'; $('hud').hidden = true; show('editor'); closePops();
   world = buildWorld(edObjs); baseHue = 200; clampEd(); renderPane(); updateEdInfo();
+  edEpoch++; edSigs = edTileSigs(); // fresh editor tiles
 }
 // Save a main level's edits as a local override (or drop the override when it matches the shipped level again).
 function saveMain() {
@@ -3422,7 +3471,7 @@ function readHacks() {
     cbf: $('hCbf').checked, uncap: $('hUncap').checked, cap: +$('hCap').value, path: $('hPath').checked,
     auto: $('hAuto').checked, acc: $('hAcc').checked, noAtt: $('hNoAtt').checked, layout: $('hLayout').checked, respawn: +(+$('hRespawn').value).toFixed(2),
     noPulse: $('hNoPulse').checked, trail: +(+$('hTrail').value).toFixed(2) };
-  if (hacks.uncap !== !!ctx.getContextAttributes?.().desynchronized) makeCanvas(hacks.uncap);
+  syncCanvas();
   if (hacks.start !== was.start) spawnCache = null;
   if (hacks.auto && !was.auto && p) { plan = []; p.sub = 0; } // turning autoplay on mid-run: plan from where you are
   store.set('zd-hacks', hacks); renderHacks();
@@ -4218,7 +4267,14 @@ function bindCanvas(c) {
   }, { passive: false });
 }
 bindCanvas(cv);
-if (hacks.uncap) makeCanvas(true);
+// The canvas is low-latency (desynchronized) with Unlock FPS or the Low latency setting; swapping it needs a fresh canvas.
+function syncCanvas() { const want = hacks.uncap || gfx.lat; if (want !== !!ctx.getContextAttributes?.().desynchronized) makeCanvas(want); }
+syncCanvas();
+$('gfxLow').addEventListener('change', e => {
+  gfx.low = lowDetail = e.target.checked; store.set('zd-gfx', gfx);
+  BG.key = ''; resize(); // new resolution; the tiles repaint on their own (their key includes it)
+});
+$('gfxLat').addEventListener('change', e => { gfx.lat = e.target.checked; store.set('zd-gfx', gfx); syncCanvas(); });
 addEventListener('pointerup', e => inputUp('p' + e.pointerId, e));
 addEventListener('pointercancel', e => inputUp('p' + e.pointerId, e));
 addEventListener('blur', () => { downIds.clear(); if (inGame()) setHeld(false); });
