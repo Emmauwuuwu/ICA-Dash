@@ -598,7 +598,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
       </div>
       <h3>Graphics</h3>
       <label class="setrow"><span><b>Low detail</b><small>For slow computers: lower resolution, no glow, plain background</small></span><input type="checkbox" class="sr" id="gfxLow"><span class="tog"></span></label>
-      <label class="setrow"><span><b>Low latency</b><small>Shows each frame sooner, so clicks feel quicker. Turn it off if the screen tears</small></span><input type="checkbox" class="sr" id="gfxLat"><span class="tog"></span></label>
+      <label class="setrow"><span><b>Low latency</b><small>Shows each frame sooner, so clicks feel quicker. Turn it off if the game stutters or the screen tears</small></span><input type="checkbox" class="sr" id="gfxLat"><span class="tog"></span></label>
       <h3>Songs</h3>
       <p class="note">Levels can use Newgrounds songs. Newgrounds doesn't let other sites stream them, so, like GD, you download a song from Newgrounds once and load the file here; it's kept in this browser.</p>
       <div class="btnrow"><label class="prop">Newgrounds ID <input class="field" type="number" id="setSongId" min="1" step="1" style="width:130px"></label><button class="ghost" id="setSongLoad">Load song file</button></div>
@@ -1245,9 +1245,9 @@ const SYNCED = new Set(['zd-best', 'zd-ach', 'zd-stats', 'zd-icon', 'zd-levels',
 const NET = { ready: false, write: false, reason: '', db: null, uid: null, owner: false, defaultName: 'Player', sync: true, key: null, salt: null,
   locked: false, cloudEnc: null, players: {}, uploads: {}, likes: {}, loaded: {}, slow: false, profileChecked: false, supa: false, sb: null };
 // Graphics settings. Low detail: 0.75x resolution, no glow, flat background, no grid inside walls. Low latency: the canvas
-// is shown straight away instead of waiting for the browser's compositor (a frame less of input delay; on by default on
-// Chromebooks, where it's well supported; elsewhere it can tear).
-const gfx = { low: false, lat: /\bCrOS\b/.test(navigator.userAgent), ...store.get('zd-gfx', {}) };
+// is shown straight away instead of waiting for the browser's compositor (a frame less of input delay, but frames can
+// arrive unevenly and stutter, or tear, so it's off unless chosen).
+const gfx = { low: false, lat: false, ...store.get('zd-gfx', {}) };
 let lowDetail = gfx.low;
 let W, H, S, dpr;
 function resize() {
@@ -2570,8 +2570,8 @@ function visibleObjs(wd, a, b) { const set = new Set(); for (let c = Math.floor(
 // tiles fixed to the level, and each frame only copies the tiles on screen. A layer's hard key (level, zoom, mode, editor
 // edits, selection) throws its tiles away; its soft key (the hue) repaints them a couple per frame, so a colour change
 // never stalls a frame.
-const TILE = 512;
-let frameNo = 0, tileBudget = 0, worldIds = 0;
+const TILE = 256; // small, so one repaint is a small piece of work
+let frameNo = 0, tileDeadline = 0, worldIds = 0;
 const selIds = new WeakMap(); let selN = 0;
 const selId = s => { let i = selIds.get(s); if (!i) selIds.set(s, i = ++selN); return i; }; // which selection Set (they're replaced, not edited, apart from adds and deletes that change its size)
 const tileLayer = () => ({ key: null, tiles: new Map(), pool: [] });
@@ -2584,19 +2584,30 @@ function paintTile(L, id, tx, ty, kd, soft, paint, t) {
   t = { c, soft, used: frameNo, empty, box: [tx * TILE / kd, (tx + 1) * TILE / kd, ty * TILE / kd, (ty + 1) * TILE / kd] }; L.tiles.set(id, t); return t;
 }
 // Draws a layer's tiles for a view whose level-to-device transform is (kd, tX, tY); tX, tY are whole device pixels.
-function drawTiles(L, key, soft, kd, tX, tY, paint) {
-  if (L.key !== key) { for (const t of L.tiles.values()) L.pool.push(t.c); L.tiles.clear(); L.key = key; }
+// spawn: true on the first frame of an attempt; those tiles are kept (pinned) so the next respawn, which jumps the camera
+// back there, doesn't have to paint a whole screen of tiles in one frame.
+function drawTiles(L, key, soft, kd, tX, tY, paint, spawn) {
+  if (L.key !== key) { for (const t of L.tiles.values()) L.pool.push(t.c); L.tiles.clear(); L.key = key; L.spawns = []; }
   const ax = Math.floor(-tX / TILE), bx = Math.floor((W * dpr - tX) / TILE), ay = Math.floor(-tY / TILE), by = Math.floor((H * dpr - tY) / TILE);
   let painted = false;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (spawn) { const ids = []; for (let ty = ay; ty <= by; ty++) for (let tx = ax; tx <= bx; tx++) ids.push(tx + ',' + ty); L.spawns = [ids, ...L.spawns.filter(s => s.join() !== ids.join())].slice(0, 2); } // the last two spawn views
   for (let ty = ay; ty <= by; ty++) for (let tx = ax; tx <= bx; tx++) {
     const id = tx + ',' + ty; let t = L.tiles.get(id);
-    if (!t || (t.soft !== soft && tileBudget > 0)) { if (t) tileBudget--; t = paintTile(L, id, tx, ty, kd, soft, paint, t); painted = true; }
+    if (!t || (t.soft !== soft && performance.now() < tileDeadline)) { t = paintTile(L, id, tx, ty, kd, soft, paint, t); painted = true; }
     t.used = frameNo;
     if (!t.empty) ctx.drawImage(t.c, tx * TILE + tX, ty * TILE + tY);
   }
-  if (!painted) for (let ty = ay; ty <= by; ty++) { const id = (bx + 1) + ',' + ty; if (!L.tiles.has(id)) { paintTile(L, id, bx + 1, ty, kd, soft, paint); break; } } // get ahead: the level scrolls this way
-  if (L.tiles.size > (bx - ax + 3) * (by - ay + 3)) for (const [id, t] of L.tiles) if (frameNo - t.used > 20) { L.pool.push(t.c); L.tiles.delete(id); }
+  // Get ahead while this frame has time left: one missing tile from the ring around the view, the side the level
+  // scrolls towards first, then above and below (the camera follows a cube up and down).
+  if (!painted && performance.now() < tileDeadline) {
+    const ring = [];
+    for (let ty = ay - 1; ty <= by + 1; ty++) ring.push([bx + 1, ty]);
+    for (let tx = ax; tx <= bx; tx++) ring.push([tx, ay - 1], [tx, by + 1]);
+    for (const [tx, ty] of ring) { const id = tx + ',' + ty; if (!L.tiles.has(id)) { paintTile(L, id, tx, ty, kd, soft, paint); break; } }
+  }
+  const pinned = new Set(L.spawns.flat());
+  if (L.tiles.size > (bx - ax + 3) * (by - ay + 3) + pinned.size) for (const [id, t] of L.tiles) if (frameNo - t.used > 20 && !pinned.has(id)) { L.pool.push(t.c); L.tiles.delete(id); }
   while (L.pool.length > 8) L.pool.pop().width = 0; // let the browser free spare tiles
   ctx.setTransform(kd, 0, 0, kd, tX, tY);
 }
@@ -2692,6 +2703,7 @@ function draw(t, dt) {
   const inGame = mode === 'play' || mode === 'dead' || mode === 'win' || mode === 'pause';
   const alive = mode === 'play' || (mode === 'pause' && pausedFrom === 'play'); // not mid-death
   const seen = alive || mode === 'dead' || (mode === 'pause' && pausedFrom === 'dead'); // the icon stays where it died, frozen
+  const spawnFrame = inGame && camSnap; // an attempt's first frame (its tiles are kept for the next respawn)
   if (inGame) { // GD: a band (ship, wave, dual) fills the screen; a lone cube is followed up and down, never showing below the ground
     camX = p.x - viewW * 0.3;
     const bt = bandTop(p);
@@ -2705,8 +2717,9 @@ function draw(t, dt) {
   else { camX += 150 * dt; if (camX > world.end) camX = -viewW * 0.3; camY = 0; }
   const target = inGame ? triggerHue(world, p, baseHue) + (speedI - 1) * 35 : baseHue; // colour triggers shift the hue
   hue += (((target - hue) % 360 + 540) % 360 - 180) * Math.min(1, dt * 3);
+  if (spawnFrame) hue = target; // an attempt starts in its own colour (no fade, so no tile repaints on respawn)
 
-  frameNo++; tileBudget = 2; // tiles a hue change may repaint this frame (the rest catch up over the next frames)
+  frameNo++; tileDeadline = performance.now() + 2; // ms this frame may spend repainting for a hue change or painting ahead (the rest waits)
   const layout = hacks.layout && !ed; // layout mode: flat background, plain walls, no effects
   // background: hue-shifting gradient + slow parallax squares (cached, see drawBg)
   if (layout) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#141726'; ctx.fillRect(0, 0, W, H); } else drawBg(hue);
@@ -2734,7 +2747,7 @@ function draw(t, dt) {
   drawTiles(LAYERS.walls, tileKey, layout ? 0 : hq, kd, tX, tY, (g, a, b, c, d) => {
     const grid = ed && (paintEdGrid(g, z, a, b, c, d), true);
     return paintWalls(g, tileObjs(world, a, b, c, d, false, inGame), hq, layout, ed, z, a, b, c, d) || grid;
-  });
+  }, spawnFrame);
   if (inGame && world.fadeG.size) paintWalls(ctx, solids.filter(isFade), hue, layout, ed, z, x0, x1, y0 - B, y1);
 
   if (!ed) { // the ground, and the band's ceiling and raised floor (only seen when they're on screen)
@@ -2748,7 +2761,7 @@ function draw(t, dt) {
     for (let y = Math.floor(camY / 30) * 30; y < Math.min(VH, camY + viewH); y += 30) { ctx.fillStyle = (y / 30) % 2 ? '#fff' : `hsl(${hue},80%,20%)`; ctx.fillRect(world.end - 8, y, 16, 30); }
   }
   // spikes: wall-coloured with the same bright edge as the walls
-  drawTiles(LAYERS.spikes, tileKey, layout ? 0 : hq, kd, tX, tY, (g, a, b, c, d) => paintSpikes(g, tileObjs(world, a, b, c, d, true, inGame), hq, layout));
+  drawTiles(LAYERS.spikes, tileKey, layout ? 0 : hq, kd, tX, tY, (g, a, b, c, d) => paintSpikes(g, tileObjs(world, a, b, c, d, true, inGame), hq, layout), spawnFrame);
   if (inGame && world.fadeG.size) paintSpikes(ctx, spikes.filter(isFade), hue, layout);
   const drawSaw = s => {
     sawPath(ctx, s.x * B, s.y * B, SAW_R * B * (s.sc || 1), t); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = 3; ctx.stroke();
@@ -2877,9 +2890,12 @@ function draw(t, dt) {
     }
     if (!layout) for (const q of parts) if (q.life > 0) {
       ctx.globalAlpha = Math.min(1, q.life * 2); ctx.fillStyle = q.col || COLORS[icon.c1];
-      if (q.shard) { const z = q.shard * Math.min(1, q.life * 1.6); ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.rot); ctx.fillRect(-z / 2, -z / 4, z, z / 2); ctx.restore(); continue; }
+      // a shard turns with its own transform (set directly: save/translate/rotate/restore per shard cost frames on deaths)
+      if (q.shard) { const z = q.shard * Math.min(1, q.life * 1.6), c = Math.cos(q.rot) * kd, n = Math.sin(q.rot) * kd; ctx.setTransform(c, n, -n, c, tX + q.x * kd, tY + q.y * kd); ctx.fillRect(-z / 2, -z / 4, z, z / 2); continue; }
+      ctx.setTransform(kd, 0, 0, kd, tX, tY);
       const z = (q.sz || 6) * (q.sz ? 0.4 + q.life * 2 : 1); ctx.fillRect(q.x - z / 2, q.y - z / 2, z, z);
     }
+    ctx.setTransform(kd, 0, 0, kd, tX, tY);
     ctx.globalAlpha = 1;
   }
   // hitboxes: what the game actually tests against
