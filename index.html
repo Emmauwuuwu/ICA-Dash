@@ -2995,6 +2995,10 @@ function frame() {
     step(STEP * (mode === 'play' || mode === 'dead' ? hacks.speed : 1));
     freshClick = false;
   }
+  // Unlock FPS on a normal canvas: the browser still shows one picture per screen refresh, so drawing hundreds a second
+  // only makes the GPU paint pictures nobody sees (on a weak GPU that's what made it stutter). The game keeps running
+  // and reading input at the full rate, but draws at most every 4 ms, so what's shown is never more than 4 ms old.
+  if (hacks.uncap && !desync && now - lastDraw < 4) return next();
   const dt = Math.min(0.05, (now - lastDraw) / 1000); lastDraw = now;
   frameAvg += (Math.min(34, Math.max(4, dt * 1000)) - frameAvg) * 0.1; // the usual time between frames, in ms
   drawFrame(now, dt);
@@ -3004,7 +3008,7 @@ function frame() {
 }
 // Unlock FPS: run frames on our own timer at the chosen cap instead of the display's refresh. It sleeps with setTimeout while it
 // can and only spins (MessageChannel) for the last ~2 ms, so the browser keeps time to handle input and paint the menus.
-// In this mode the canvas uses desynchronized: true, which lets browsers that support it show those frames right away.
+// With the Low latency setting too, the canvas is desynchronized, so browsers that support it show those frames right away.
 const CAPS = [144, 240, 360, 500, 1000];
 const mc = new MessageChannel();
 let nextDue = 0;
@@ -4318,8 +4322,10 @@ function bindCanvas(c) {
   }, { passive: false });
 }
 bindCanvas(cv);
-// The canvas is low-latency (desynchronized) with Unlock FPS or the Low latency setting; swapping it needs a fresh canvas.
-function syncCanvas() { const want = hacks.uncap || gfx.lat; if (want !== !!ctx.getContextAttributes?.().desynchronized) makeCanvas(want); }
+// The canvas is low-latency (desynchronized) only with the Low latency setting; swapping it needs a fresh canvas. (Unlock
+// FPS used to switch it on too, and on ChromeOS that made frames arrive unevenly: choppy play, then a crash.)
+let desync = false;
+function syncCanvas() { const want = gfx.lat; if (want !== !!ctx.getContextAttributes?.().desynchronized) makeCanvas(want); desync = !!ctx.getContextAttributes?.().desynchronized; }
 syncCanvas();
 $('gfxLow').addEventListener('change', e => {
   gfx.low = lowDetail = e.target.checked; store.set('zd-gfx', gfx);
