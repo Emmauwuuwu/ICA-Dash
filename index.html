@@ -2568,10 +2568,9 @@ function renderObj(g, o, u, t) { // one object in its editor colours (palette ic
   else if (o.t === 'P') drawStartPos(g, o, u);
   else drawPortal(g, o, u, u >= 30);
 }
-// Cheap glow: a wide faint stroke under a thin bright one (shadowBlur costs frames, and dropped frames feel like input lag).
+// The bright edge of walls, spikes and D blocks. (There used to be a wide faint glow band under it in the level's colour;
+// it was taken out for a cleaner look. `glow` is kept so the callers don't change.)
 function glowStroke(g, color, glow, w) {
-  if (lowDetail) { g.globalAlpha = 1; g.strokeStyle = color; g.lineWidth = w; g.stroke(); return; } // low detail: just the edge
-  g.strokeStyle = glow; g.globalAlpha = 0.35; g.lineWidth = w * 3.5; g.stroke();
   g.globalAlpha = 1; g.strokeStyle = color; g.lineWidth = w; g.stroke();
 }
 function visibleObjs(wd, a, b) { const set = new Set(); for (let c = Math.floor(a) - 1; c <= Math.ceil(b) + 1; c++) for (const o of wd.cols.get(c) || []) set.add(o.src || o); return set; } // a turned solid's pieces draw as the solid
