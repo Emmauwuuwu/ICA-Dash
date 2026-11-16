@@ -43,4 +43,6 @@ The online part runs on [Supabase](https://supabase.com). `supabase/schema.sql` 
 
 Everything is in `index.html`: no build step. It loads Google Fonts and, for the online part, `supabase-js` (pinned, with an integrity hash).
 
+`assets/portals.png` is a fan-made portal texture sheet shared on Reddit as free to use. The game keys out its grey background when it loads and falls back to drawn portals if it can't load it.
+
 Made with [Claude Code](https://claude.com/claude-code).
