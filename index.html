@@ -344,7 +344,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
     <div class="hbar"><span>Performance</span></div>
     <label class="hrow"><input type="checkbox" class="sr" id="hCbf"><span class="hchk"></span>Click between frames</label>
     <label class="hrow"><input type="checkbox" class="sr" id="hUncap"><span class="hchk"></span>Unlock FPS (no vsync)</label>
-    <label class="hrow hcol"><span>FPS cap <b class="hval" id="hCapOut">240</b></span><input type="range" id="hCap" min="0" max="4" step="1" value="1"></label>
+    <label class="hrow hcol"><span>FPS cap <small>(any number, 10–10000)</small></span><input class="field" type="number" id="hCap" min="10" max="10000" step="1" value="240" inputmode="numeric" style="min-width:0"></label>
     <p class="hrow hfoot">Click between frames counts each press from the exact moment you made it. Unlock FPS redraws as fast as your PC can, ignoring the browser's frame timing; it uses a lot more CPU.</p>
   </div>
 </div>
@@ -1351,9 +1351,12 @@ function shipPicture(ic) {
 let keys = store.get('zd-keys', DEFAULT_KEYS);
 if (!Array.isArray(keys.climb) || typeof keys.exit !== 'string') keys = structuredClone(DEFAULT_KEYS);
 if (typeof keys.restart !== 'string') keys.restart = DEFAULT_KEYS.restart; // saved before the restart key existed
-const HACK_DEFAULTS = { noclip: false, hitbox: false, speed: 1, start: 0, fps: false, cbf: true, uncap: false, cap: 1,
+const HACK_DEFAULTS = { noclip: false, hitbox: false, speed: 1, start: 0, fps: false, cbf: true, uncap: false, cap: 240,
   path: false, auto: false, acc: false, noAtt: false, layout: false, respawn: 0.75, noPulse: false, trail: 1 };
 let hacks = { ...HACK_DEFAULTS, ...store.get('zd-hacks', {}) };
+// The FPS cap is the frame rate itself (it used to be one of five presets, saved as 0-4).
+const fpsCap = (v, saved) => { v = Math.round(+v); return !Number.isFinite(v) ? 240 : saved && v >= 0 && v <= 4 ? [144, 240, 360, 500, 1000][v] : Math.min(10000, Math.max(10, v)); };
+hacks.cap = fpsCap(hacks.cap, true);
 let unlocked = store.get('zd-unlocked', false);
 // Balance edits to main levels (made with "Edit levels" once the hack menu is unlocked). They're kept in this browser and
 // replace the built-in code; l.orig keeps the shipped version for "Reset to original".
@@ -2995,10 +2998,6 @@ function frame() {
     step(STEP * (mode === 'play' || mode === 'dead' ? hacks.speed : 1));
     freshClick = false;
   }
-  // Unlock FPS on a normal canvas: the browser still shows one picture per screen refresh, so drawing hundreds a second
-  // only makes the GPU paint pictures nobody sees (on a weak GPU that's what made it stutter). The game keeps running
-  // and reading input at the full rate, but draws at most every 4 ms, so what's shown is never more than 4 ms old.
-  if (hacks.uncap && !desync && now - lastDraw < 4) return next();
   const dt = Math.min(0.05, (now - lastDraw) / 1000); lastDraw = now;
   frameAvg += (Math.min(34, Math.max(4, dt * 1000)) - frameAvg) * 0.1; // the usual time between frames, in ms
   drawFrame(now, dt);
@@ -3007,19 +3006,20 @@ function frame() {
   next();
 }
 // Unlock FPS: run frames on our own timer at the chosen cap instead of the display's refresh. It sleeps with setTimeout while it
-// can and only spins (MessageChannel) for the last ~2 ms, so the browser keeps time to handle input and paint the menus.
+// can and only spins (MessageChannel) for the last ~5 ms, so the browser keeps time to handle input and paint the menus.
 // With the Low latency setting too, the canvas is desynchronized, so browsers that support it show those frames right away.
-const CAPS = [144, 240, 360, 500, 1000];
+
 const mc = new MessageChannel();
 let nextDue = 0;
 function tick() {
   const wait = nextDue - performance.now();
-  if (wait > 2) setTimeout(tick, wait - 1.5); else if (wait > 0) mc.port2.postMessage(0); else frame();
+  if (wait > 6) setTimeout(tick, wait - 5); // a repeated setTimeout sleeps at least ~4 ms, so it only sleeps the part before that
+  else if (wait > 0) mc.port2.postMessage(0); else frame();
 }
 mc.port1.onmessage = tick;
 function next() {
   if (!hacks.uncap || document.hidden) return requestAnimationFrame(frame);
-  nextDue = Math.max(nextDue + 1000 / CAPS[hacks.cap], performance.now()); // steady pacing; a late frame never triggers a burst
+  nextDue = Math.max(nextDue + 1000 / hacks.cap, performance.now()); // steady pacing; a late frame never triggers a burst
   mc.port2.postMessage(0); // always hand control back to the browser between frames
 }
 function setHeld(v, e, fresh = v) {
@@ -3507,7 +3507,7 @@ function renderHacks() {
   $('hAcc').checked = hacks.acc; $('hNoAtt').checked = hacks.noAtt; $('hLayout').checked = hacks.layout;
   $('hRespawn').value = hacks.respawn; $('hRespawnOut').textContent = hacks.respawn.toFixed(2) + ' s';
   $('hCbf').checked = hacks.cbf; $('hUncap').checked = hacks.uncap;
-  $('hCap').value = hacks.cap; $('hCapOut').textContent = CAPS[hacks.cap]; $('hCap').disabled = !hacks.uncap;
+  if (document.activeElement !== $('hCap')) $('hCap').value = hacks.cap; $('hCap').disabled = !hacks.uncap; // (not while you're typing in it)
   $('hSpeed').value = hacks.speed; $('hSpeedOut').textContent = hacks.speed + 'x';
   $('hStart').value = hacks.start; $('hStartOut').textContent = Math.round(hacks.start * 100) + '%';
   $('hNoPulse').checked = hacks.noPulse; $('hTrail').value = hacks.trail; $('hTrailOut').textContent = hacks.trail + 'x';
@@ -3516,7 +3516,7 @@ function renderHacks() {
 function readHacks() {
   const was = hacks;
   hacks = { noclip: $('hNoclip').checked, hitbox: $('hHitbox').checked, speed: +(+$('hSpeed').value).toFixed(2), start: +$('hStart').value, fps: $('hFps').checked,
-    cbf: $('hCbf').checked, uncap: $('hUncap').checked, cap: +$('hCap').value, path: $('hPath').checked,
+    cbf: $('hCbf').checked, uncap: $('hUncap').checked, cap: $('hCap').value === '' ? was.cap : fpsCap($('hCap').value), path: $('hPath').checked,
     auto: $('hAuto').checked, acc: $('hAcc').checked, noAtt: $('hNoAtt').checked, layout: $('hLayout').checked, respawn: +(+$('hRespawn').value).toFixed(2),
     noPulse: $('hNoPulse').checked, trail: +(+$('hTrail').value).toFixed(2) };
   syncCanvas();
@@ -3526,8 +3526,9 @@ function readHacks() {
   if (cheating() && (mode === 'play' || mode === 'dead' || mode === 'pause')) usedHacks = true; // switching a hack on mid-run voids that run's best
   updateHackTag();
 }
-for (const id of ['hNoclip', 'hHitbox', 'hSpeed', 'hStart', 'hFps', 'hCbf', 'hUncap', 'hCap', 'hPath', 'hAuto', 'hAcc', 'hNoAtt', 'hLayout', 'hRespawn', 'hNoPulse', 'hTrail'])
+for (const id of ['hNoclip', 'hHitbox', 'hSpeed', 'hStart', 'hFps', 'hCbf', 'hUncap', 'hPath', 'hAuto', 'hAcc', 'hNoAtt', 'hLayout', 'hRespawn', 'hNoPulse', 'hTrail'])
   $(id).addEventListener('input', readHacks);
+$('hCap').addEventListener('change', readHacks); // typed: applies on Enter or when you click away
 $('hSpeedReset').onclick = () => { $('hSpeed').value = 1; readHacks(); };
 
 let winPos = store.get('zd-hackpos', {}), folded = store.get('zd-hackfold', {});
