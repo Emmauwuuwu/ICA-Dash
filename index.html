@@ -1280,6 +1280,9 @@ let bests = store.get('zd-best', {}), customs = store.get('zd-levels', []);
 let savedCoins = store.get('zd-coins', {}); // level id -> coin numbers collected on runs you finished without hacks
 let icon = { shape: 0, c1: 0, c2: 11, ...store.get('zd-icon', {}) };
 if (!SHAPES[icon.shape]) icon.shape = 0; if (!COLORS[icon.c1]) icon.c1 = 0; if (!COLORS[icon.c2]) icon.c2 = 11;
+// Every change to the icon goes through here: it's stamped with the time, so the cloud save can tell which device's icon
+// is newer (see mergeSave), then saved (which also queues the cloud save).
+function saveIcon() { icon.at = Date.now(); return store.set('zd-icon', icon); }
 
 // ---------- achievements: every shape and colour past the starters is a reward ----------
 // Keyed by level id, not position, so inserting levels never changes which icon a level you've already beaten gave you.
@@ -1445,7 +1448,9 @@ $('comm').addEventListener('click', e => {
   } else if (d.cuse) {
     const it = item(d.cuse); if (!it) return; const [key, use, imgOf] = KIND_SLOT[it.kind];
     icon[key] = it.image; icon[use] = true; imgOf().src = it.image; if (it.kind === 'cube') icon.cubeAdj = { s: 2 }; // shared cubes are baked 2 blocks across
-    if (it.kind === 'ship') { shipHint(); icon.shipBaked = true; delete icon.shipAdj2; icon.shipMirror = icon.shipTint = false; } // shared ships are baked as they looked store.set('zd-icon', icon); renderIcons(); toast(`Using "${it.name}" as your ${it.kind}`);
+    if (it.kind === 'ship') { shipHint(); icon.shipBaked = true; delete icon.shipAdj2; icon.shipMirror = icon.shipTint = false; } // shared ships are baked as they looked
+    if (!saveIcon()) toast('Your browser wouldn\'t save that icon (storage is full).'); else toast(`Using "${it.name}" as your ${it.kind}`);
+    renderIcons();
   } else if (d.cok) commDo(() => NET.sb.from('community_icons').update({ status: 'approved' }).eq('id', d.cok), 'Approved: everyone can see it now');
   else if (d.cno) commDo(() => NET.sb.from('community_icons').update({ status: 'rejected' }).eq('id', d.cno), 'Rejected');
   else if (d.cdel && confirm('Remove this icon from the community list?')) commDo(() => NET.sb.from('community_icons').delete().eq('id', d.cdel), 'Removed');
@@ -3616,8 +3621,8 @@ document.addEventListener('click', e => {
   else if (d.tool) { edTool = d.tool; clearArmed = false; renderPane(); }
   else if (d.pal) { edPal = d.pal; renderPane(); }
   else if (d.ed) edAction(d.ed);
-  else if (d.shape !== undefined) { icon.shape = +d.shape; icon.useCustom = false; store.set('zd-icon', icon); renderIcons(); }
-  else if (d.c1 !== undefined || d.c2 !== undefined) { const k = d.c1 !== undefined ? 'c1' : 'c2'; icon[k] = +d[k]; store.set('zd-icon', icon); renderIcons(); }
+  else if (d.shape !== undefined) { icon.shape = +d.shape; icon.useCustom = false; saveIcon(); renderIcons(); }
+  else if (d.c1 !== undefined || d.c2 !== undefined) { const k = d.c1 !== undefined ? 'c1' : 'c2'; icon[k] = +d[k]; saveIcon(); renderIcons(); }
   else if (d.bind !== undefined) { listening = d.bind; renderBinds(); }
   else if (d.up) uploadLevel(d.up);
   else if (d.sort) { onSort = d.sort; renderOnline(); }
@@ -3641,10 +3646,10 @@ const customMsg = t => { $('customMsg').textContent = t; };
 $('customUpload').onclick = () => $('iconFile').click();
 $('customTile').onclick = () => {
   if (!customImg.naturalWidth) return $('iconFile').click();
-  icon.useCustom = true; store.set('zd-icon', icon); renderIcons();
+  icon.useCustom = true; saveIcon(); renderIcons();
 };
 $('customRemove').onclick = () => {
-  delete icon.custom; icon.useCustom = false; customImg.removeAttribute('src'); store.set('zd-icon', icon); customMsg(''); renderIcons();
+  delete icon.custom; icon.useCustom = false; customImg.removeAttribute('src'); saveIcon(); customMsg(''); renderIcons();
 };
 // Read a picked file as a PNG data URL of at most `max` px; returns { url } or { err } with a message for the player.
 // clearBg makes a plain white background (white pixels joined to the edge) transparent.
@@ -3684,51 +3689,51 @@ const NOT_SAVED = 'Your browser wouldn\'t save the image, so it will be gone aft
 $('iconFile').addEventListener('change', async () => {
   const { url, err } = await readIconFile($('iconFile')); if (err) return customMsg(err); if (!url) return;
   icon.custom = url; icon.useCustom = true; customImg.src = url;
-  customMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
+  customMsg(saveIcon() ? '' : NOT_SAVED);
 });
 const cubeMsg = t => { $('cubeMsg').textContent = t; };
 $('cubeUpload').onclick = () => $('cubeFile').click();
 document.querySelectorAll('[data-adj]').forEach(el => el.addEventListener('input', () => {
-  icon.cubeAdj = { ...CUBE_ADJ, ...icon.cubeAdj, [el.dataset.adj]: +el.value }; store.set('zd-icon', icon); renderIcons();
+  icon.cubeAdj = { ...CUBE_ADJ, ...icon.cubeAdj, [el.dataset.adj]: +el.value }; saveIcon(); renderIcons();
 }));
-$('cubeAdjReset').onclick = () => { delete icon.cubeAdj; store.set('zd-icon', icon); renderIcons(); };
-$('cubeTileDef').onclick = () => { icon.useCubeCustom = false; store.set('zd-icon', icon); renderIcons(); };
+$('cubeAdjReset').onclick = () => { delete icon.cubeAdj; saveIcon(); renderIcons(); };
+$('cubeTileDef').onclick = () => { icon.useCubeCustom = false; saveIcon(); renderIcons(); };
 $('cubeTile').onclick = () => {
   if (!cubeImg.naturalWidth) return $('cubeFile').click();
-  icon.useCubeCustom = true; store.set('zd-icon', icon); renderIcons();
+  icon.useCubeCustom = true; saveIcon(); renderIcons();
 };
 $('cubeRemove').onclick = () => {
-  delete icon.cubeCustom; delete icon.cubeAdj; icon.useCubeCustom = false; cubeImg.removeAttribute('src'); store.set('zd-icon', icon); cubeMsg(''); renderIcons();
+  delete icon.cubeCustom; delete icon.cubeAdj; icon.useCubeCustom = false; cubeImg.removeAttribute('src'); saveIcon(); cubeMsg(''); renderIcons();
 };
 $('cubeFile').addEventListener('change', async () => {
   const { url, err } = await readIconFile($('cubeFile')); if (err) return cubeMsg(err); if (!url) return;
   icon.cubeCustom = url; icon.useCubeCustom = true; delete icon.cubeAdj; cubeImg.src = url;
-  cubeMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
+  cubeMsg(saveIcon() ? '' : NOT_SAVED);
 });
 const shipMsg = t => { $('shipMsg').textContent = t; };
 $('shipUpload').onclick = () => $('shipFile').click();
-$('shipTileDef').onclick = () => { icon.useShipCustom = false; store.set('zd-icon', icon); renderIcons(); };
+$('shipTileDef').onclick = () => { icon.useShipCustom = false; saveIcon(); renderIcons(); };
 $('shipTile').onclick = () => {
   if (!shipImg.naturalWidth) return $('shipFile').click();
-  icon.useShipCustom = true; store.set('zd-icon', icon); renderIcons(); shipHint();
+  icon.useShipCustom = true; saveIcon(); renderIcons(); shipHint();
 };
 // The first time you pick a custom ship: a tip that its offsets can be changed if it looks off (shown once).
 function shipHint() { if (store.get('zd-shiphint', false)) return; store.set('zd-shiphint', true); $('shipHint').hidden = false; $('shShow').focus(); }
 $('shOk').onclick = () => { $('shipHint').hidden = true; };
 $('shShow').onclick = () => { $('shipHint').hidden = true; $('shipAdj').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
 $('shipRemove').onclick = () => {
-  delete icon.shipAdj2; delete icon.shipBaked; delete icon.shipCustom; icon.useShipCustom = false; shipImg.removeAttribute('src'); store.set('zd-icon', icon); shipMsg(''); renderIcons();
+  delete icon.shipAdj2; delete icon.shipBaked; delete icon.shipCustom; icon.useShipCustom = false; shipImg.removeAttribute('src'); saveIcon(); shipMsg(''); renderIcons();
 };
 $('shipFile').addEventListener('change', async () => {
   const { url, err } = await readIconFile($('shipFile'), 256, true); if (err) return shipMsg(err); if (!url) return;
   icon.shipCustom = url; icon.useShipCustom = true; delete icon.shipAdj2; delete icon.shipBaked; shipImg.src = url; shipHint();
-  shipMsg(store.set('zd-icon', icon) ? '' : NOT_SAVED);
+  shipMsg(saveIcon() ? '' : NOT_SAVED);
 });
 document.querySelectorAll('[data-sadj]').forEach(el => el.addEventListener('input', () => {
-  icon.shipAdj2 = { ...SHIP_ADJ, ...icon.shipAdj2, [el.dataset.sadj]: +el.value }; store.set('zd-icon', icon); renderIcons();
+  icon.shipAdj2 = { ...SHIP_ADJ, ...icon.shipAdj2, [el.dataset.sadj]: +el.value }; saveIcon(); renderIcons();
 }));
-$('shipAdjReset').onclick = () => { delete icon.shipAdj2; store.set('zd-icon', icon); renderIcons(); };
-for (const k of ['shipMirror', 'shipTint']) $(k).onchange = e => { icon[k] = e.target.checked; store.set('zd-icon', icon); renderIcons(); };
+$('shipAdjReset').onclick = () => { delete icon.shipAdj2; saveIcon(); renderIcons(); };
+for (const k of ['shipMirror', 'shipTint']) $(k).onchange = e => { icon[k] = e.target.checked; saveIcon(); renderIcons(); };
 // A new level starts empty, like GD's: just the ground.
 $('newLevel').onclick = () => openEditor({ id: 'c' + Date.now(), name: 'Untitled level', code: 'ICA2;' });
 $('edDone').onclick = () => { if (editing.main) { saveMain(); go('levels'); } else { saveEditing(); go('create'); } };
@@ -3940,16 +3945,23 @@ function mergeSave(s) {
     if (l && typeof l.id === 'string' && typeof l.code === 'string' && !customs.some(c => c.id === l.id))
       customs.push({ id: l.id.slice(0, 40), name: String(l.name || 'Untitled level').slice(0, 40), code: l.code });
   }
-  if (s.icon && !localStorage.getItem('zd-icon')) { // a device that never picked an icon takes the saved one
-    const i = s.icon, png = u => typeof u === 'string' && u.startsWith('data:image/png');
-    if (SHAPES[i.shape] && COLORS[i.c1] && COLORS[i.c2]) icon = { shape: i.shape, c1: i.c1, c2: i.c2, ...(png(i.custom) ? { custom: i.custom, useCustom: !!i.useCustom } : {}),
-      ...(png(i.cubeCustom) ? { cubeCustom: i.cubeCustom, useCubeCustom: !!i.useCubeCustom } : {}),
-      ...(png(i.shipCustom) ? { shipCustom: i.shipCustom, useShipCustom: !!i.useShipCustom, shipMirror: !!i.shipMirror, shipTint: !!i.shipTint } : {}) };
-    if (icon.custom) customImg.src = icon.custom;
-    if (icon.cubeCustom) cubeImg.src = icon.cubeCustom;
-    if (icon.shipCustom) shipImg.src = icon.shipCustom;
+  // The icon: the one changed most recently wins (icons carry the time they were last changed, `at`). A save from before
+  // icons had times counts as older than any change made here, but still beats a device that only has the starting icon.
+  const i = s.icon, iconAt = v => Number.isFinite(v?.at) ? v.at : 0;
+  const untouched = !localStorage.getItem('zd-icon') || (!iconAt(icon) && icon.shape === 0 && icon.c1 === 0 && icon.c2 === 11 && !icon.custom && !icon.cubeCustom && !icon.shipCustom);
+  if (i && SHAPES[i.shape] && COLORS[i.c1] && COLORS[i.c2] && (untouched || iconAt(i) > iconAt(icon))) {
+    const img = u => typeof u === 'string' && IMG_OK.test(u), adj = (a, def) => a && typeof a === 'object' ? Object.fromEntries(Object.keys(def).filter(k => Number.isFinite(a[k])).map(k => [k, a[k]])) : undefined;
+    icon = { shape: i.shape, c1: i.c1, c2: i.c2, at: iconAt(i),
+      ...(img(i.custom) ? { custom: i.custom, useCustom: !!i.useCustom } : {}),
+      ...(img(i.cubeCustom) ? { cubeCustom: i.cubeCustom, useCubeCustom: !!i.useCubeCustom, ...(adj(i.cubeAdj, CUBE_ADJ) ? { cubeAdj: adj(i.cubeAdj, CUBE_ADJ) } : {}) } : {}),
+      ...(img(i.shipCustom) ? { shipCustom: i.shipCustom, useShipCustom: !!i.useShipCustom, shipMirror: !!i.shipMirror, shipTint: !!i.shipTint, shipBaked: !!i.shipBaked,
+        ...(adj(i.shipAdj2, SHIP_ADJ) ? { shipAdj2: adj(i.shipAdj2, SHIP_ADJ) } : {}) } : {}) };
+    if (icon.custom) customImg.src = icon.custom; else customImg.removeAttribute('src');
+    if (icon.cubeCustom) cubeImg.src = icon.cubeCustom; else cubeImg.removeAttribute('src');
+    if (icon.shipCustom) shipImg.src = icon.shipCustom; else shipImg.removeAttribute('src');
+    if (!$('icons').hidden) renderIcons();
   }
-  store.set('zd-best', bests); store.set('zd-ach', ach); store.set('zd-stats', stats); store.set('zd-levels', customs); store.set('zd-icon', icon);
+  store.set('zd-best', bests); store.set('zd-ach', ach); store.set('zd-stats', stats); store.set('zd-levels', customs); store.set('zd-icon', icon); // (as merged: keeps its time)
   renderHome();
 }
 async function cloudLoad() {
