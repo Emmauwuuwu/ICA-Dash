@@ -407,6 +407,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
       <button class="eico" id="edZoomOut" title="Zoom out (Ctrl+wheel, -)" aria-label="Zoom out">&minus;</button>
       <button class="eico play" id="edTest" title="Playtest (Enter)" aria-label="Playtest">&#9654;</button>
       <button class="eico" id="edTestHere" title="Playtest from the middle of the view" aria-label="Playtest from here">&#9654;|</button>
+      <button class="eico" id="edMusic" title="Play the music from here (press again to stop)" aria-label="Play the music from here" aria-pressed="false">&#9835;</button>
     </div>
     <div class="edright" id="edQuick"></div>
   </div>
@@ -2045,6 +2046,7 @@ function songGate(level, origin, id) {
 }
 function closeGate(go) { $('songGate').hidden = true; const g = gate; gate = null; if (go && g) play(g.level, g.origin, true); }
 function play(level, origin, songOk) {
+  edMusicStop(); // a playtest (or any level) stops the editor's music playback
   if (!songOk) { const id = missingSong(level); if (id) return songGate(level, origin, id); }
   cur = level; from = origin; world = level.id === 'test' ? buildWorld(edObjs) : worldFor(level.code); baseHue = level.hue ?? 200;
   if (level.id === 'test') { testPath = []; testPath2 = []; testClicks = []; testPrevHeld = false; testTick = 0; }
@@ -2279,9 +2281,31 @@ function timeAt(wd, xu) {
   return t + Math.max(0, xu - x) / (SPEEDS[i] * B);
 }
 const BPM_FOR = { Easy: 120, Normal: 128, Hard: 136, Harder: 144, Insane: 150, Extreme: 160 };
-function levelMusic() { // what the current level plays
-  const song = world.song || { t: 'M', k: 0, n: LEVELS.includes(cur) ? LEVELS.indexOf(cur) + 1 : 1, off: 0 };
-  return { song, bpm: LEVELS.includes(cur) ? BPM_FOR[cur.diff] || 128 : 132 };
+function levelMusic() { // what the current level plays (a playtest or the editor: the level being edited)
+  const lv = (mode === 'edit' || cur?.id === 'test') && editing ? editing : cur;
+  const song = world.song || { t: 'M', k: 0, n: LEVELS.includes(lv) ? LEVELS.indexOf(lv) + 1 : 1, off: 0 };
+  return { song, bpm: LEVELS.includes(lv) ? BPM_FOR[lv.diff] || 128 : 132 };
+}
+// The other way from timeAt: how far into the level (game units) you are t seconds in, following its speed portals.
+function xAt(wd, t) {
+  let x = 0, i = 1, tt = 0;
+  for (const o of wd.portals) if (o.k === 'S') {
+    if (o.x * B > x) { const seg = (o.x * B - x) / (SPEEDS[i] * B); if (tt + seg >= t) break; tt += seg; x = o.x * B; }
+    i = o.v;
+  }
+  return x + Math.max(0, t - tt) * SPEEDS[i] * B;
+}
+// Editor music playback (GD's): the level's song from the spot "Playtest from here" would start at, with a line moving
+// through the level in time with it. The view turns the page when the line nears its right edge. Pressing it again,
+// playtesting or leaving the editor stops it.
+let edMus = null; // { off: seconds into the level where it started, t0: performance.now() then }
+function edMusicStop() { if (!edMus) return; edMus = null; songStop(); $('edMusic').innerHTML = '&#9835;'; $('edMusic').setAttribute('aria-pressed', 'false'); }
+function edMusicToggle() {
+  if (edMus) return edMusicStop();
+  const x = Math.max(0, editCam + 0.3 * W / (S * edZoom)), off = timeAt(world, x);
+  songStart(levelMusic(), off);
+  edMus = { off, t0: performance.now() };
+  $('edMusic').innerHTML = '&#9632;'; $('edMusic').setAttribute('aria-pressed', 'true');
 }
 function attemptMusic() { if (mode === 'play' || mode === 'dead') songStart(levelMusic(), timeAt(world, p.x)); }
 
@@ -2969,7 +2993,13 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
     ty = Math.min(ty, VH - viewH);
     camY = camSnap ? ty : camY + (ty - camY) * Math.min(1, dt * 6); camSnap = false;
   }
-  else if (ed) { camX = editCam; camY = edCamY; }
+  else if (ed) {
+    if (edMus) { // music playback: stop past the end; turn the page when the line nears the view's right edge
+      const lx = xAt(world, edMus.off + (performance.now() - edMus.t0) / 1000);
+      if (lx > world.end + B) edMusicStop(); else if (lx > editCam + viewW * 0.85) { editCam = lx - viewW * 0.15; clampEd(); }
+    }
+    camX = editCam; camY = edCamY;
+  }
   else { camX += 150 * dt; if (camX > world.end) camX = -viewW * 0.3; camY = 0; }
   const target = inGame ? triggerHue(world, p, baseHue) + (speedI - 1) * 35 : baseHue; // colour triggers shift the hue
   hue += (((target - hue) % 360 + 540) % 360 - 180) * Math.min(1, dt * 3);
@@ -3073,6 +3103,11 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
     ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = '700 15px "Space Mono", monospace'; ctx.textAlign = 'center';
     for (let b = Math.ceil(camX / B / 5) * 5; b * B < camX + viewW; b += 5) ctx.fillText(b, b * B, camY + 22 / z);
     ctx.globalAlpha = 0.6; drawIcon(ctx, 0, VH / 2, Math.PI / 4, WAVE_S, icon); ctx.globalAlpha = 1;
+    if (edMus) { // the music playback line, where the level is in the song right now
+      const lx = xAt(world, edMus.off + (performance.now() - edMus.t0) / 1000);
+      ctx.strokeStyle = 'rgba(12,14,28,.7)'; ctx.lineWidth = 7 / z; ctx.beginPath(); ctx.moveTo(lx, camY); ctx.lineTo(lx, camY + viewH); ctx.stroke();
+      ctx.strokeStyle = '#4dff5e'; ctx.lineWidth = 3 / z; ctx.stroke();
+    }
     if (testPath.length > 1) { // the last playtest's route (green) and where you pressed (orange), as GD leaves them
       ctx.lineJoin = 'round'; ctx.strokeStyle = '#4dff5e'; ctx.lineWidth = 2.5 / z;
       for (const path of [testPath, testPath2]) if (path.length > 1) { ctx.beginPath(); path.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
@@ -3286,6 +3321,7 @@ function inputUp(id, e) { if (!downIds.delete(id)) return; if (inGame()) setHeld
 
 // ---------- menus ----------
 function go(id) {
+  edMusicStop(); // leaving the editor stops its music playback
   mode = 'menu'; show(id);
   if (id === 'levels') renderBoard();
   if (id === 'create') renderCustoms();
@@ -4026,6 +4062,7 @@ $('lvCopyEdits').onclick = () => {
 };
 $('edTest').onclick = () => { testFrom = null; play({ id: 'test', name: $('lvName').value.trim() || 'Untitled level', hue: 200 }, 'editor'); };
 $('edTestHere').onclick = () => { testFrom = Math.max(0, editCam + 0.3 * W / (S * edZoom)); testFromY = edCamY + 0.5 * H / (S * edZoom); play({ id: 'test', name: $('lvName').value.trim() || 'Untitled level', hue: 200 }, 'editor'); }; // starts at the middle of the view
+$('edMusic').onclick = edMusicToggle;
 $('edUndo').onclick = undo;
 $('edRedo').onclick = redo;
 $('edZoomIn').onclick = () => zoomBy(1.25);
