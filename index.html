@@ -1963,7 +1963,7 @@ function spawnState(x) {
 // between there and x (gamemode, speed, gravity, size, dual, its band) and counts every trigger before x as fired at the
 // moment you'd have passed it, so moved, faded and coloured groups are where they'd be. Its height is the free spot nearest
 // yHint (the middle of the editor's view): a wave or ship starts there, a cube or ball drops from there.
-function stateAt(x, yHint = VH / 2) {
+function stateAt(x, yHint = VH / 2, back = 0) {
   const sp = spList().filter(o => (o.x + 0.5) * B <= x).at(-1);
   const s = sp ? startPosState(sp) : { x: 0, y: VH / 2, bt: 0, bb: VH, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, cube: false, ship: false, ball: false, vy: 0, vy2: 0, gnd: false, gnd2: false, dash: null };
   s.wd = world;
@@ -1971,14 +1971,24 @@ function stateAt(x, yHint = VH / 2) {
   s.x = x; s.vy = s.vy2 = 0; s.gnd = s.gnd2 = false; s.sv = s.sv2 = s.lv = s.lv2 = 0; s.dash = null; s.bair = !!s.ball;
   s.t = timeAt(world, x); s.tf = world.trig.filter(o => o.x * B <= x).map(o => timeAt(world, o.x * B));
   placeMoving(world, s);
-  // the free height nearest the hint, inside the band (searching outward a few units at a time)
+  // Its height: the middle of an open gap in that column (not just any free point: one at a gap's edge dies at once), one
+  // there's a way to survive half a second from (the autoplay search; a tight corridor needs you to zigzag straight away),
+  // the nearest such to the hint.
   const body = hasBody(s), r = body ? cubeHalf(s) : s.mini ? RM : R, top = (bandTop(s) ?? TOP) + r + 1, bot = bandBot(s) - r - 1;
   const ok = y => y >= top && y <= bot && (body ? survives(world, x, y, r) : !solidHit(world, x, y, r))
     && (!s.dual || (body ? survives(world, x, mirrorY(s, y), r) : !solidHit(world, x, mirrorY(s, y), r)));
-  const y0 = Math.min(bot, Math.max(top, yHint));
-  let y = null; for (let d = 0; d <= VH * 2 && y === null; d += 3) { if (ok(y0 - d)) y = y0 - d; else if (ok(y0 + d)) y = y0 + d; }
-  s.y = y ?? y0; s.y2 = s.dual ? mirrorY(s, s.y) : VH - s.y; s.dir = s.flip ? -1 : 1;
-  return stateOf(s);
+  const mids = []; let run = null;
+  // (a cube or ball: the gap's floor, or its ceiling upside down, so it starts standing on the ground there)
+  for (let y = Math.max(top, -40 * B); y <= bot + 3; y += 3) { if (y <= bot && ok(y)) run ??= y; else if (run !== null) { mids.push(!body ? (run + y - 3) / 2 : s.flip ? run : y - 3); run = null; } }
+  const at = y => { const c = { ...s, y }; c.y2 = c.dual ? mirrorY(c, y) : VH - y; c.dir = c.flip ? -1 : 1; return c; };
+  const canLive = y => { const c = at(y); return !!(findPath(world, c, 30, 2500, false) || findPath(world, c, 30, 2500, true)); };
+  const lasts = y => { const c = at(y); return Math.max(survival(c, false, 240), survival(c, true, 240)); };
+  mids.sort((a, b) => Math.abs(a - yHint) - Math.abs(b - yHint));
+  const live = mids.find(canLive);
+  // nowhere to live right at x (say a wall closing a dual lane exactly there): a little earlier, up to 3 blocks back
+  if (live === undefined && back < 12 && x > B / 4) return stateAt(x - B / 4, yHint, back + 1);
+  const y = live ?? mids.reduce((b, m) => b === null || lasts(m) > lasts(b) ? m : b, null) ?? Math.min(bot, Math.max(top, yHint));
+  return stateOf(at(y));
 }
 // Effects for the real game: tick1 calls these on p (portal ones before the state changes). The wave draws a trail of its
 // corners; a cube draws none, so the trail breaks (null) while it's a cube.
@@ -2014,9 +2024,10 @@ function reset() {
   else if (sx > 0) Object.assign(p, spawnCache ??= spawnState(sx)); // start partway in at a safe spot (worked out once per level)
   else p.y2 = VH - p.y;
   p.ci = world.cps.filter(c => c.x * B <= p.x).length; // checkpoint objects behind a mid-level spawn don't count again
-  // A mid-level spawn from the start % hack waits for your first press instead of moving straight away. (A start position,
-  // a practice checkpoint and "Playtest from here" go straight away, as GD's start positions do.)
-  p.wait = !hacks.auto && !cp && sx > 0 && !st && !here;
+  // A mid-level spawn from the start % hack or "Playtest from here" waits for your first press instead of moving straight
+  // away: you've just clicked a button, and the spot may need input at once. (A start position or a practice checkpoint
+  // goes straight away, as in GD.)
+  p.wait = !hacks.auto && !cp && sx > 0 && !st;
   if (p.wait) p.dir = p.flip ? 1 : -1; // facing the way a press will send it
   p.ang = p.from = p.dir * (p.mini ? Math.atan(2) : Math.PI / 4); p.cpT = 0; p.sub = 0; speedI = p.speedI;
   trail = hasBody(p) ? [] : [[p.x, p.y]]; trail2 = p.dual && !hasBody(p) ? [[p.x, p.y2]] : [];
@@ -3306,7 +3317,7 @@ function next() {
   mc.port2.postMessage(0); // always hand control back to the browser between frames
 }
 function setHeld(v, e, fresh = v) {
-  if (v && p?.wait && mode === 'play') { p.wait = false; held = true; inputs.length = 0; attemptMusic(); return; } // first press starts a waiting spawn (and its music)
+  if (v && p?.wait && mode === 'play') { p.wait = false; held = !p.cube && !p.ball; inputs.length = 0; attemptMusic(); return; } // first press starts a waiting spawn (and its music); it's a hold for a wave or ship, but a cube or ball isn't made to jump or flip by it
   const now = performance.now(); let ts = e && e.timeStamp;
   if (!(ts > now - 250 && ts <= now)) ts = now; // fall back if the browser's event clock differs
   if (inputs.length && ts < inputs[inputs.length - 1][0]) ts = inputs[inputs.length - 1][0];
