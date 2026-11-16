@@ -1963,7 +1963,7 @@ function spawnState(x) {
 // between there and x (gamemode, speed, gravity, size, dual, its band) and counts every trigger before x as fired at the
 // moment you'd have passed it, so moved, faded and coloured groups are where they'd be. Its height is the free spot nearest
 // yHint (the middle of the editor's view): a wave or ship starts there, a cube or ball drops from there.
-function stateAt(x, yHint = VH / 2, back = 0) {
+function stateAt(x, yHint = VH / 2, back = 0, until = performance.now() + 15) { // until: the search's time limit (no freezes)
   const sp = spList().filter(o => (o.x + 0.5) * B <= x).at(-1);
   const s = sp ? startPosState(sp) : { x: 0, y: VH / 2, bt: 0, bb: VH, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, cube: false, ship: false, ball: false, vy: 0, vy2: 0, gnd: false, gnd2: false, dash: null };
   s.wd = world;
@@ -1979,15 +1979,20 @@ function stateAt(x, yHint = VH / 2, back = 0) {
     && (!s.dual || (body ? survives(world, x, mirrorY(s, y), r) : !solidHit(world, x, mirrorY(s, y), r)));
   const mids = []; let run = null;
   // (a cube or ball: the gap's floor, or its ceiling upside down, so it starts standing on the ground there)
-  for (let y = Math.max(top, -40 * B); y <= bot + 3; y += 3) { if (y <= bot && ok(y)) run ??= y; else if (run !== null) { mids.push(!body ? (run + y - 3) / 2 : s.flip ? run : y - 3); run = null; } }
+  // (every 6 units, from 6 blocks above the view down: a cube has no ceiling to stop the scan)
+  for (let y = Math.max(top, yHint - 6 * B); y <= bot + 6; y += 6) { if (y <= bot && ok(y)) run ??= y; else if (run !== null) { mids.push(!body ? (run + y - 6) / 2 : s.flip ? run : y - 6); run = null; } }
   const at = y => { const c = { ...s, y }; c.y2 = c.dual ? mirrorY(c, y) : VH - y; c.dir = c.flip ? -1 : 1; return c; };
-  const canLive = y => { const c = at(y); return !!(findPath(world, c, 30, 2500, false) || findPath(world, c, 30, 2500, true)); };
-  const lasts = y => { const c = at(y); return Math.max(survival(c, false, 240), survival(c, true, 240)); };
-  mids.sort((a, b) => Math.abs(a - yHint) - Math.abs(b - yHint));
+  // The whole search has 15 ms and no route search (on a busy level that took seconds on a slow computer): of the 6 nearest
+  // gaps, the first where holding or letting go keeps you alive an eighth of a second (the spawn waits for your first press,
+  // so you see it before anything moves); out of time, the spot found so far that lasts longest.
+  const lastsM = new Map(), lasts = y => { if (!lastsM.has(y)) { const c = at(y); lastsM.set(y, Math.max(survival(c, false, 120), survival(c, true, 120))); } return lastsM.get(y); };
+  const canLive = y => performance.now() < until && lasts(y) >= 60;
+  mids.sort((a, b) => Math.abs(a - yHint) - Math.abs(b - yHint)); mids.length = Math.min(mids.length, 6);
   const live = mids.find(canLive);
-  // nowhere to live right at x (say a wall closing a dual lane exactly there): a little earlier, up to 3 blocks back
-  if (live === undefined && back < 12 && x > B / 4) return stateAt(x - B / 4, yHint, back + 1);
-  const y = live ?? mids.reduce((b, m) => b === null || lasts(m) > lasts(b) ? m : b, null) ?? Math.min(bot, Math.max(top, yHint));
+  // nowhere to live right at x (say a wall closing a dual lane exactly there): a little earlier, up to 3 blocks back, in time
+  if (live === undefined && back < 12 && x > B / 4 && performance.now() < until) return stateAt(x - B / 4, yHint, back + 1, until);
+  // (out of time: only spots already checked count, so the fallback costs nothing)
+  const y = live ?? [...lastsM].reduce((b, e) => !b || e[1] > b[1] ? e : b, null)?.[0] ?? mids[0] ?? Math.min(bot, Math.max(top, yHint));
   return stateOf(at(y));
 }
 // Effects for the real game: tick1 calls these on p (portal ones before the state changes). The wave draws a trail of its
@@ -2066,7 +2071,7 @@ function play(level, origin, songOk) {
   reset(); mode = 'play'; inputs.length = 0; show(null); $('hud').hidden = false;
   // Load the level's look before it starts: paint the first screen and up to a screen ahead now (up to 0.4 s), so the
   // opening seconds don't have tiles to paint. The clock restarts after, so the player doesn't jump ahead by that time.
-  draw(performance.now() / 1000, 0, 400); simT = lastDraw = performance.now();
+  draw(performance.now() / 1000, 0, level.id === 'test' ? 50 : 400); simT = lastDraw = performance.now(); // (an editor playtest: shorter, so it starts at once)
   updateHackTag();
   if (level === LEVELS[0] && !(bests[level.id] > 0)) { // a brand-new player's first go: say how to play
     const names = keys.climb.filter(Boolean).map(keyName);
