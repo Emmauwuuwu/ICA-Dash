@@ -599,6 +599,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
       <h3>Graphics</h3>
       <label class="setrow"><span><b>Low detail</b><small>For slow computers: lower resolution, no glow, plain background</small></span><input type="checkbox" class="sr" id="gfxLow"><span class="tog"></span></label>
       <label class="setrow"><span><b>Low latency</b><small>Shows each frame sooner, so clicks feel quicker. Turn it off if the game stutters or the screen tears</small></span><input type="checkbox" class="sr" id="gfxLat"><span class="tog"></span></label>
+      <label class="setrow"><span><b>Run-ahead</b><small>Draws your icon where it will be when the frame reaches the screen: about a frame less delay. Turn it off if it looks jumpy when you click</small></span><input type="checkbox" class="sr" id="gfxAhead"><span class="tog"></span></label>
       <h3>Songs</h3>
       <p class="note">Levels can use Newgrounds songs. Newgrounds doesn't let other sites stream them, so, like GD, you download a song from Newgrounds once and load the file here; it's kept in this browser.</p>
       <div class="btnrow"><label class="prop">Newgrounds ID <input class="field" type="number" id="setSongId" min="1" step="1" style="width:130px"></label><button class="ghost" id="setSongLoad">Load song file</button></div>
@@ -1247,7 +1248,7 @@ const NET = { ready: false, write: false, reason: '', db: null, uid: null, owner
 // Graphics settings. Low detail: 0.75x resolution, no glow, flat background, no grid inside walls. Low latency: the canvas
 // is shown straight away instead of waiting for the browser's compositor (a frame less of input delay, but frames can
 // arrive unevenly and stutter, or tear, so it's off unless chosen).
-const gfx = { low: false, lat: false, ...store.get('zd-gfx', {}) };
+const gfx = { low: false, lat: false, ahead: true, ...store.get('zd-gfx', {}) };
 let lowDetail = gfx.low;
 let W, H, S, dpr;
 function resize() {
@@ -1836,10 +1837,10 @@ function tick1(wd, s, hold, dt, fx, fresh) {
   if (s.dual) { const s2 = sy2 !== s.y2; if (s2 && (!s.slid2 || onD)) fx?.trail(2, s.x, sy2); s.y2 = sy2; s.slid2 = s2; }
   if (wd.coins.length) takeCoins(wd, s, r, fx);
 }
-function simulate(wd, s, hold, n, pts) { // returns the new state, null if it crashes (pts collects the route for drawing)
+function simulate(wd, s, hold, n, pts, k = 1) { // returns the new state, null if it crashes (pts collects the route for drawing; k: game speed)
   s = { ...s };
   for (let i = 0; i < n; i++) {
-    const res = tick1(wd, s, hold, STEP);
+    const res = tick1(wd, s, hold, STEP * k);
     if (res === 'win') { s.won = true; return s; }
     if (pts && (i % 4 === 0 || res === 'dead')) pts.push([s.x, s.y]);
     if (res === 'dead') return null;
@@ -2972,6 +2973,18 @@ function drawPreview(t, dt) {
 // so a press counts from the moment it happened, not from the next frame.
 const STEP = 1 / 480;
 let simT = performance.now(), lastDraw = simT, fpsN = 0, fpsT = simT, hudPct = -1, hudAtt = -1;
+// Run-ahead (Settings > Graphics): a finished frame reaches the screen about a frame later, so the icon is drawn where it
+// will be by then: the same physics run on a copy for one more frame with the button as it is now. If you press or let
+// go in that sliver, the next frame shows the corrected spot. The real state is never changed by it, and a copy that
+// would crash is not drawn (the real one is).
+let frameAvg = 16.7;
+function drawFrame(now, dt) {
+  if (!gfx.ahead || mode !== 'play' || p.wait || hacks.auto) return draw(now / 1000, dt);
+  const n = Math.round(frameAvg / (STEP * 1000)), ahead = simulate(world, p, held, n, null, hacks.speed);
+  if (!ahead || ahead.won) return draw(now / 1000, dt);
+  const real = p; p = ahead;
+  try { draw(now / 1000, dt); } finally { real.sa = p.sa; real.rot = p.rot; real.ang = p.ang; p = real; } // the icon's turn eases frame to frame: keep it
+}
 function frame() {
   const now = performance.now();
   if (now - simT > 100) simT = now - 100;
@@ -2983,7 +2996,8 @@ function frame() {
     freshClick = false;
   }
   const dt = Math.min(0.05, (now - lastDraw) / 1000); lastDraw = now;
-  draw(now / 1000, dt);
+  frameAvg += (Math.min(34, Math.max(4, dt * 1000)) - frameAvg) * 0.1; // the usual time between frames, in ms
+  drawFrame(now, dt);
   if (!$('icons').hidden) drawPreview(now / 1000, dt);
   if (hacks.fps) { fpsN++; if (now - fpsT > 500) { $('fps').textContent = Math.round(fpsN * 1000 / (now - fpsT)) + ' FPS'; fpsN = 0; fpsT = now; } }
   next();
@@ -3024,7 +3038,7 @@ function go(id) {
   if (id === 'levels') renderBoard();
   if (id === 'create') renderCustoms();
   if (id === 'icons') { renderIcons(); loadComm(); }
-  if (id === 'settings') { listening = null; renderBinds(); $('hackNote').hidden = !unlocked; renderAccount(); $('gfxLow').checked = gfx.low; $('gfxLat').checked = gfx.lat; }
+  if (id === 'settings') { listening = null; renderBinds(); $('hackNote').hidden = !unlocked; renderAccount(); $('gfxLow').checked = gfx.low; $('gfxLat').checked = gfx.lat; $('gfxAhead').checked = gfx.ahead; }
   if (id === 'online') renderOnline();
   if (id === 'home') renderHome();
   if (id === 'achievements') renderAch();
@@ -4312,6 +4326,7 @@ $('gfxLow').addEventListener('change', e => {
   BG.key = ''; resize(); // new resolution; the tiles repaint on their own (their key includes it)
 });
 $('gfxLat').addEventListener('change', e => { gfx.lat = e.target.checked; store.set('zd-gfx', gfx); syncCanvas(); });
+$('gfxAhead').addEventListener('change', e => { gfx.ahead = e.target.checked; store.set('zd-gfx', gfx); });
 addEventListener('pointerup', e => inputUp('p' + e.pointerId, e));
 addEventListener('pointercancel', e => inputUp('p' + e.pointerId, e));
 addEventListener('blur', () => { downIds.clear(); if (inGame()) setHeld(false); });
