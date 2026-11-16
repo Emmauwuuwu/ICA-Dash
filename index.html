@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="description" content="ICA Dash: a one-button wave game with fifteen levels, a level editor, icons and achievements.">
 <style>:root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.min.js" integrity="sha384-EyR2P0dlmjnEGcm9xcjdAn0VedZpRHEwDLP9oSS6wYMvzHBHkUrvgonveazJ/sSx" crossorigin="anonymous"></script>
+<script>window.supaReady = new Promise(r => window.supaDone = r);</script>
+<!-- async: the online library downloads alongside the page instead of holding it up; netInit() waits for supaReady -->
+<script async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.min.js" integrity="sha384-EyR2P0dlmjnEGcm9xcjdAn0VedZpRHEwDLP9oSS6wYMvzHBHkUrvgonveazJ/sSx" crossorigin="anonymous" onload="supaDone()" onerror="supaDone()"></script>
 </head>
 <body><title>ICA Dash</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -1034,18 +1036,29 @@ function triggerHue(wd, s, base) { // background and wall hue after colour trigg
 // blocks and slopes keep their angle). Collision code reads them from MOVING.
 const NO_MOVING = [];
 let MOVING = NO_MOVING;
+// Runs every physics tick (and in look-ahead), so each group's placed objects are cached and only rebuilt when that group's
+// move or turn changes; a group at rest (most of the time) costs one groupMove() and no new objects.
 function placeMoving(wd, s) {
   if (!wd.moving.length) { MOVING = NO_MOVING; return; }
-  const tf = new Map();
-  MOVING = wd.moving.map(o => {
-    let m = tf.get(o.g); if (!m) tf.set(o.g, m = groupMove(wd, s, o.g));
-    if (!m.dx && !m.dy && !m.ang) return o;
-    let [cx, cy] = centreOf(o);
-    if (m.ang) { const [px, py] = wd.pivots.get(o.g), r = m.ang * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r); [cx, cy] = [px + (cx - px) * c - (cy - py) * sn, py + (cx - px) * sn + (cy - py) * c]; }
-    cx += m.dx; cy += m.dy;
-    const q = ((Math.round(m.ang / 90) % 4) + 4) % 4;
-    return o.t === 's' ? { ...o, x: cx, y: cy } : o.t === 'k' ? { ...o, x: cx - 0.5, y: cy - 0.5, o: (o.o + q) % 4 } : { ...o, x: cx - o.w / 2, y: cy - o.h / 2 };
-  });
+  const mc = wd.mvCache ??= { groups: [...new Set(wd.moving.map(o => o.g))].map(g => ({ g, idx: wd.moving.flatMap((o, i) => o.g === g ? [i] : []), dx: 0, dy: 0, ang: 0 })), list: wd.moving };
+  let list = null;
+  for (const G of mc.groups) {
+    const m = groupMove(wd, s, G.g);
+    if (m.dx === G.dx && m.dy === G.dy && m.ang === G.ang) continue;
+    G.dx = m.dx; G.dy = m.dy; G.ang = m.ang;
+    list ??= mc.list.slice(); // a new array, so a MOVING read earlier keeps what it saw
+    const q = ((Math.round(m.ang / 90) % 4) + 4) % 4, r = m.ang * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r), pv = wd.pivots.get(G.g);
+    for (const i of G.idx) {
+      const o = wd.moving[i];
+      if (!m.dx && !m.dy && !m.ang) { list[i] = o; continue; }
+      let [cx, cy] = centreOf(o);
+      if (m.ang) { const [px, py] = pv; [cx, cy] = [px + (cx - px) * c - (cy - py) * sn, py + (cx - px) * sn + (cy - py) * c]; }
+      cx += m.dx; cy += m.dy;
+      list[i] = o.t === 's' ? { ...o, x: cx, y: cy } : o.t === 'k' ? { ...o, x: cx - 0.5, y: cy - 0.5, o: (o.o + q) % 4 } : { ...o, x: cx - o.w / 2, y: cy - o.h / 2 };
+    }
+  }
+  if (list) mc.list = list;
+  MOVING = mc.list;
 }
 // Is a point (in blocks) strictly inside a solid?
 function inside(o, px, py) {
@@ -1108,16 +1121,19 @@ function letterHit(wd, k, bx, by, br) {
 }
 // hitKind: 0 clear, 1 deadly (a saw, a spike or a plain solid), 2 touching only blocks it may slide on (old-style D blocks, or
 // any block while the wave overlaps a D letter block).
+// (called up to ~30 times a physics tick by settle(), so it allocates nothing: the nine test points are offsets in a loop)
+const HIT_D = [-1, 0, 1];
 function hitKind(wd, x, y, r) {
-  const bx = x / B, by = y / B, br = r / B, pts = [];
+  const bx = x / B, by = y / B, br = r / B, near = nearObjs(wd, bx - br, bx + br);
   let k = 0, dz = null;
-  for (const dx of [-br, 0, br]) for (const dy of [-br, 0, br]) pts.push([bx + dx, by + dy]);
-  const test = o => {
-    if (o.t === 's' || o.t === 'k') return hazardHit(o, bx, by, br) ? 1 : 0;
-    for (const [px, py] of pts) if (inside(o, px, py)) return o.d || (dz ??= letterHit(wd, 'D', bx, by, br)) ? 2 : 1;
-    return 0;
-  };
-  for (const o of nearObjs(wd, bx - br, bx + br)) { const h = test(o); if (h === 1) return 1; if (h) k = 2; }
+  for (let n = 0; n < near.length; n++) {
+    const o = near[n]; let h = 0;
+    if (o.t === 's' || o.t === 'k') h = hazardHit(o, bx, by, br) ? 1 : 0;
+    else if (bx + br > o.x && bx - br < o.x + o.w && by + br > o.y && by - br < o.y + o.h) { // the square reaches its box at all
+      pts: for (const dx of HIT_D) for (const dy of HIT_D) if (inside(o, bx + dx * br, by + dy * br)) { h = o.d || (dz ??= letterHit(wd, 'D', bx, by, br)) ? 2 : 1; break pts; }
+    }
+    if (h === 1) return 1; if (h) k = 2;
+  }
   return k;
 }
 // Solids, saws and spikes that may overlap the block columns x0..x1: the fixed ones from the column index, plus the moving
@@ -1126,7 +1142,10 @@ const NEAR = [];
 function nearObjs(wd, x0, x1) {
   NEAR.length = 0;
   for (let c = Math.floor(x0); c <= Math.floor(x1); c++) for (const o of wd.cols.get(c) || []) NEAR.push(o);
-  for (const o of MOVING) { const [cx, , hw] = centreOf(o), e = hw * (o.sc || 1) + (o.ra ? hw : 0); if (cx + e >= x0 - 1 && cx - e <= x1 + 1) NEAR.push(o); }
+  for (let i = 0; i < MOVING.length; i++) { // (centreOf inlined: this runs for every moving object on every hit test)
+    const o = MOVING[i], hw = o.t === 's' ? SAW_R : o.t === 'k' ? 0.5 : o.w / 2, cx = o.t === 's' ? o.x : o.x + hw, e = hw * (o.sc || 1) + (o.ra ? hw : 0);
+    if (cx + e >= x0 - 1 && cx - e <= x1 + 1) NEAR.push(o);
+  }
   return NEAR;
 }
 const solidHit = (wd, x, y, r) => hitKind(wd, x, y, r) !== 0;
@@ -3870,6 +3889,7 @@ $('authOut').onclick = async () => {
   await NET.sb.auth.signOut(); location.reload();
 };
 async function netInit() {
+  if (!window.claude?.use) await window.supaReady; // the library loads async (loaded or failed, it settles)
   if (window.claude?.use) {
     let db = null, user = null;
     try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) { /* treated as signed out */ }
