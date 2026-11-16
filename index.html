@@ -2552,6 +2552,126 @@ function glowStroke(g, color, glow, w) {
 }
 function visibleObjs(wd, a, b) { const set = new Set(); for (let c = Math.floor(a) - 1; c <= Math.ceil(b) + 1; c++) for (const o of wd.cols.get(c) || []) set.add(o.src || o); return set; } // a turned solid's pieces draw as the solid
 
+// ---------- cached layers ----------
+// Walls, spikes, the editor grid and the selection don't change from one frame to the next, and stroking their glowing
+// outlines was most of a frame's cost (a Chromebook managed ~30 FPS in a busy editor). So they're drawn once into 512 px
+// tiles fixed to the level, and each frame only copies the tiles on screen. A layer's hard key (level, zoom, mode, editor
+// edits, selection) throws its tiles away; its soft key (the hue) repaints them a couple per frame, so a colour change
+// never stalls a frame.
+const TILE = 512;
+let frameNo = 0, tileBudget = 0, worldIds = 0;
+const selIds = new WeakMap(); let selN = 0;
+const selId = s => { let i = selIds.get(s); if (!i) selIds.set(s, i = ++selN); return i; }; // which selection Set (they're replaced, not edited, apart from adds and deletes that change its size)
+const tileLayer = () => ({ key: null, tiles: new Map(), pool: [] });
+const LAYERS = { walls: tileLayer(), spikes: tileLayer(), sel: tileLayer() };
+function paintTile(L, id, tx, ty, kd, soft, paint, t) {
+  const c = t?.c || L.pool.pop() || Object.assign(document.createElement('canvas'), { width: TILE, height: TILE }), g = c.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, TILE, TILE); g.globalAlpha = 1;
+  g.setTransform(kd, 0, 0, kd, -tx * TILE, -ty * TILE);
+  const empty = !paint(g, tx * TILE / kd, (tx + 1) * TILE / kd, ty * TILE / kd, (ty + 1) * TILE / kd); // paint returns whether it drew
+  t = { c, soft, used: frameNo, empty }; L.tiles.set(id, t); return t;
+}
+// Draws a layer's tiles for a view whose level-to-device transform is (kd, tX, tY); tX, tY are whole device pixels.
+function drawTiles(L, key, soft, kd, tX, tY, paint) {
+  if (L.key !== key) { for (const t of L.tiles.values()) L.pool.push(t.c); L.tiles.clear(); L.key = key; }
+  const ax = Math.floor(-tX / TILE), bx = Math.floor((W * dpr - tX) / TILE), ay = Math.floor(-tY / TILE), by = Math.floor((H * dpr - tY) / TILE);
+  let painted = false;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  for (let ty = ay; ty <= by; ty++) for (let tx = ax; tx <= bx; tx++) {
+    const id = tx + ',' + ty; let t = L.tiles.get(id);
+    if (!t || (t.soft !== soft && tileBudget > 0)) { if (t) tileBudget--; t = paintTile(L, id, tx, ty, kd, soft, paint, t); painted = true; }
+    t.used = frameNo;
+    if (!t.empty) ctx.drawImage(t.c, tx * TILE + tX, ty * TILE + tY);
+  }
+  if (!painted) for (let ty = ay; ty <= by; ty++) { const id = (bx + 1) + ',' + ty; if (!L.tiles.has(id)) { paintTile(L, id, bx + 1, ty, kd, soft, paint); break; } } // get ahead: the level scrolls this way
+  if (L.tiles.size > (bx - ax + 3) * (by - ay + 3)) for (const [id, t] of L.tiles) if (frameNo - t.used > 20) { L.pool.push(t.c); L.tiles.delete(id); }
+  while (L.pool.length > 8) L.pool.pop().width = 0; // let the browser free spare tiles
+  ctx.setTransform(kd, 0, 0, kd, tX, tY);
+}
+// The fixed (not moving, not fading) solids or spikes near a box in the level, for painting a tile.
+function tileObjs(wd, x0, x1, y0, y1, spikes, skipFade) {
+  const out = [];
+  for (const o of visibleObjs(wd, x0 / B, x1 / B)) {
+    if (o.t === 's' || (o.t === 'k') !== spikes || (skipFade && o.g && wd.fadeG.has(o.g))) continue;
+    const [, cy, hw, hh] = centreOf(o), e = Math.max(hw, hh) * (o.sc || 1) * 1.5 + 1; // generous: turned shapes and the glow reach past the box
+    if (cy + e >= y0 / B && cy - e <= y1 / B) out.push(o);
+  }
+  return out;
+}
+// Solids, merged so only their outside edge glows, with the block grid inside; also D block edges and (editor) each piece's outline.
+function paintWalls(g, solids, hue, layout, ed, z, x0, x1, y0, y1) {
+  if (!solids.length) return false;
+  const wallCol = layout ? '#3a4066' : `hsl(${hue},60%,8%)`;
+  g.beginPath(); for (const o of solids) addSolid(g, o, B);
+  g.lineJoin = 'round';
+  if (layout) { g.strokeStyle = '#c9cfe8'; g.lineWidth = 4; g.stroke(); g.fillStyle = wallCol; g.fill(); g.lineWidth = 1.5; g.strokeStyle = wallCol; g.stroke(); }
+  else {
+    glowStroke(g, '#fff', `hsl(${hue},100%,65%)`, 6);
+    g.fillStyle = wallCol; g.fill(); g.lineWidth = 1.5; g.strokeStyle = wallCol; g.stroke();
+    g.save(); g.clip(); g.beginPath();
+    for (let x = Math.floor(x0 / B) * B; x < x1 + B; x += B) { g.moveTo(x, y0 - B); g.lineTo(x, y1 + B); }
+    for (let y = Math.floor(y0 / B) * B - B; y < y1 + B; y += B) { g.moveTo(x0 - B, y); g.lineTo(x1 + B, y); }
+    g.strokeStyle = `hsla(${hue},90%,65%,.28)`; g.lineWidth = 2; g.stroke(); g.restore();
+  }
+  const dSolids = solids.filter(o => o.d); // D blocks: a mint edge so players can tell which walls they can slide on
+  if (dSolids.length) { g.beginPath(); for (const o of dSolids) addSolid(g, o, B); if (layout) { g.strokeStyle = D_COL; g.lineWidth = 3; g.stroke(); } else glowStroke(g, D_COL, D_COL, 4); }
+  if (ed) { // in the editor every object shows its own outline so you can see the pieces
+    g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1.5 / z;
+    for (const o of solids) { g.beginPath(); addSolid(g, o, B); g.stroke(); }
+  }
+  return true;
+}
+function paintSpikes(g, spikes, hue, layout) {
+  if (!spikes.length) return false;
+  const wallCol = layout ? '#3a4066' : `hsl(${hue},60%,8%)`;
+  g.beginPath(); for (const k of spikes) spikePath(g, k, B);
+  g.lineJoin = 'round';
+  if (layout) { g.fillStyle = wallCol; g.fill(); g.strokeStyle = '#c9cfe8'; g.lineWidth = 3; g.stroke(); }
+  else { glowStroke(g, '#fff', `hsl(${hue},100%,65%)`, 4); g.fillStyle = wallCol; g.fill(); }
+  return true;
+}
+// The editor's build grid, brighter every 5 blocks, the shade under the ground and the ground line.
+function paintEdGrid(g, z, x0, x1, y0, y1) {
+  g.lineWidth = 1 / z; g.beginPath();
+  for (let x = Math.floor(x0 / B) * B; x < x1 + B; x += B) { g.moveTo(x, y0 - B); g.lineTo(x, y1 + B); }
+  for (let y = Math.floor(y0 / B) * B; y < y1 + B; y += B) { g.moveTo(x0 - B, y); g.lineTo(x1 + B, y); }
+  g.strokeStyle = 'rgba(255,255,255,.07)'; g.stroke();
+  g.beginPath(); for (let x = Math.floor(x0 / B / 5) * 5 * B; x < x1 + B; x += 5 * B) { g.moveTo(x, y0 - B); g.lineTo(x, y1 + B); }
+  g.strokeStyle = 'rgba(255,255,255,.16)'; g.stroke();
+  if (y1 > VH) { g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(x0 - B, VH, x1 - x0 + 2 * B, y1 - VH + B); } // the ground (no ceiling: GD levels have none)
+  g.strokeStyle = 'rgba(255,204,26,.6)'; g.lineWidth = 2 / z; g.beginPath(); g.moveTo(x0 - B, VH); g.lineTo(x1 + B, VH); g.stroke();
+}
+// Selected objects are green, as in GD.
+function paintSel(g, z, x0, x1, y0, y1) {
+  g.strokeStyle = '#4dff5e'; g.lineWidth = 3 / z; g.lineJoin = 'round'; g.beginPath();
+  let any = false;
+  for (const o of sel) {
+    const [cx, cy] = objCenter(o); if (cx < x0 / B - 6 || cx > x1 / B + 6 || cy < y0 / B - 6 || cy > y1 / B + 6) continue; // (6 blocks: wide portals, text)
+    any = true;
+    if (o.t === 's' || o.t === 'd' || o.t === 'q' || o.t === 'c') { const r = (o.t === 's' ? SAW_R : o.t === 'c' ? COIN_R : ORB_R * 1.45) * B + 4; g.moveTo(o.x * B + r, o.y * B); g.arc(o.x * B, o.y * B, r, 0, 7); }
+    else if (o.t === 'h' || o.t === 'x') g.rect(o.x * B - B * 0.45, o.y * B - B * 0.5, B * 0.9, B); else if (o.t === 'k' || o.t === 'j' || o.t === 'L' || o.t === 'P') g.rect(o.x * B, o.y * B, B, B); else if (o.t === 'a') { const [tcx, tcy, hw, hh] = textBox(o); g.rect((tcx - hw) * B, (tcy - hh) * B, hw * 2 * B, hh * 2 * B); } else if (o.t === 'p') g.rect((o.x - PORTAL_W / 2) * B, o.y * B, PORTAL_W * B, o.h * B); else addSolid(g, o, B);
+  }
+  if (any) g.stroke();
+  return any;
+}
+// Background: the hue's gradient and the parallax squares, drawn once per hue into a canvas one square wider than the
+// screen, then copied at the scroll offset.
+const BG = { c: null, key: '' };
+function drawBg(hue) {
+  const sz = 150 * S, hq = Math.round(hue), wd = Math.ceil((W + sz) * dpr) + 2, hd = Math.ceil(H * dpr), key = hq + ',' + wd + ',' + hd + ',' + dpr;
+  if (BG.key !== key) {
+    BG.key = key; const c = BG.c ??= document.createElement('canvas'); c.width = wd; c.height = hd;
+    const g = c.getContext('2d', { alpha: false }); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, `hsl(${hq},65%,27%)`); bg.addColorStop(1, `hsl(${hq},70%,10%)`);
+    g.fillStyle = bg; g.fillRect(0, 0, wd / dpr, H);
+    g.strokeStyle = `hsla(${hq},90%,75%,.09)`; g.lineWidth = 2; g.beginPath();
+    for (let x = 0; x < W + sz; x += sz) for (let y = 0; y < H; y += sz) g.rect(x + 10, y + 10, sz - 20, sz - 20);
+    g.stroke();
+  }
+  const off = -((camX * S * 0.25) % sz + sz) % sz;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(BG.c, Math.round(off * dpr), 0);
+}
+
 function draw(t, dt) {
   const ed = mode === 'edit', z = ed ? edZoom : 1, k = S * z, viewW = W / k, viewH = H / k;
   const inGame = mode === 'play' || mode === 'dead' || mode === 'win' || mode === 'pause';
@@ -2571,33 +2691,16 @@ function draw(t, dt) {
   const target = inGame ? triggerHue(world, p, baseHue) + (speedI - 1) * 35 : baseHue; // colour triggers shift the hue
   hue += (((target - hue) % 360 + 540) % 360 - 180) * Math.min(1, dt * 3);
 
-  // background: hue-shifting gradient + slow parallax squares
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, `hsl(${hue},65%,27%)`); bg.addColorStop(1, `hsl(${hue},70%,10%)`);
+  frameNo++; tileBudget = 2; // tiles a hue change may repaint this frame (the rest catch up over the next frames)
   const layout = hacks.layout && !ed; // layout mode: flat background, plain walls, no effects
-  ctx.fillStyle = layout ? '#141726' : bg; ctx.fillRect(0, 0, W, H);
-  if (!layout) {
-    const sz = 150 * S, off = -((camX * S * 0.25) % sz + sz) % sz;
-    ctx.strokeStyle = `hsla(${hue},90%,75%,.09)`; ctx.lineWidth = 2; ctx.beginPath();
-    for (let x = off - sz; x < W + sz; x += sz) for (let y = 0; y < H; y += sz) ctx.rect(x + 10, y + 10, sz - 20, sz - 20);
-    ctx.stroke();
-  }
+  // background: hue-shifting gradient + slow parallax squares (cached, see drawBg)
+  if (layout) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#141726'; ctx.fillRect(0, 0, W, H); } else drawBg(hue);
 
+  // The view snaps to whole device pixels, so the cached tiles line up exactly with everything drawn live.
   const sx = shake > 0.3 ? (Math.random() - 0.5) * shake : 0, sy = shake > 0.3 ? (Math.random() - 0.5) * shake : 0;
-  ctx.setTransform(dpr * k, 0, 0, dpr * k, (-camX * k + sx) * dpr, (-camY * k + sy) * dpr);
+  const kd = dpr * k, tX = Math.round((-camX * k + sx) * dpr), tY = Math.round((-camY * k + sy) * dpr);
+  ctx.setTransform(kd, 0, 0, kd, tX, tY);
   const x0 = Math.floor(camX / B) * B, x1 = camX + viewW + B, y0 = Math.floor(camY / B) * B, y1 = camY + viewH + B;
-
-  if (ed) { // build grid over the whole view, brighter every 5 blocks; shade outside the playable 10-block band
-    ctx.lineWidth = 1 / z; ctx.beginPath();
-    for (let x = x0; x < x1; x += B) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
-    for (let y = y0; y < y1; y += B) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
-    ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.stroke();
-    ctx.beginPath(); for (let x = Math.floor(camX / B / 5) * 5 * B; x < x1; x += 5 * B) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
-    ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.stroke();
-    if (y1 > VH) { ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(x0, VH, x1 - x0, y1 - VH); } // the ground (no ceiling: GD levels have none)
-    ctx.strokeStyle = 'rgba(255,204,26,.6)'; ctx.lineWidth = 2 / z; ctx.beginPath(); ctx.moveTo(x0, VH); ctx.lineTo(x1, VH); ctx.stroke();
-  }
 
   // solids: bright outline drawn first, then the fill covers its inner half and every seam between neighbouring pieces,
   // so only the outside edge of each wall shows; then the block grid is clipped inside the walls
@@ -2609,23 +2712,14 @@ function draw(t, dt) {
   for (const o of vis) { const a = alphaOf(o); if (a < 0.999) singles.push([o, a]); else (o.t === 's' ? saws : o.t === 'k' ? spikes : solids).push(o); }
   for (const o of moved) singles.push([o, alphaOf(o)]);
   const wallCol = layout ? '#3a4066' : `hsl(${hue},60%,8%)`;
-  ctx.beginPath(); for (const o of solids) addSolid(ctx, o, B);
-  ctx.lineJoin = 'round';
-  if (layout) { ctx.strokeStyle = '#c9cfe8'; ctx.lineWidth = 4; ctx.stroke(); ctx.fillStyle = wallCol; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = wallCol; ctx.stroke(); }
-  else {
-    glowStroke(ctx, '#fff', `hsl(${hue},100%,65%)`, 6);
-    ctx.fillStyle = wallCol; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = wallCol; ctx.stroke();
-    ctx.save(); ctx.clip(); ctx.beginPath();
-    for (let x = x0; x < x1; x += B) { ctx.moveTo(x, y0 - B); ctx.lineTo(x, y1); }
-    for (let y = y0 - B; y < y1; y += B) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
-    ctx.strokeStyle = `hsla(${hue},90%,65%,.28)`; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
-  }
-  const dSolids = solids.filter(o => o.d); // D blocks: a mint edge so players can tell which walls they can slide on
-  if (dSolids.length) { ctx.beginPath(); for (const o of dSolids) addSolid(ctx, o, B); if (layout) { ctx.strokeStyle = D_COL; ctx.lineWidth = 3; ctx.stroke(); } else glowStroke(ctx, D_COL, D_COL, 4); }
-  if (ed) { // in the editor every object shows its own outline so you can see the pieces
-    ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 1.5 / z;
-    for (const o of solids) { ctx.beginPath(); addSolid(ctx, o, B); ctx.stroke(); }
-  }
+  // Fixed walls and spikes come from the tile cache. In play, objects in a fade group can change, so while fully shown
+  // they're drawn live (merged among themselves, the same way).
+  const hq = Math.round(hue), tileKey = [world.id ??= ++worldIds, kd, layout, ed, inGame].join(), isFade = o => inGame && o.g && world.fadeG.has(o.g);
+  drawTiles(LAYERS.walls, tileKey, layout ? 0 : hq, kd, tX, tY, (g, a, b, c, d) => {
+    const grid = ed && (paintEdGrid(g, z, a, b, c, d), true);
+    return paintWalls(g, tileObjs(world, a, b, c, d, false, inGame), hq, layout, ed, z, a, b, c, d) || grid;
+  });
+  if (inGame && world.fadeG.size) paintWalls(ctx, solids.filter(isFade), hue, layout, ed, z, x0, x1, y0 - B, y1);
 
   if (!ed) { // the ground, and the band's ceiling and raised floor (only seen when they're on screen)
     const gx0 = camX - 20, gw = viewW + 40, edge = layout ? '#5a6080' : `hsl(${hue},100%,72%)`, fill = layout ? '#0d0f1c' : `hsl(${hue},60%,9%)`;
@@ -2637,11 +2731,9 @@ function draw(t, dt) {
   if (world.end > camX - 40 && world.end < camX + viewW + 40) {
     for (let y = Math.floor(camY / 30) * 30; y < Math.min(VH, camY + viewH); y += 30) { ctx.fillStyle = (y / 30) % 2 ? '#fff' : `hsl(${hue},80%,20%)`; ctx.fillRect(world.end - 8, y, 16, 30); }
   }
-  if (spikes.length) { // spikes: wall-coloured with the same bright edge as the walls
-    ctx.beginPath(); for (const k of spikes) spikePath(ctx, k, B);
-    if (layout) { ctx.fillStyle = wallCol; ctx.fill(); ctx.strokeStyle = '#c9cfe8'; ctx.lineWidth = 3; ctx.stroke(); }
-    else { glowStroke(ctx, '#fff', `hsl(${hue},100%,65%)`, 4); ctx.fillStyle = wallCol; ctx.fill(); }
-  }
+  // spikes: wall-coloured with the same bright edge as the walls
+  drawTiles(LAYERS.spikes, tileKey, layout ? 0 : hq, kd, tX, tY, (g, a, b, c, d) => paintSpikes(g, tileObjs(world, a, b, c, d, true, inGame), hq, layout));
+  if (inGame && world.fadeG.size) paintSpikes(ctx, spikes.filter(isFade), hue, layout);
   const drawSaw = s => {
     sawPath(ctx, s.x * B, s.y * B, SAW_R * B * (s.sc || 1), t); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = 3; ctx.stroke();
     ctx.fillStyle = wallCol; ctx.beginPath(); ctx.arc(s.x * B, s.y * B, SAW_R * B * 0.25 * (s.sc || 1), 0, 7); ctx.fill();
@@ -2701,13 +2793,7 @@ function draw(t, dt) {
       ctx.fillStyle = '#ff9a1a'; for (const [x, y] of testClicks) ctx.fillRect(x - 5 / z, y - 5 / z, 10 / z, 10 / z);
     }
     if (pdrag?.kind === 'box') { ctx.fillStyle = 'rgba(77,255,94,.12)'; ctx.strokeStyle = '#4dff5e'; ctx.lineWidth = 2 / z; const x0 = Math.min(pdrag.bx, pdrag.ex) * B, y0 = Math.min(pdrag.by, pdrag.ey) * B, w0 = Math.abs(pdrag.ex - pdrag.bx) * B, h0 = Math.abs(pdrag.ey - pdrag.by) * B; ctx.fillRect(x0, y0, w0, h0); ctx.strokeRect(x0, y0, w0, h0); }
-    ctx.strokeStyle = '#4dff5e'; ctx.lineWidth = 3 / z; // selected objects are green, as in GD
-    for (const o of sel) {
-      ctx.beginPath();
-      if (o.t === 's' || o.t === 'd' || o.t === 'q' || o.t === 'c') ctx.arc(o.x * B, o.y * B, (o.t === 's' ? SAW_R : o.t === 'c' ? COIN_R : ORB_R * 1.45) * B + 4, 0, 7);
-      else if (o.t === 'h' || o.t === 'x') ctx.rect(o.x * B - B * 0.45, o.y * B - B * 0.5, B * 0.9, B); else if (o.t === 'k' || o.t === 'j' || o.t === 'L' || o.t === 'P') ctx.rect(o.x * B, o.y * B, B, B); else if (o.t === 'a') { const [cx, cy, hw, hh] = textBox(o); ctx.rect((cx - hw) * B, (cy - hh) * B, hw * 2 * B, hh * 2 * B); } else if (o.t === 'p') ctx.rect((o.x - PORTAL_W / 2) * B, o.y * B, PORTAL_W * B, o.h * B); else addSolid(ctx, o, B);
-      ctx.stroke();
-    }
+    if (sel.size) drawTiles(LAYERS.sel, [tileKey, edObjs.length, selId(sel), sel.size].join(), 0, kd, tX, tY, (g, a, b, c, d) => paintSel(g, z, a, b, c, d)); // selected: green, cached
     if (hoverCell && edTool === 'build' && !pdrag) {
       const item = PALETTE.find(q => q.id === edPal);
       ctx.globalAlpha = 0.45; renderObj(ctx, item.make(snap(hoverCell[0]), snap(hoverCell[1])), B, t); ctx.globalAlpha = 1;
