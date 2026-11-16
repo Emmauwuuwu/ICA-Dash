@@ -880,12 +880,12 @@ function decodeLevel(code) {
       for (let i = objs.length - 1; i >= 0; i--) if (objs[i].t === 'M') objs.splice(i, 1);
       objs.push({ t, k, n: k === 2 ? 1 : nn, off: Math.max(0, Math.min(600, c || 0)), ...(k === 2 ? { url } : {}) });
     }
-    else if (t === 'P' && okPos(a, b)) objs.push({ t, x: a, y: b, sp: Math.min(4, Math.max(0, Math.round(c) || 0)), m: Math.min(2, Math.max(0, Math.round(d) || 0)), f: (Math.round(num(f[5])) || 0) & 15 });
+    else if (t === 'P' && okPos(a, b)) objs.push({ t, x: a, y: b, sp: Math.min(4, Math.max(0, Math.round(c) || 0)), m: Math.min(3, Math.max(0, Math.round(d) || 0)), f: (Math.round(num(f[5])) || 0) & 15 });
     else if (t === 'a' && okPos(a, b)) { let txt = ''; try { txt = cleanText(decodeURIComponent(f[4] || '')); } catch (e) {} if (txt) objs.push({ t, x: a, y: b, s: Math.min(4, Math.max(0.25, c || 1)), txt }); }
     else if (t === 'j' && okPos(a, b) && PAD[f[4]]) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4, c: f[4] });
     else if (t === 'p' && okPos(a, b) && c > 0 && c <= 40 && ['S', 'm', 'v', 'w', 'g', 'T'].includes(f[4])) {
       const v = Math.round(num(f[5])) || 0;
-      objs.push({ t, x: a, y: b, h: c, k: f[4], v: f[4] === 'S' ? Math.min(4, Math.max(0, v)) : (f[4] === 'v' || f[4] === 'g') && v === 2 ? 2 : v ? 1 : 0 });
+      objs.push({ t, x: a, y: b, h: c, k: f[4], v: f[4] === 'S' ? Math.min(4, Math.max(0, v)) : (f[4] === 'v' || f[4] === 'g') && v === 2 ? 2 : f[4] === 'g' && v === 3 ? 3 : v ? 1 : 0 });
     }
     if (objs.length > before && grp(gs)) objs[objs.length - 1].g = grp(gs);
     if (objs.length > before && xs && XF_T.includes(objs[objs.length - 1].t)) { // turned / sized: "@angle,size"
@@ -1168,7 +1168,7 @@ function settle(wd, x, y, r, pushUp, push) {
 function orbAt(wd, s, r) {
   const bx = s.x / B, br = r / B;
   for (let i = 0; i < wd.orbs.length; i++) {
-    const o = wd.orbs[i]; if (o.x > bx + 5) break; if (o.x < bx - 5 || (o.t === 'q' && !s.cube && !s.ship && !RING[o.c].flip) || (!o.m && s.used?.includes(i))) continue; // the wave only takes gravity orbs (blue, green), as in GD
+    const o = wd.orbs[i]; if (o.x > bx + 5) break; if (o.x < bx - 5 || (o.t === 'q' && !hasBody(s) && !RING[o.c].flip) || (!o.m && s.used?.includes(i))) continue; // the wave only takes gravity orbs (blue, green), as in GD
     for (const y of s.dual ? [s.y, s.y2] : [s.y]) if (boxHit(o, o.x - ORB_HIT, o.y - ORB_HIT, o.x + ORB_HIT, o.y + ORB_HIT, bx, y / B, br)) return i;
   }
   return -1;
@@ -1186,6 +1186,7 @@ function launch(s, v) {
 }
 function ringUse(wd, s, i) { // a jump orb: uses up the press
   const o = wd.orbs[i], k = RING[o.c]; orbTaken(wd, s, i);
+  if (s.ball) return ballRing(s, o.c); // the ball has its own orb launches (see ballRing)
   if (k.flip) s.flip = !s.flip;
   launch(s, s.ship ? SHIP_RING[o.c] : k.v);
 }
@@ -1215,6 +1216,7 @@ function padUse(wd, s, i, h) {
     if (s.dual) { s.y2 = mirrorY(s, s.y); s.vy2 = 0; s.gnd2 = false; }
     return;
   }
+  if (s.ball) return ballPad(s, o.c); // the ball has its own pad launches (see ballPad)
   if (k.flip) s.flip = !s.flip;
   launch(s, k.v);
 }
@@ -1474,7 +1476,7 @@ const inputs = []; // [timestamp, held] queued so each press lands on the exact 
 const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
 let checkpoints = [], spawnCache = null, plan = [];
 const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, bt: q.bt, bb: q.bb, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
-  used: q.used, lastPad: q.lastPad, cube: q.cube, ship: q.ship, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2, pt: q.pt, acc: q.acc, acc2: q.acc2, ph: q.ph, ss: q.ss, ss2: q.ss2,
+  used: q.used, lastPad: q.lastPad, cube: q.cube, ship: q.ship, ball: q.ball, bair: q.bair, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2, pt: q.pt, acc: q.acc, acc2: q.acc2, ph: q.ph, ss: q.ss, ss2: q.ss2,
   t: q.t, tf: q.tf, coins: q.coins, ci: q.ci });
 // ---------- cube ----------
 // Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), with GD's player step
@@ -1577,7 +1579,7 @@ function cubeBody(wd, s, k, gs, h, dt, v) {
   const rise = was ? -gs * (s[SV] || 0) : 0; // how fast the surface it was standing on rises (against gravity)
   let ny, vy = s[VY] || 0;
   if (s.dash != null) { ny = y + (k === 1 ? -1 : 1) * s.dash * v * dt; vy = 0; }
-  else { const v0 = vy; vy += gs * cubeG(s) * dt; if (vy * gs > CUBE_TERM) vy = gs * CUBE_TERM; ny = y + (v0 + vy) / 2 * dt; } // averaged: the arc is exact at any step size
+  else { const v0 = vy; vy += gs * bodyG(s) * dt; if (vy * gs > CUBE_TERM) vy = gs * CUBE_TERM; ny = y + (v0 + vy) / 2 * dt; } // averaged: the arc is exact at any step size
   let gnd = false;
   // Moving with gravity (or riding): land on what its feet reached and keep riding flat ground, downhill slopes and the slope
   // it's being carried up. Moving against gravity: a slope can only push it up so it doesn't sink in; it keeps its own speed
@@ -1627,6 +1629,50 @@ function survives(wd, x, y, h) {
 // holding pushes up by 0.9582 x 0.5 while "falling" and x 0.4 once rising; letting go pulls down by 0.9582 x 0.4 x 0.8
 // while falling and x 1.2 while still rising. Speed is capped at 8 up and 6.4 down. Mini divides all of it by 0.85.
 // Like the cube it uses GD's 0.9 step scale. It slides along floors and ceilings (and slopes); hitting a side kills it.
+// ---------- ball ----------
+// GD's ball, from its player code: PlayerObject::updateJump (decompiled in camila314/gdp) and ringJump, propellPlayer and
+// flipGravity (OSGD reconstructions, as ported in alpbayrak031-hash/GD-Remake). Per 1/60 s frame in GD units:
+// - gravity 0.958199 x 0.6 at every game speed (not the cube's per-speed value); falls cap at 15, like the cube;
+// - a click on the ground (or one still held from the air as it lands) starts the speed's normal jump (pushing off a rising
+//   slope adds 0.25 of the slope's speed, up to 1.4x), then flipGravity halves it and the ball keeps 0.6 of that: 0.3 x the
+//   jump, toward the new ground. The flip uses up the click: holding doesn't flip again;
+// - orbs: the speed's jump x the orb's factor x 0.7 (pink 0.77, red 1.34; blue 0.8, then halved by its flip; green flips
+//   first); black: 15 toward the ground; pads: 16 x the pad's bump x 0.6 (blue 0.8, then halved by its flip); mini x 0.8;
+// - its band is 8 blocks (9 in dual); it rolls at 600 deg/s, and spins back at 425 deg/s after a flip or an orb until it
+//   lands (both x 1/0.8 mini, and scaled per speed).
+// Launches get GD's step offset: its launch step moves without gravity, and after that it adds speed before moving (240
+// steps a second), which follows the exact curve of a launch g x step / 2 slower along its gravity. Checked against GD's own
+// steps: within 0.1 GD unit across a whole flip.
+const BALL_G = 0.958199 * 0.6 * GD * 60 * 0.9, BALL_LOSS = BALL_G / 240 / 2;
+const BALL_RING = { y: 1, p: 0.77, r: 1.34, g: 1, b: 0.8 }, BALL_PAD = { y: 1, p: 0.7, r: 1.25, b: 0.8 };
+const BALL_SPIN_T = [311.5801 / 251.16, 1, 311.5801 / 387.4201, 311.5801 / 468.0002, 311.5801 / 576.0002]; // runBallRotation's speed scaling
+const hasBody = s => s.cube || s.ship || s.ball; // a box that falls or flies (not the wave)
+const bodyG = s => s.ball ? BALL_G : cubeG(s);
+// Sets the ball's speed: gdv GD units a frame away from its ground as it is now (negative: toward it); flip: then its
+// gravity flips, which halves the speed (flipGravity). The dual twin gets the mirror. Not standing any more.
+function ballSet(s, gdv, flip) {
+  let vy = -(s.flip ? -1 : 1) * gdv * GD;
+  if (flip) { s.flip = !s.flip; vy *= 0.5; }
+  vy -= (s.flip ? -1 : 1) * BALL_LOSS; // GD's launch step moves without gravity, then adds speed before moving: as if g x step / 2 slower along it
+  s.vy = vy; s.vy2 = -vy; s.gnd = s.gnd2 = false; s.sv = s.sv2 = s.lv = s.lv2 = 0; s.dash = null; s.bair = true;
+}
+// A click on the ground: GD's jump for this speed and size (plus a rising slope's push), x 0.6 after the flip halves it.
+function ballFlip(s) {
+  const gs = s.flip ? -1 : 1, jv = GD_JUMP[s.speedI] * (s.mini ? 0.8 : 1);
+  const push = sv => { const rise = -gs * (sv || 0) / GD; return rise > 0 ? Math.min(jv + rise * 0.25, jv * 1.4) : jv; };
+  const v1 = push(s.gnd ? s.sv : 0) * 0.6, v2 = push(s.gnd2 ? s.sv2 : 0) * 0.6, vy0 = s.vy || 0, vy20 = s.vy2 || 0, g1 = s.gnd, g2 = s.dual && s.gnd2;
+  ballSet(s, v1, true);
+  // dual: both icons share the flip; one that wasn't on the ground keeps its own speed, halved by the flip
+  if (!g1) s.vy = vy0 * 0.5;
+  if (s.dual) s.vy2 = g2 ? gs * (v2 * GD * 0.5 - BALL_LOSS) : vy20 * 0.5; // the twin's gravity is the other way: its mirror
+  s.spent = true;
+}
+function ballRing(s, c) {
+  if (c === 'k') return ballSet(s, -15, false); // black: straight down toward its ground
+  if (c === 'g') s.flip = !s.flip; // green flips first, then launches away from its new ground
+  ballSet(s, GD_JUMP[s.speedI] * BALL_RING[c] * (s.mini ? 0.8 : 1) * 0.7, c === 'b');
+}
+function ballPad(s, c) { ballSet(s, 16 * BALL_PAD[c] * (s.mini ? 0.8 : 1) * 0.6, c === 'b'); if (c !== 'b') s.bair = false; } // pads roll it on (runRotateAction), blue spins it back
 const SHIP_G = 0.9582 * GD * 60 * 0.9;
 const SHIP_SLOPE_EXIT = 0.685; // fits the recorded GD path to 1.6 px (riding up, sliding down a ceiling slope, and both exits)
 function shipBody(wd, s, k, gs, h, dt, v, hold) {
@@ -1705,7 +1751,7 @@ function shipBody(wd, s, k, gs, h, dt, v, hold) {
 // shortcut: GD's exact rounding of the band to the portal isn't documented; it's centred on the portal, rounded to whole blocks.
 function setBand(s, cy) {
   if (s.cube && !s.dual) { s.bt = null; s.bb = VH; return; }
-  const h = (s.cube ? 9 : 10) * B, bb = Math.min(VH, Math.round((cy + h / 2) / B) * B);
+  const h = (s.dual && (s.cube || s.ball) ? 9 : s.ball ? 8 : 10) * B, bb = Math.min(VH, Math.round((cy + h / 2) / B) * B);
   s.bt = bb - h; s.bb = bb;
 }
 const bandTop = s => s.bt === undefined ? 0 : s.bt, bandBot = s => s.bb === undefined ? VH : s.bb;
@@ -1715,26 +1761,28 @@ function portalState(s, o) {
   if (o.k === 'S') s.speedI = o.v;
   else if (o.k === 'm') { // a cube keeps its feet where they were
     const h0 = cubeHalf(s); s.mini = !!o.v;
-    if (s.cube || s.ship) { const d = (h0 - cubeHalf(s)) * (s.flip ? -1 : 1); s.y += d; s.y2 -= d; }
+    if (hasBody(s)) { const d = (h0 - cubeHalf(s)) * (s.flip ? -1 : 1); s.y += d; s.y2 -= d; }
   }
   else if (o.k === 'v') s.flip = o.v === 2 ? !s.flip : !!o.v; // 2: the swap portal flips whichever way gravity is
   else if (o.k === 'T') { // teleport entrance: up or down to the nearest exit's height (keeping where you are within the gate)
     const d = teleportShift(s.wd, o); if (!d) return;
-    s.y += d; s.y2 -= d; if (s.cube || s.ship) { s.gnd = s.gnd2 = false; s.sv = s.sv2 = s.lv = s.lv2 = 0; }
+    s.y += d; s.y2 -= d; if (hasBody(s)) { s.gnd = s.gnd2 = false; s.sv = s.sv2 = s.lv = s.lv2 = 0; }
   }
   else if (o.k === 'w') {
     const was = s.dual; s.dual = !!o.v;
-    if (s.cube && s.dual !== was) setBand(s, (o.y + o.h / 2) * B); // a dual cube gets a 9-block band; leaving dual removes it
+    if ((s.cube || s.ball) && s.dual !== was) setBand(s, (o.y + o.h / 2) * B); // a dual cube gets a 9-block band; leaving dual removes it
     if (o.v && !was) { s.y2 = mirrorY(s, s.y); s.vy2 = -(s.vy || 0); s.gnd2 = false; }
   }
-  else if (o.k === 'g') { // gamemode: v 0 wave, 1 cube, 2 ship
-    if (o.v && !s.cube && !s.ship) { // from the wave: keeps half of the wave's vertical speed
+  else if (o.k === 'g') { // gamemode: v 0 wave, 1 cube, 2 ship, 3 ball
+    if (o.v && !hasBody(s)) { // from the wave: keeps half of the wave's vertical speed
       const v = SPEEDS[s.speedI] * B, dy = s.dash != null ? -s.dash * v : s.dir * v * (s.mini ? 2 : 1);
       s.vy = dy / 2; s.vy2 = -dy / 2; s.gnd = s.gnd2 = false;
-    } else if (o.v === 2 && s.cube) { s.vy = (s.vy || 0) / 2; s.vy2 = (s.vy2 || 0) / 2; s.gnd = s.gnd2 = false; } // cube -> ship: half its speed
-    const same = (o.v === 1) === !!s.cube && (o.v === 2) === !!s.ship;
-    s.cube = o.v === 1; s.ship = o.v === 2;
-    if (!same || !s.cube) setBand(s, (o.y + o.h / 2) * B); // a ship or wave portal (even of the same form) lines the band up on itself
+    } else if (o.v === 2 && (s.cube || s.ball)) { s.vy = (s.vy || 0) / 2; s.vy2 = (s.vy2 || 0) / 2; s.gnd = s.gnd2 = false; } // into a ship: half its speed
+    else if (o.v === 3 && s.ship) { s.vy = (s.vy || 0) / 2; s.vy2 = (s.vy2 || 0) / 2; s.gnd = s.gnd2 = false; } // ship -> ball: half (GD halves leaving a ship)
+    const same = (o.v === 1) === !!s.cube && (o.v === 2) === !!s.ship && (o.v === 3) === !!s.ball;
+    if (o.v === 3 && !s.ball) s.bair = !s.gnd; // a ball that isn't standing starts in its air spin
+    s.cube = o.v === 1; s.ship = o.v === 2; s.ball = o.v === 3;
+    if (!same || !s.cube) setBand(s, (o.y + o.h / 2) * B); // a ship, ball or wave portal (even of the same form) lines the band up on itself
   }
 }
 // How far (game units, down positive) a teleport entrance moves you: to the exit nearest it along the level. 0 if none.
@@ -1764,14 +1812,14 @@ function tick1(wd, s, hold, dt, fx, fresh) {
   s.t = (s.t || 0) + dt; s.wd = wd; // game time (for triggers); the world, for teleports
   if (fresh) s.spent = false; // a new button went down (even with another still held): it can take the next orb
   if (!hold) { // letting go ends a dash (a cube keeps the dash's speed) and frees the next press for an orb
-    if (s.dash != null) { if (s.cube || s.ship) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner(); }
+    if (s.dash != null) { if (hasBody(s)) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner(); }
     s.spent = false;
   }
   const press = fresh || (hold && !s.ph); s.ph = hold; // a new press (look-ahead has no fresh flag: a release then a hold is one)
   if (s.dash != null && wd.letters.length) { // S letter block: the dash ends there, as if you'd let go
-    const r = (s.cube || s.ship ? cubeHalf(s) : s.mini ? RM : R) / B;
+    const r = (hasBody(s) ? cubeHalf(s) : s.mini ? RM : R) / B;
     if (letterHit(wd, 'S', s.x / B, s.y / B, r) || (s.dual && letterHit(wd, 'S', s.x / B, s.y2 / B, r))) {
-      if (s.cube || s.ship) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner();
+      if (hasBody(s)) { s.vy = -s.dash * v; s.vy2 = s.dash * v; } s.dash = null; fx?.corner();
     }
   }
   const portals = () => { // like GD: a portal works when your hitbox touches its hitbox (PORTAL_W wide, its full height, turned and sized with it)
@@ -1787,11 +1835,11 @@ function tick1(wd, s, hold, dt, fx, fresh) {
     }
     fireTriggers(wd, s); placeMoving(wd, s); // moving groups are placed before this tick's collisions
   };
-  if (s.cube || s.ship) {
+  if (hasBody(s)) {
     const gs = s.flip ? -1 : 1, h = cubeHalf(s);
     // an orb takes the press before a jump. The cube may hold into an orb (a buffered click); the ship has to click while
     // touching it, as in GD, since holding is how it flies
-    if (hold && !s.spent && (s.cube || press)) {
+    if (hold && !s.spent && (s.cube || s.ball || press)) {
       const oi = orbAt(wd, s, h);
       if (oi >= 0) { if (wd.orbs[oi].t === 'd') { dashStart(wd, s, oi); s.gnd = s.gnd2 = false; } else ringUse(wd, s, oi); fx?.orb(); }
     }
@@ -1804,14 +1852,17 @@ function tick1(wd, s, hold, dt, fx, fresh) {
       if (s.gnd && jOK(s.y)) { s.vy = -gs * jumpOff(-gs * (s.sv || 0)); s.gnd = false; s.spent = true; s.lv = 0; }
       if (s.dual && s.gnd2 && jOK(s.y2)) { s.vy2 = gs * jumpOff(gs * (s.sv2 || 0)); s.gnd2 = false; s.spent = true; s.lv2 = 0; }
     }
+    // the ball: a click on the ground (or one held from the air as it lands) flips its gravity; it uses the click up
+    if (s.ball && hold && !s.spent && s.dash == null && (s.gnd || (s.dual && s.gnd2))) { ballFlip(s); fx?.corner(); }
     s.x += v * dt;
     if (s.x >= wd.end) return 'win';
     portals();
-    if (!s.cube && !s.ship) return; // switched to wave: it takes over next tick
+    if (!hasBody(s)) return; // switched to wave: it takes over next tick
     const h2 = cubeHalf(s), g2 = s.flip ? -1 : 1;
     const ok = s.ship ? shipBody(wd, s, 1, g2, h2, dt, v, hold) && (!s.dual || shipBody(wd, s, 2, -g2, h2, dt, v, hold))
       : cubeBody(wd, s, 1, g2, h2, dt, v) && (!s.dual || cubeBody(wd, s, 2, -g2, h2, dt, v));
     if (!ok) return 'dead';
+    if (s.ball && (s.gnd || s.gnd2)) s.bair = false; // landed: back to rolling
     const pi = padAt(wd, s, h2); if (pi >= 0) { padUse(wd, s, pi, h2); fx?.orb(); } // pads fire on touch, no press needed
     if (wd.coins.length) takeCoins(wd, s, h2, fx);
     return;
@@ -1824,7 +1875,7 @@ function tick1(wd, s, hold, dt, fx, fresh) {
   if (s.x >= wd.end) return 'win';
   // Portals apply after the move and before collisions, so a wave never spends a step in a corridor that just closed.
   portals();
-  if (s.cube || s.ship) return; // switched to cube or ship: it takes over next tick
+  if (hasBody(s)) return; // switched to cube, ship or ball: it takes over next tick
   // The band's ceiling and floor: the wave slides along them, and along D blocks.
   const bt = bandTop(s) ?? 0, bb = bandBot(s), cy = Math.min(bb - r, Math.max(bt + r, s.y)), cy2 = Math.min(bb - r, Math.max(bt + r, s.y2));
   if (press && !s.spent) { // the wave has to click while touching an orb (no holding into it), as in GD
@@ -1861,7 +1912,7 @@ function findPath(wd, s0, decisions, budget, firstHold = held, untilX = Infinity
       const nn = { s: t, hold, depth: node.depth + 1, up: node };
       if (t.won || nn.depth >= decisions || t.x >= untilX) { const out = []; for (let q = nn; q.up; q = q.up) out.push(q.hold); return out.reverse(); }
       const key = (t.x / 3 | 0) + ',' + Math.round(t.y / 3) + ',' + (t.mini ? 1 : 0) + (t.flip ? 1 : 0) + (t.dash != null ? 1 : 0)
-        + (t.cube || t.ship ? ',' + Math.round(t.vy / 150) + (t.gnd ? 'g' : '') + (t.ship ? 's' : '') : '');
+        + (hasBody(t) ? ',' + Math.round(t.vy / 150) + (t.gnd ? 'g' : '') + (t.ship ? 's' : t.ball ? 'b' : '') : '');
       if (seen.has(key)) continue; seen.add(key); stack.push(nn);
     }
   }
@@ -1876,7 +1927,7 @@ function survival(s, hold, cap = 192) {
 function gapMiddles(x) {
   const base = { x, y: VH / 2, y2: VH / 2, bt: 0, bb: VH, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0 };
   while (base.pi < world.portals.length && world.portals[base.pi].x * B <= x) portalState(base, world.portals[base.pi++]);
-  if (base.cube) return []; // a cube spawn comes from the real route instead (a cube in mid-gap would just fall)
+  if (base.cube || base.ball) return []; // a cube spawn comes from the real route instead (a cube in mid-gap would just fall)
   const r = base.mini ? RM : R, out = [];
   let start = null;
   for (let y = r + 1; y <= VH - r - 1 + 3; y += 3) {
@@ -1909,16 +1960,16 @@ function spawnState(x) {
 // Effects for the real game: tick1 calls these on p (portal ones before the state changes). The wave draws a trail of its
 // corners; a cube draws none, so the trail breaks (null) while it's a cube.
 const FX = {
-  corner() { if (p.cube || p.ship) return; trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang; p.turnT = 0; },
+  corner() { if (hasBody(p)) return; trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang; p.turnT = 0; },
   trail(k, x, y) { (k === 1 ? trail : trail2).push([x, y]); },
   orb() { if (!calm) flash = 0.2; },
   coin() { SFX.coin(); if (!calm) flash = 0.15; for (let i = 0; i < 14; i++) { const a = Math.random() * 6.283, v = 60 + Math.random() * 160; parts.push({ x: p.x, y: p.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5, col: '#ffd84a' }); } },
   portal(o) {
-    if (o.k === 'T' && !o.v && !p.cube) { const d = teleportShift(world, o); if (d) { trail.push([p.x, p.y], null, [p.x, p.y + d]); if (p.dual) trail2.push([p.x, p.y2], null, [p.x, p.y2 - d]); } }
+    if (o.k === 'T' && !o.v && !p.cube && !p.ball) { const d = teleportShift(world, o); if (d) { trail.push([p.x, p.y], null, [p.x, p.y + d]); if (p.dual) trail2.push([p.x, p.y2], null, [p.x, p.y2 - d]); } }
     if (o.k === 'S') { if (p.speedI !== o.v && !calm) flash = 0.45; }
-    else if (o.k === 'm') { if (!!o.v !== p.mini && !p.cube) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } }
-    else if (o.k === 'w') { if (o.v && !p.dual) trail2 = p.cube ? [] : [[p.x, mirrorY(p, p.y)]]; } // second icon appears mirrored
-    else if (o.k === 'g' && o.v !== (p.cube ? 1 : p.ship ? 2 : 0)) { // only the wave leaves a trail
+    else if (o.k === 'm') { if (!!o.v !== p.mini && !p.cube && !p.ball) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } }
+    else if (o.k === 'w') { if (o.v && !p.dual) trail2 = p.cube || p.ball ? [] : [[p.x, mirrorY(p, p.y)]]; } // second icon appears mirrored
+    else if (o.k === 'g' && o.v !== (p.cube ? 1 : p.ship ? 2 : p.ball ? 3 : 0)) { // only the wave leaves a trail
       if (o.v) { trail.push([p.x, p.y], null); if (p.dual) trail2.push([p.x, p.y2], null); p.rot = 0; p.sa = 0; } // into cube or ship: the trail stops here
       else { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang = 0; p.turnT = 0; p.sa = 0; } // a trail starts (or carries on)
       if (!calm) flash = 0.3;
@@ -1927,7 +1978,7 @@ const FX = {
 };
 function reset() {
   p = { x: 0, y: VH / 2, bt: 0, bb: VH, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
-    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 };
+    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, ball: false, bair: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 };
   trail = []; trail2 = []; parts = []; booms = []; camSnap = true;
   const cp =practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = cur.id === 'test' && testFrom !== null ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
@@ -1943,14 +1994,14 @@ function reset() {
   p.wait = !hacks.auto && !cp && sx > 0 && !st; // (a start position or practice checkpoint goes straight away, as in GD)
   if (p.wait) p.dir = p.flip ? 1 : -1; // facing the way a press will send it
   p.ang = p.from = p.dir * (p.mini ? Math.atan(2) : Math.PI / 4); p.cpT = 0; p.sub = 0; speedI = p.speedI;
-  trail = p.cube || p.ship ? [] : [[p.x, p.y]]; trail2 = p.dual && !p.cube && !p.ship ? [[p.x, p.y2]] : [];
+  trail = hasBody(p) ? [] : [[p.x, p.y]]; trail2 = p.dual && !hasBody(p) ? [[p.x, p.y2]] : [];
   plan = hacks.auto ? findPath(world, stateOf(p), Infinity, 300000, false) || [] : []; // autoplay: route to the end, worked out now
   songStop(); if (!p.wait) setTimeout(attemptMusic, 0); // each attempt starts the song again, from where it starts (a checkpoint: that spot)
 }
 // The state a start position sets: its place, speed, gamemode, size, gravity and dual; portals behind it are skipped.
 function startPosState(o) {
   const x = (o.x + 0.5) * B, y = (o.y + 0.5) * B, f = o.f || 0;
-  const s = { x, y, dir: 1, speedI: o.sp, mini: !!(f & 1), flip: !!(f & 2), dual: !!(f & 4), cube: o.m === 1, ship: o.m === 2,
+  const s = { x, y, dir: 1, speedI: o.sp, mini: !!(f & 1), flip: !!(f & 2), dual: !!(f & 4), cube: o.m === 1, ship: o.m === 2, ball: o.m === 3,
     pi: world.portals.filter(q => q.x * B <= x).length, vy: 0, vy2: 0, gnd: false, gnd2: false, dash: null };
   setBand(s, y); s.y2 = mirrorY(s, y); return s; // its band lines up on it, like a portal's
 }
@@ -2003,7 +2054,7 @@ function die() {
   trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]);
   // GD-style death: a bright flash and a shockwave ring where the icon was, and the icon blowing apart into spinning shards
   // in its colours that fly out fast and slow down (drag per second, so it looks the same at any frame rate)
-  const r = p.cube || p.ship ? cubeHalf(p) : 20, cols = [COLORS[icon.c1], COLORS[icon.c2], '#ffffff'];
+  const r = hasBody(p) ? cubeHalf(p) : 20, cols = [COLORS[icon.c1], COLORS[icon.c2], '#ffffff'];
   for (const y of p.dual ? [p.y, p.y2] : [p.y]) {
     booms.push({ x: p.x, y, r, t: 0 });
     for (let i = 0; i < 30; i++) {
@@ -2383,11 +2434,27 @@ function drawCube(g, x, y, a, s, ic) {
   g.fillStyle = COLORS[ic.c1]; g.fillRect(-h * 0.18, -h * 0.18, h * 0.36, h * 0.36);
   g.restore();
 }
+// The ball, in the icon's colours: a dark-outlined disc of colour 1, an inner disc of colour 2 crossed by four spokes so you
+// can see it roll, and a hub. Its size is the cube's box (one block; mini 0.6), which is also its hitbox.
+function drawBall(g, x, y, a, s, ic) {
+  const r = CUBE_H * s, ink = '#0c0e1c', c1 = COLORS[ic.c1], c2 = COLORS[ic.c2] === ink || ic.c2 === 11 ? '#ffffff' : COLORS[ic.c2];
+  g.save(); g.translate(x, y); g.rotate(a);
+  g.fillStyle = ink; g.beginPath(); g.arc(0, 0, r, 0, 7); g.fill();
+  g.fillStyle = c1; g.beginPath(); g.arc(0, 0, r - 3 * s, 0, 7); g.fill();
+  g.fillStyle = ink; g.beginPath(); g.arc(0, 0, r * 0.62, 0, 7); g.fill();
+  g.fillStyle = c2; g.beginPath(); g.arc(0, 0, r * 0.62 - 3 * s, 0, 7); g.fill();
+  g.strokeStyle = ink; g.lineWidth = 3.5 * s; g.lineCap = 'butt'; g.beginPath();
+  for (let i = 0; i < 4; i++) { const c = Math.cos(i * Math.PI / 2), n = Math.sin(i * Math.PI / 2); g.moveTo(c * r * 0.2, n * r * 0.2); g.lineTo(c * (r - 3 * s), n * (r - 3 * s)); }
+  g.stroke();
+  g.fillStyle = c1; g.beginPath(); g.arc(0, 0, r * 0.22, 0, 7); g.fill();
+  g.strokeStyle = ink; g.lineWidth = 2.5 * s; g.stroke();
+  g.restore();
+}
 // Portals, drawn after GD's look (not its art): a tall oval ring seen side-on in the portal's colour, with a dark rim and a glow;
 // speed portals are rows of chevrons (one pointing back for 0.5x, then 1 to 4 forward). Colours follow GD's: cube green, ship
 // pink, wave cyan; gravity blue (normal) / yellow (flipped) / green (swap); mini pink / big green; dual orange / single blue;
 // teleport blue in / orange out; speed orange, blue, green, pink, red. The label shows only in the editor.
-const PORTAL_COL = { g: ['#3fd8ff', '#4dff4a', '#ff5ce6'], v: ['#3f8cff', '#ffe23a', '#4dff9a'], m: ['#4dff4a', '#ff5ce6'], w: ['#3f8cff', '#ff9f2e'], T: ['#3f8cff', '#ff9f2e'],
+const PORTAL_COL = { g: ['#3fd8ff', '#4dff4a', '#ff5ce6', '#ff5a3a'], v: ['#3f8cff', '#ffe23a', '#4dff9a'], m: ['#4dff4a', '#ff5ce6'], w: ['#3f8cff', '#ff9f2e'], T: ['#3f8cff', '#ff9f2e'],
   S: ['#ff9f2e', '#3fb6ff', '#4dff4a', '#ff5ce6', '#ff3b3b'] };
 function drawPortal(g, o, u, label = true) { return withXf(g, o, u, () => drawPortal0(g, o, u, label)); }
 const mixHex = (h, w, k) => '#' + [1, 3, 5].map(i => Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - k) + w * k).toString(16).padStart(2, '0')).join(''); // toward w (0 black, 255 white) by k
@@ -2452,7 +2519,7 @@ function drawPortal0(g, o, u, label) {
     g.fillStyle = col; g.beginPath(); g.ellipse(cx, top + u * 0.02, rx * 0.4, u * 0.07, 0, 0, 7); g.ellipse(cx, top + hh - u * 0.02, rx * 0.4, u * 0.07, 0, 0, 7); g.fill();
   }
   if (label) {
-    const text = o.k === 'S' ? SPD_LABELS[o.v] : o.k === 'v' && o.v === 2 ? 'SWAP' : o.k === 'g' ? ['WAVE', 'CUBE', 'SHIP'][o.v] : PORTALS[o.k][o.v ? 1 : 2];
+    const text = o.k === 'S' ? SPD_LABELS[o.v] : o.k === 'v' && o.v === 2 ? 'SWAP' : o.k === 'g' ? ['WAVE', 'CUBE', 'SHIP', 'BALL'][o.v] : PORTALS[o.k][o.v ? 1 : 2];
     g.fillStyle = col; g.font = `700 ${Math.round(u * 0.22)}px "Space Mono", monospace`; g.textAlign = 'center'; g.fillText(text, cx, top - u * 0.3);
   }
   g.restore();
@@ -2859,7 +2926,7 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
       if (!tr.length || pulse <= 0) continue; // trail size 0x: no trail (canvas ignores a 0 line width)
       ctx.beginPath(); let gap = true;
       for (const q of tr) { if (!q) { gap = true; continue; } if (gap) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); gap = false; }
-      if (alive && on && !p.cube && !p.ship && !gap) ctx.lineTo(p.x, py);
+      if (alive && on && !hasBody(p) && !gap) ctx.lineTo(p.x, py);
       ctx.lineJoin = 'miter'; ctx.miterLimit = 2; ctx.lineCap = 'butt';
       ctx.strokeStyle = mixc(0.55, 0); ctx.lineWidth = 12 * pulse; ctx.stroke(); // band
       ctx.strokeStyle = mixc(0.35, 0.65); ctx.lineWidth = 4 * pulse; ctx.stroke(); // core
@@ -2881,6 +2948,14 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
       const s = p.mini ? CUBE_MINI : 1;
       drawCube(ctx, p.x, p.y, p.rot, s, icon);
       if (p.dual) drawCube(ctx, p.x, p.y2, -p.rot, s, icon);
+    } else if (seen && p.ball) { // GD's ball (runBallRotation): rolls at 600 deg/s, or spins back at 425 deg/s after a flip or an
+      // orb until it lands; mini x 1/0.8, scaled per speed; the way it turns follows gravity. GD time runs at 0.9x.
+      const gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0;
+      const rate = (p.bair ? -425 : 600) * (p.flip ? -1 : 1) * 0.9 / ((p.mini ? 0.8 : 1) * BALL_SPIN_T[p.speedI]);
+      p.rot += rate * Math.PI / 180 * gdt;
+      const s = p.mini ? CUBE_MINI : 1;
+      drawBall(ctx, p.x, p.y, p.rot, s, icon);
+      if (p.dual) drawBall(ctx, p.x, p.y2, -p.rot, s, icon);
     } else if (seen) {
       // GD's wave tilt (updateShipRotation): eases toward the way it's moving, 0.25 of the way per GD frame (mini 0.4), run each
       // 240 Hz step (0.225 GD frames), so it swings over in ~0.1 s. Sliding on a floor or ceiling it eases to flat at 1/4 the
@@ -2927,7 +3002,7 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
     if (!ed) { ctx.globalAlpha = 0.6; for (const o of world.letters) drawLetter(ctx, o, B); ctx.globalAlpha = 1; } // letter blocks (the editor draws them anyway)
     ctx.strokeStyle = '#ff3355'; for (const k of spikes) { const [l, tp, r, b] = spikeBox(k); withXf(ctx, k, B, () => ctx.strokeRect(l * B, tp * B, (r - l) * B, (b - tp) * B)); }
     if (inGame) { // also on death, so you can see what you hit
-      const box = p.cube || p.ship, r = box ? cubeHalf(p) : p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
+      const box = hasBody(p), r = box ? cubeHalf(p) : p.mini ? RM : R; ctx.strokeStyle = '#33ff88';
       for (const y of p.dual ? [p.y, p.y2] : [p.y]) {
         ctx.strokeRect(p.x - r, y - r, r * 2, r * 2);
         if (box) { const ri = r * CUBE_INNER; ctx.strokeStyle = '#3f8cff'; ctx.strokeRect(p.x - ri, y - ri, ri * 2, ri * 2); ctx.strokeStyle = '#33ff88'; } // inner box (solids)
@@ -3131,6 +3206,7 @@ const PALETTE = [
   { id: 'g1', label: 'Cube', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 1 }) },
   { id: 'g0', label: 'Wave', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 0 }) },
   { id: 'g2', label: 'Ship', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 2 }) },
+  { id: 'g3', label: 'Ball', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 3 }) },
   { id: 'start', label: 'Start pos', make: (x, y) => ({ t: 'P', x, y, sp: 1, m: 0, f: 0 }) },
   { id: 'text', label: 'Text', make: (x, y) => ({ t: 'a', x: x + 0.5, y: y + 0.5, s: 1, txt: 'Text' }) },
   ...Object.entries(LETTERS).map(([k, L]) => ({ id: 'L' + k, label: L.name, make: (x, y) => ({ t: 'L', x, y, k }) })),
@@ -3150,7 +3226,7 @@ const HELP = {
 };
 // Build tabs, like GD's object tabs (anything not listed lands in the last one).
 const ED_CATS = [['Blocks', ['block', 'half', 'slope', 'steep', 'spike', 'spikeS', 'saw']],
-  ['Gameplay', ['start', 'g1', 'g0', 'g2', 'spd0', 'spd1', 'spd2', 'spd3', 'spd4', 'v1', 'v0', 'v2', 'm1', 'm0', 'w1', 'w0', 'T0', 'T1',
+  ['Gameplay', ['start', 'g1', 'g0', 'g2', 'g3', 'spd0', 'spd1', 'spd2', 'spd3', 'spd4', 'v1', 'v0', 'v2', 'm1', 'm0', 'w1', 'w0', 'T0', 'T1',
     'pady', 'padp', 'padr', 'padb', 'pads', 'ringy', 'ringp', 'ringr', 'ringb', 'ringg', 'ringk', 'dash0', 'dash1']],
   ['Special', ['coin', 'cp', 'trm', 'trr', 'trf', 'trc', 'LD', 'LJ', 'LS', 'LH', 'LF', 'text']]];
 for (const q of PALETTE) if (!ED_CATS.some(([, ids]) => ids.includes(q.id))) ED_CATS[ED_CATS.length - 1][1].push(q.id);
@@ -3377,7 +3453,7 @@ function propFields(kind = 'group') {
   if (sp) { // GD's Start Pos settings (the ones this game has)
     const pick = (prop, label, opts, val) => `<label class="prop"><span>${label}</span><select class="field" data-prop="${prop}">${opts.map((t, i) => `<option value="${i}"${i === val ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
     const tick = (prop, label, bit) => `<label class="hrow"><input type="checkbox" class="sr" data-prop="${prop}"${sp.f & bit ? ' checked' : ''}><span class="hchk"></span>${label}</label>`;
-    return pick('sp_speed', 'Speed', SPD_LABELS, sp.sp) + pick('sp_mode', 'Gamemode', ['Wave', 'Cube', 'Ship'], sp.m)
+    return pick('sp_speed', 'Speed', SPD_LABELS, sp.sp) + pick('sp_mode', 'Gamemode', ['Wave', 'Cube', 'Ship', 'Ball'], sp.m)
       + `<div style="width:100%">${tick('sp_mini', 'Mini', 1) + tick('sp_flip', 'Upside down', 2) + tick('sp_dual', 'Dual', 4) + tick('sp_off', 'Switched off', 8)}</div>`
       + '<p class="note" style="width:100%">Playtest (Enter) starts from the rightmost start position that\'s on. Normal play always starts at the beginning.</p>';
   }
@@ -3393,7 +3469,7 @@ $('edPropBody').addEventListener('change', e => {
   if (prop.startsWith('sp_')) {
     const o = objs[0]; if (!o || o.t !== 'P') return renderPane();
     if (prop === 'sp_speed') o.sp = Math.min(4, Math.max(0, Math.round(v) || 0));
-    else if (prop === 'sp_mode') o.m = Math.min(2, Math.max(0, Math.round(v) || 0));
+    else if (prop === 'sp_mode') o.m = Math.min(3, Math.max(0, Math.round(v) || 0));
     else { const bit = { sp_mini: 1, sp_flip: 2, sp_dual: 4, sp_off: 8 }[prop]; o.f = inp.checked ? o.f | bit : o.f & ~bit; }
   } else if (prop === 'txt' || prop === 'ts') {
     const o = objs[0]; if (!o || o.t !== 'a') return renderPane();
