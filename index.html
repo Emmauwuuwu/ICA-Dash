@@ -406,7 +406,6 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
       <button class="eico" id="edZoomIn" title="Zoom in (Ctrl+wheel, +)" aria-label="Zoom in">+</button>
       <button class="eico" id="edZoomOut" title="Zoom out (Ctrl+wheel, -)" aria-label="Zoom out">&minus;</button>
       <button class="eico play" id="edTest" title="Playtest (Enter)" aria-label="Playtest">&#9654;</button>
-      <button class="eico" id="edTestHere" title="Playtest from the middle of the view" aria-label="Playtest from here">&#9654;|</button>
       <button class="eico" id="edMusic" title="Play the music from here (press again to stop)" aria-label="Play the music from here" aria-pressed="false">&#9835;</button>
     </div>
     <div class="edright" id="edQuick"></div>
@@ -1469,7 +1468,7 @@ function worldFor(code) { let w = worldCache.get(code); if (!w) { w = buildWorld
 let mode = 'menu', from = 'levels', cur = LEVELS[0], world = worldFor(cur.code);
 const BOOM_T = 0.5; // seconds a death shockwave lasts
 let held = false, attempt = 1, p, trail = [], trail2 = [], parts = [], booms = [], deadT = 0, shake = 0, flash = 0, hitFlash = 0, speedI = 1;
-let camSnap = true, camX = 0, camY = 0, editCam = 0, hue = LEVELS[0].hue, baseHue = LEVELS[0].hue, editing = null, usedHacks = false, lvIndex = 0, testFrom = null, testFromY = VH / 2;
+let camSnap = true, camX = 0, camY = 0, editCam = 0, hue = LEVELS[0].hue, baseHue = LEVELS[0].hue, editing = null, usedHacks = false, lvIndex = 0;
 const inputs = []; // [timestamp, held] queued so each press lands on the exact sub-step it happened in
 
 // ---------- look-ahead simulation (safe spawns, show path, practice checkpoints, autoplay) ----------
@@ -1958,43 +1957,6 @@ function spawnState(x) {
   const pick = best || cands[0] || start;
   return stateOf(pick);
 }
-// "Playtest from here" (the editor's ▶| button), like starting from a GD start position: the level's state at x, worked out
-// directly. It begins from the nearest start position that's on before x (or the level's start), applies every portal
-// between there and x (gamemode, speed, gravity, size, dual, its band) and counts every trigger before x as fired at the
-// moment you'd have passed it, so moved, faded and coloured groups are where they'd be. Its height is the free spot nearest
-// yHint (the middle of the editor's view): a wave or ship starts there, a cube or ball drops from there.
-function stateAt(x, yHint = VH / 2, back = 0, until = performance.now() + 15) { // until: the search's time limit (no freezes)
-  const sp = spList().filter(o => (o.x + 0.5) * B <= x).at(-1);
-  const s = sp ? startPosState(sp) : { x: 0, y: VH / 2, bt: 0, bb: VH, dir: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, cube: false, ship: false, ball: false, vy: 0, vy2: 0, gnd: false, gnd2: false, dash: null };
-  s.wd = world;
-  while (s.pi < world.portals.length && world.portals[s.pi].x * B <= x) portalState(s, world.portals[s.pi++]);
-  s.x = x; s.vy = s.vy2 = 0; s.gnd = s.gnd2 = false; s.sv = s.sv2 = s.lv = s.lv2 = 0; s.dash = null; s.bair = !!s.ball;
-  s.t = timeAt(world, x); s.tf = world.trig.filter(o => o.x * B <= x).map(o => timeAt(world, o.x * B));
-  placeMoving(world, s);
-  // Its height: the middle of an open gap in that column (not just any free point: one at a gap's edge dies at once), one
-  // there's a way to survive half a second from (the autoplay search; a tight corridor needs you to zigzag straight away),
-  // the nearest such to the hint.
-  const body = hasBody(s), r = body ? cubeHalf(s) : s.mini ? RM : R, top = (bandTop(s) ?? TOP) + r + 1, bot = bandBot(s) - r - 1;
-  const ok = y => y >= top && y <= bot && (body ? survives(world, x, y, r) : !solidHit(world, x, y, r))
-    && (!s.dual || (body ? survives(world, x, mirrorY(s, y), r) : !solidHit(world, x, mirrorY(s, y), r)));
-  const mids = []; let run = null;
-  // (a cube or ball: the gap's floor, or its ceiling upside down, so it starts standing on the ground there)
-  // (every 6 units, from 6 blocks above the view down: a cube has no ceiling to stop the scan)
-  for (let y = Math.max(top, yHint - 6 * B); y <= bot + 6; y += 6) { if (y <= bot && ok(y)) run ??= y; else if (run !== null) { mids.push(!body ? (run + y - 6) / 2 : s.flip ? run : y - 6); run = null; } }
-  const at = y => { const c = { ...s, y }; c.y2 = c.dual ? mirrorY(c, y) : VH - y; c.dir = c.flip ? -1 : 1; return c; };
-  // The whole search has 15 ms and no route search (on a busy level that took seconds on a slow computer): of the 6 nearest
-  // gaps, the first where holding or letting go keeps you alive an eighth of a second (the spawn waits for your first press,
-  // so you see it before anything moves); out of time, the spot found so far that lasts longest.
-  const lastsM = new Map(), lasts = y => { if (!lastsM.has(y)) { const c = at(y); lastsM.set(y, Math.max(survival(c, false, 120), survival(c, true, 120))); } return lastsM.get(y); };
-  const canLive = y => performance.now() < until && lasts(y) >= 60;
-  mids.sort((a, b) => Math.abs(a - yHint) - Math.abs(b - yHint)); mids.length = Math.min(mids.length, 6);
-  const live = mids.find(canLive);
-  // nowhere to live right at x (say a wall closing a dual lane exactly there): a little earlier, up to 3 blocks back, in time
-  if (live === undefined && back < 12 && x > B / 4 && performance.now() < until) return stateAt(x - B / 4, yHint, back + 1, until);
-  // (out of time: only spots already checked count, so the fallback costs nothing)
-  const y = live ?? [...lastsM].reduce((b, e) => !b || e[1] > b[1] ? e : b, null)?.[0] ?? mids[0] ?? Math.min(bot, Math.max(top, yHint));
-  return stateOf(at(y));
-}
 // Effects for the real game: tick1 calls these on p (portal ones before the state changes). The wave draws a trail of its
 // corners; a cube draws none, so the trail breaks (null) while it's a cube.
 const FX = {
@@ -2019,19 +1981,17 @@ function reset() {
     dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, ball: false, bair: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 };
   trail = []; trail2 = []; parts = []; booms = []; camSnap = true;
   const cp =practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
-  const here = cur.id === 'test' && testFrom !== null, sx = here ? testFrom : hacks.start > 0 ? world.end * hacks.start : 0;
-  // an editor playtest starts at the rightmost start position that's on (unless you chose "playtest from here")
-  const st = cur.id === 'test' ? (testFrom === null ? spList().at(-1) : null) : spIdx > 0 ? spList()[spIdx - 1] || null : null; // playtest: the rightmost on; play: the switcher's choice
+  const sx = hacks.start > 0 ? world.end * hacks.start : 0;
+  // an editor playtest starts at the rightmost start position that's on
+  const st = cur.id === 'test' ? spList().at(-1) || null : spIdx > 0 ? spList()[spIdx - 1] || null : null; // playtest: the rightmost on; play: the switcher's choice
   if (cur.id !== 'test') usedHacks = cheating(); // each attempt: one from a start position (or with hacks on) doesn't count
   if (cp) Object.assign(p, cp); // practice: back to the newest checkpoint
   else if (st) Object.assign(p, startPosState(st));
-  else if (here) Object.assign(p, spawnCache ??= stateAt(sx, testFromY)); // "Playtest from here": the level's state at that spot
   else if (sx > 0) Object.assign(p, spawnCache ??= spawnState(sx)); // start partway in at a safe spot (worked out once per level)
   else p.y2 = VH - p.y;
   p.ci = world.cps.filter(c => c.x * B <= p.x).length; // checkpoint objects behind a mid-level spawn don't count again
-  // A mid-level spawn from the start % hack or "Playtest from here" waits for your first press instead of moving straight
-  // away: you've just clicked a button, and the spot may need input at once. (A start position or a practice checkpoint
-  // goes straight away, as in GD.)
+  // A mid-level spawn from the start % hack waits for your first press instead of moving straight
+  // away. (A start position or a practice checkpoint goes straight away, as in GD.)
   p.wait = !hacks.auto && !cp && sx > 0 && !st;
   if (p.wait) p.dir = p.flip ? 1 : -1; // facing the way a press will send it
   p.ang = p.from = p.dir * (p.mini ? Math.atan(2) : Math.PI / 4); p.cpT = 0; p.sub = 0; speedI = p.speedI;
@@ -2311,7 +2271,7 @@ function xAt(wd, t) {
   }
   return x + Math.max(0, t - tt) * SPEEDS[i] * B;
 }
-// Editor music playback (GD's): the level's song from the spot "Playtest from here" would start at, with a line moving
+// Editor music playback (GD's): the level's song from a third of the way into the view, with a line moving
 // through the level in time with it. The view turns the page when the line nears its right edge. Pressing it again,
 // playtesting or leaving the editor stops it.
 let edMus = null; // { off: seconds into the level where it started, t0: performance.now() then }
@@ -3728,7 +3688,7 @@ function updateEdInfo() {
 }
 function openEditor(l) {
   editing = l; edObjs = levelObjects(l.code); sel = new Set(); undoS = []; redoS = []; edTool = 'build'; clearArmed = false;
-  edZoom = 1; edCamY = VH - 0.68 * (H / S); editCam = -3 * B; testFrom = null; // the ground just above the bottom bar, room above
+  edZoom = 1; edCamY = VH - 0.68 * (H / S); editCam = -3 * B; // the ground just above the bottom bar, room above
   $('lvName').value = l.name; $('lvName').readOnly = !!l.main; $('edReset').hidden = !l.main; // main levels keep their names
   $('codeMsg').textContent = '';
   resumeEditor();
@@ -4076,8 +4036,7 @@ $('lvCopyEdits').onclick = () => {
   navigator.clipboard.writeText(text).then(() => { $('devMsg').textContent = 'Copied. Paste it to Claude to make these the official levels.'; },
     () => { const o = $('editsOut'); o.value = text; o.hidden = false; o.select(); $('devMsg').textContent = 'Press Ctrl+C to copy the selected text.'; });
 };
-$('edTest').onclick = () => { testFrom = null; play({ id: 'test', name: $('lvName').value.trim() || 'Untitled level', hue: 200 }, 'editor'); };
-$('edTestHere').onclick = () => { testFrom = Math.max(0, editCam + 0.3 * W / (S * edZoom)); testFromY = edCamY + 0.5 * H / (S * edZoom); play({ id: 'test', name: $('lvName').value.trim() || 'Untitled level', hue: 200 }, 'editor'); }; // starts at the middle of the view
+$('edTest').onclick = () => { play({ id: 'test', name: $('lvName').value.trim() || 'Untitled level', hue: 200 }, 'editor'); };
 $('edMusic').onclick = edMusicToggle;
 $('edUndo').onclick = undo;
 $('edRedo').onclick = redo;
