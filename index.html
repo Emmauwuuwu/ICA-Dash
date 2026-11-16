@@ -2456,69 +2456,137 @@ function drawBall(g, x, y, a, s, ic) {
 // teleport blue in / orange out; speed orange, blue, green, pink, red. The label shows only in the editor.
 const PORTAL_COL = { g: ['#3fd8ff', '#4dff4a', '#ff5ce6', '#ff5a3a'], v: ['#3f8cff', '#ffe23a', '#4dff9a'], m: ['#4dff4a', '#ff5ce6'], w: ['#3f8cff', '#ff9f2e'], T: ['#3f8cff', '#ff9f2e'],
   S: ['#ff9f2e', '#3fb6ff', '#4dff4a', '#ff5ce6', '#ff3b3b'] };
-function drawPortal(g, o, u, label = true) { return withXf(g, o, u, () => drawPortal0(g, o, u, label)); }
+// part: 'back' (behind the player), 'front' (the near half of the ring, drawn over the player so you fly through it) or 'all'.
+function drawPortal(g, o, u, label = true, part = 'all') { return withXf(g, o, u, () => drawPortal0(g, o, u, label, part)); }
 const mixHex = (h, w, k) => '#' + [1, 3, 5].map(i => Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - k) + w * k).toString(16).padStart(2, '0')).join(''); // toward w (0 black, 255 white) by k
-function drawPortal0(g, o, u, label) {
-  const col = PORTAL_COL[o.k][o.v] || '#ffffff', cx = o.x * u, top = o.y * u, hh = o.h * u, cy = top + hh / 2, tt = performance.now() / 1000;
-  const lite = mixHex(col, 255, 0.55), deep = mixHex(col, 0, 0.45), ink = '#0c0e1c';
-  g.save(); g.lineJoin = 'round'; g.lineCap = 'round';
-  if (o.k === 'S') {
-    // GD-style speed changer: big arrows in a row (one pointing back for 0.5x, then 1 to 4 forward), each a thick chevron with
-    // a dark outline, a light-to-deep fill and a bright edge; a soft glow and speed streaks running the way it sends you
-    const n = o.v === 0 ? 1 : o.v, dir = o.v === 0 ? -1 : 1, ch = Math.min(hh, u * 1.9) / 2, cw = ch * 0.78, th = cw * 0.5, gap = cw * 0.62;
-    const x0 = cx - ((n - 1) * gap) / 2 * dir;
-    const glow = g.createRadialGradient(cx, cy, 0, cx, cy, ch * 1.5); glow.addColorStop(0, col + '66'); glow.addColorStop(1, col + '00');
-    g.fillStyle = glow; g.beginPath(); g.ellipse(cx, cy, cw / 2 + (n - 1) * gap / 2 + ch * 0.6, ch * 1.4, 0, 0, 7); g.fill();
-    g.strokeStyle = lite; g.lineWidth = Math.max(1, u * 0.04);
-    for (let i = 0; i < 6; i++) { // streaks
-      const ph = (tt * 1.6 + i / 6) % 1, y = cy + ((i * 0.37) % 1 - 0.5) * ch * 1.6, len = u * 0.6;
-      const xs = cx - dir * (cw + n * gap) * (1 - ph) - dir * u * 0.3; g.globalAlpha = Math.sin(ph * Math.PI) * 0.7;
-      g.beginPath(); g.moveTo(xs, y); g.lineTo(xs - dir * len, y); g.stroke();
+// The static art of each portal (per type, height, size on screen and part) is painted once into a sprite and copied each
+// frame; only the speed streaks move. Painters draw around (0, 0) = the portal's middle-top in block units u.
+const PORTAL_SPR = new Map();
+const PORTAL_BOX = { S: [2.3, 2.3, 0.8, 0.8], ring: [2.9, 1.0, 0.9, 0.9] }; // blocks left, right, above, below the portal's box
+function portalSprite(o, u, sc, part) {
+  const key = [o.k, o.v, o.h, part, Math.round(u * sc * 4) / 4].join();
+  let c = PORTAL_SPR.get(key); if (c) return c;
+  if (PORTAL_SPR.size > 160) { for (const s of PORTAL_SPR.values()) s.width = 0; PORTAL_SPR.clear(); } // zoomed a lot: start over
+  const [L, R, T, Bt] = PORTAL_BOX[o.k === 'S' ? 'S' : 'ring'], px = u * sc;
+  c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil((L + R) * px)); c.height = Math.max(1, Math.ceil((o.h + T + Bt) * px));
+  const g = c.getContext('2d'); g.setTransform(sc, 0, 0, sc, L * px, T * px); g.lineJoin = 'round'; g.lineCap = 'round';
+  if (o.k === 'S') paintSpeed(g, o, u); else if (part === 'front') paintRingFront(g, o, u); else paintRingBack(g, o, u);
+  c.box = [L, R, T, Bt]; PORTAL_SPR.set(key, c); return c;
+}
+const portalCols = col => ({ col, lite: mixHex(col, 255, 0.55), deep: mixHex(col, 0, 0.45), dark: mixHex(col, 0, 0.72), ink: '#0c0e1c' });
+// The ring: a tall oval seen side-on. Its back half (left) and the frame's decorations go behind the player, its near half
+// (right) in front. rx: half width, ry: half height, bw: the band's thickness.
+const ringDims = (o, u) => { const hh = o.h * u, ry = hh / 2; return { hh, ry, cy: ry, rx: Math.min(u * 0.46, ry * 0.34), bw: u * 0.28 }; };
+function paintRingBack(g, o, u) {
+  const { col, lite, deep, dark, ink } = portalCols(PORTAL_COL[o.k][o.v] || '#ffffff'), { hh, ry, cy, rx, bw } = ringDims(o, u);
+  const at = (a, kx, ky = kx) => [Math.cos(a) * rx * kx, cy + Math.sin(a) * ry * ky]; // a point on the oval, scaled out
+  // soft colour inside the ring, brightest toward its edge
+  g.save(); g.translate(0, cy); g.scale(rx / ry, 1);
+  const inner = g.createRadialGradient(0, 0, ry * 0.15, 0, 0, ry); inner.addColorStop(0, col + '00'); inner.addColorStop(0.7, col + '30'); inner.addColorStop(1, col + '70');
+  g.fillStyle = inner; g.beginPath(); g.arc(0, 0, ry, 0, 7); g.fill(); g.restore();
+  const shape = (pts, fill) => { g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.fillStyle = fill; g.fill(); g.strokeStyle = ink; g.lineWidth = u * 0.07; g.stroke(); };
+  const PI = Math.PI;
+  // a back plate: a crescent between the ring's back half and a wider oval behind it, dark in the middle, coloured at its edge
+  const plate = (k) => {
+    g.beginPath(); g.ellipse(0, cy, rx * k, ry * 1.02, 0, PI / 2, PI * 1.5); g.ellipse(0, cy, rx, ry, 0, PI * 1.5, PI / 2, true); g.closePath();
+    const f = g.createLinearGradient(-rx * k, 0, -rx, 0); f.addColorStop(0, deep); f.addColorStop(0.55, dark); f.addColorStop(1, ink);
+    g.fillStyle = f; g.fill(); g.strokeStyle = ink; g.lineWidth = u * 0.08; g.stroke();
+    g.beginPath(); g.ellipse(0, cy, rx * k - u * 0.07, ry * 1.02 - u * 0.05, 0, PI * 0.58, PI * 1.42); g.strokeStyle = lite; g.lineWidth = u * 0.04; g.stroke();
+  };
+  if (o.k === 'g') { // gamemode: a soft glow, a big smooth back plate and a coloured rim round its edge (no spikes)
+    g.save(); g.translate(-rx * 1.6, cy); g.scale(1, ry / (rx * 2.4));
+    const halo = g.createRadialGradient(0, 0, 0, 0, 0, rx * 2.4); halo.addColorStop(0, col + '40'); halo.addColorStop(1, col + '00');
+    g.fillStyle = halo; g.beginPath(); g.arc(0, 0, rx * 2.4, 0, 7); g.fill(); g.restore();
+    plate(2.7);
+    const edge = (w, s) => { g.beginPath(); g.ellipse(0, cy, rx * 2.7, ry * 1.02, 0, PI * 0.55, PI * 1.45); g.strokeStyle = s; g.lineWidth = w; g.stroke(); };
+    edge(bw * 0.75, ink); edge(bw * 0.42, col); edge(u * 0.035, lite); // the plate's rim in the portal's colour
+  } else if (o.k === 'v') { // gravity: a back plate carrying arrows the way gravity will pull (both ways for swap)
+    plate(3.1);
+    const dirs = o.v === 2 ? [-1, 1] : [o.v ? -1 : 1], x = -rx * 2.05;
+    dirs.forEach((d, i) => {
+      const y = cy + (dirs.length === 2 ? (i ? 0.42 : -0.42) : 0) * ry, s = u * (dirs.length === 2 ? 0.4 : 0.52);
+      const fill = g.createLinearGradient(0, y - s, 0, y + s); fill.addColorStop(0, d > 0 ? lite : deep); fill.addColorStop(1, d > 0 ? deep : lite);
+      shape([[x - s * 0.36, y - d * s * 0.75], [x + s * 0.36, y - d * s * 0.75], [x + s * 0.36, y], [x + s * 0.8, y], [x, y + d * s], [x - s * 0.8, y], [x - s * 0.36, y]], fill);
+    });
+  } else if (o.k === 'm') { // size: a back plate with bulbs on its edge, many small ones for mini, a few big ones for big
+    plate(2.0);
+    const n = o.v ? 5 : 3, r = u * (o.v ? 0.15 : 0.27);
+    for (let i = 0; i < n; i++) {
+      const a = PI * (0.7 + 0.6 * (i + 0.5) / n), [x, y] = at(a, 2.0 + r / rx * 0.35, 1.02);
+      const fill = g.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r); fill.addColorStop(0, lite); fill.addColorStop(1, deep);
+      g.beginPath(); g.arc(x, y, r, 0, 7); g.fillStyle = fill; g.fill(); g.strokeStyle = ink; g.lineWidth = u * 0.06; g.stroke();
     }
-    g.globalAlpha = 1;
-    const chev = x => { // a chevron band pointing dir, its tip at x + dir * cw / 2
-      const b = x - dir * cw / 2, tip = x + dir * cw / 2;
-      g.beginPath(); g.moveTo(b, cy - ch); g.lineTo(b + dir * th, cy - ch); g.lineTo(tip, cy); g.lineTo(b + dir * th, cy + ch); g.lineTo(b, cy + ch); g.lineTo(tip - dir * th, cy); g.closePath();
-    };
-    for (let i = n - 1; i >= 0; i--) { // back to front, so the front arrow overlaps
-      const x = x0 + i * gap * dir, fill = g.createLinearGradient(0, cy - ch, 0, cy + ch);
-      fill.addColorStop(0, lite); fill.addColorStop(0.45, col); fill.addColorStop(1, deep);
-      chev(x); g.strokeStyle = ink; g.lineWidth = u * 0.14; g.stroke(); g.fillStyle = fill; g.fill();
-      g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = u * 0.035; g.beginPath(); g.moveTo(x - dir * cw / 2 + dir * th * 0.6, cy - ch * 0.86); g.lineTo(x + dir * cw / 2 - dir * th * 0.35, cy - ch * 0.04); g.stroke();
+  } else if (o.k === 'w') { // dual: a second frame behind the first (single: one thin line)
+    const outer = (k, w, s) => { g.beginPath(); g.ellipse(0, cy, rx * k, ry * (1 + (k - 1) * 0.08), 0, PI / 2, PI * 1.5); g.strokeStyle = s; g.lineWidth = w; g.stroke(); };
+    if (o.v) { outer(2.1, bw + u * 0.12, ink); outer(2.1, bw * 0.6, deep); outer(2.1, u * 0.03, lite); }
+    else { outer(1.9, u * 0.12, ink); outer(1.9, u * 0.05, deep); }
+  } else if (o.k === 'T') { // teleport: a broken frame of short segments around the back
+    for (let i = 0; i < 6; i++) {
+      const a0 = PI * (0.56 + i * 0.15), a1 = a0 + PI * 0.09;
+      g.beginPath(); g.ellipse(0, cy, rx * 1.75, ry * 1.04, 0, a0, a1); g.strokeStyle = ink; g.lineWidth = bw * 0.9; g.stroke();
+      g.strokeStyle = i % 2 ? col : lite; g.lineWidth = bw * 0.5; g.stroke();
+    }
+  }
+  // the ring's back half: a dark outline and the deep colour
+  const back = () => { g.beginPath(); g.ellipse(0, cy, rx, ry, 0, PI / 2, PI * 1.5); };
+  back(); g.strokeStyle = ink; g.lineWidth = bw + u * 0.14; g.stroke();
+  back(); g.strokeStyle = dark; g.lineWidth = bw; g.stroke();
+  back(); g.strokeStyle = deep; g.lineWidth = bw * 0.45; g.stroke();
+}
+function paintRingFront(g, o, u) {
+  const { col, lite, deep, ink } = portalCols(PORTAL_COL[o.k][o.v] || '#ffffff'), { hh, ry, cy, rx, bw } = ringDims(o, u), PI = Math.PI;
+  const front = (kx = 1, ky = 1, a0 = -PI / 2, a1 = PI / 2) => { g.beginPath(); g.ellipse(0, cy, rx * kx, ry * ky, 0, a0, a1); };
+  const band = g.createLinearGradient(0, 0, 0, hh); band.addColorStop(0, lite); band.addColorStop(0.45, col); band.addColorStop(1, deep);
+  front(); g.strokeStyle = ink; g.lineWidth = bw + u * 0.16; g.stroke(); // outline
+  front(); g.strokeStyle = band; g.lineWidth = bw; g.stroke(); // the band, light at the top
+  front(1 - bw / rx * 0.28, 1 - bw / ry * 0.2, -PI * 0.42, PI * 0.1); g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = u * 0.055; g.stroke(); // highlight
+  front(1 + bw / rx * 0.32, 1 + bw / ry * 0.2, PI * 0.05, PI * 0.42); g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = u * 0.05; g.stroke(); // its shadow side
+  for (const y of [0, hh]) { // end caps where the ring turns from front to back
+    g.beginPath(); g.ellipse(0, y, bw * 0.95, bw * 0.55, 0, 0, 7); g.fillStyle = ink; g.fill();
+    g.beginPath(); g.ellipse(0, y, bw * 0.62, bw * 0.32, 0, 0, 7); g.fillStyle = y ? deep : lite; g.fill();
+  }
+}
+// Speed changer: big arrows in a row (one pointing back for 0.5x, then 1 to 4 forward), each a thick chevron with a dark
+// outline, a light-to-deep fill and a bright edge, over a soft glow.
+function paintSpeed(g, o, u) {
+  const { col, lite, deep, ink } = portalCols(PORTAL_COL[o.k][o.v] || '#ffffff'), hh = o.h * u, cy = hh / 2;
+  const n = o.v === 0 ? 1 : o.v, dir = o.v === 0 ? -1 : 1, ch = Math.min(hh, u * 1.9) / 2, cw = ch * 0.78, th = cw * 0.5, gap = cw * 0.62;
+  const x0 = -((n - 1) * gap) / 2 * dir;
+  const glow = g.createRadialGradient(0, cy, 0, 0, cy, ch * 1.5); glow.addColorStop(0, col + '66'); glow.addColorStop(1, col + '00');
+  g.fillStyle = glow; g.beginPath(); g.ellipse(0, cy, cw / 2 + (n - 1) * gap / 2 + ch * 0.6, ch * 1.4, 0, 0, 7); g.fill();
+  const chev = x => {
+    const b = x - dir * cw / 2, tip = x + dir * cw / 2;
+    g.beginPath(); g.moveTo(b, cy - ch); g.lineTo(b + dir * th, cy - ch); g.lineTo(tip, cy); g.lineTo(b + dir * th, cy + ch); g.lineTo(b, cy + ch); g.lineTo(tip - dir * th, cy); g.closePath();
+  };
+  for (let i = n - 1; i >= 0; i--) { // back to front, so the front arrow overlaps
+    const x = x0 + i * gap * dir, fill = g.createLinearGradient(0, cy - ch, 0, cy + ch);
+    fill.addColorStop(0, lite); fill.addColorStop(0.45, col); fill.addColorStop(1, deep);
+    chev(x); g.strokeStyle = ink; g.lineWidth = u * 0.14; g.stroke(); g.fillStyle = fill; g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = u * 0.035; g.beginPath(); g.moveTo(x - dir * cw / 2 + dir * th * 0.6, cy - ch * 0.86); g.lineTo(x + dir * cw / 2 - dir * th * 0.35, cy - ch * 0.04); g.stroke();
+  }
+}
+function drawPortal0(g, o, u, label, part) {
+  const col = PORTAL_COL[o.k][o.v] || '#ffffff', cx = o.x * u, top = o.y * u, hh = o.h * u, cy = top + hh / 2, tt = performance.now() / 1000;
+  const m = g.getTransform(), sc = Math.hypot(m.a, m.b) || 1;
+  const blit = c => { const [L, R, T, Bt] = c.box; g.drawImage(c, cx - L * u, top - T * u, (L + R) * u, (o.h + T + Bt) * u); };
+  g.save();
+  if (o.k === 'S') {
+    if (part !== 'front') {
+      blit(portalSprite(o, u, sc, 'S'));
+      const n = o.v === 0 ? 1 : o.v, dir = o.v === 0 ? -1 : 1, ch = Math.min(hh, u * 1.9) / 2, cw = ch * 0.78, gap = cw * 0.62;
+      g.strokeStyle = mixHex(col, 255, 0.55); g.lineWidth = Math.max(1, u * 0.04); g.lineCap = 'round';
+      for (let i = 0; i < 6; i++) { // speed streaks running the way it sends you
+        const ph = (tt * 1.6 + i / 6) % 1, y = cy + ((i * 0.37) % 1 - 0.5) * ch * 1.6, len = u * 0.6;
+        const xs = cx - dir * (cw + n * gap) * (1 - ph) - dir * u * 0.3; g.globalAlpha = Math.sin(ph * Math.PI) * 0.7;
+        g.beginPath(); g.moveTo(xs, y); g.lineTo(xs - dir * len, y); g.stroke();
+      }
+      g.globalAlpha = 1;
     }
   } else {
-    // GD-style gamemode portal: a tall ring seen side-on with a toothed frame behind it, a swirl of colour inside, a thick
-    // shaded near rim with a highlight, and sparks drawn into it
-    const ry = hh / 2, rx = Math.min(u * 0.5, ry * 0.36);
-    const ell = (sx, sy, a0, a1) => { g.beginPath(); g.ellipse(cx, cy, rx * sx, ry * sy, 0, a0, a1); };
-    const glow = g.createRadialGradient(cx, cy, 0, cx, cy, ry * 1.05); glow.addColorStop(0, col + '50'); glow.addColorStop(1, col + '00');
-    g.save(); g.translate(cx, cy); g.scale(rx * 2.6 / ry, 1); g.fillStyle = glow; g.beginPath(); g.arc(0, 0, ry * 1.05, 0, 7); g.fill(); g.restore();
-    for (let i = 0; i < 5; i++) { // teeth on the frame's back
-      const th = Math.PI / 2 + (i + 1) * Math.PI / 6, d = 0.16, pt = (a, k) => [cx + Math.cos(a) * rx * k, cy + Math.sin(a) * ry * Math.min(1.06, k)];
-      g.beginPath(); g.moveTo(...pt(th - d, 1)); g.lineTo(...pt(th, 1.75)); g.lineTo(...pt(th + d, 1)); g.closePath();
-      g.fillStyle = deep; g.fill(); g.strokeStyle = ink; g.lineWidth = u * 0.06; g.stroke();
-    }
-    g.strokeStyle = ink; g.lineWidth = u * 0.2; ell(1, 1, Math.PI / 2, Math.PI * 1.5); g.stroke(); // the frame's back
-    g.strokeStyle = deep; g.lineWidth = u * 0.1; ell(1, 1, Math.PI / 2, Math.PI * 1.5); g.stroke();
-    for (let k = 0; k < 3; k++) { // swirl inside, drawn in toward the middle
-      const ph = (tt * 0.7 + k / 3) % 1; g.globalAlpha = Math.sin(ph * Math.PI) * 0.55; g.strokeStyle = lite; g.lineWidth = u * 0.05;
-      g.beginPath(); g.ellipse(cx, cy, rx * 0.85 * (1 - ph * 0.8), ry * 0.9 * (1 - ph * 0.8), 0, 0, 7); g.stroke();
-    }
-    g.globalAlpha = 1;
-    for (let i = 0; i < 7; i++) { // sparks pulled in from behind
-      const ph = (tt * 0.9 + i / 7) % 1, y0 = cy + (((i * 0.61) % 1) - 0.5) * hh * 0.85, sx = cx - rx * 3.2;
-      const x = sx + (cx - sx) * ph, y = y0 + (cy - y0) * ph * 0.3, z = u * 0.09 * (1 - ph * 0.5);
-      g.globalAlpha = Math.sin(ph * Math.PI); g.fillStyle = i % 2 ? lite : col; g.fillRect(x - z / 2, y - z / 2, z, z);
-    }
-    g.globalAlpha = 1;
-    const rim = g.createLinearGradient(0, top, 0, top + hh); rim.addColorStop(0, lite); rim.addColorStop(0.5, col); rim.addColorStop(1, deep);
-    g.strokeStyle = ink; g.lineWidth = u * 0.42; ell(1, 1, -Math.PI / 2, Math.PI / 2); g.stroke(); // near rim: outline,
-    g.strokeStyle = rim; g.lineWidth = u * 0.27; ell(1, 1, -Math.PI / 2, Math.PI / 2); g.stroke(); // shaded colour,
-    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = u * 0.06; ell(1.1, 0.95, -Math.PI * 0.38, Math.PI * 0.12); g.stroke(); // and a highlight
-    g.fillStyle = ink; g.beginPath(); g.ellipse(cx, top + u * 0.02, rx * 0.55, u * 0.12, 0, 0, 7); g.ellipse(cx, top + hh - u * 0.02, rx * 0.55, u * 0.12, 0, 0, 7); g.fill(); // end caps
-    g.fillStyle = col; g.beginPath(); g.ellipse(cx, top + u * 0.02, rx * 0.4, u * 0.07, 0, 0, 7); g.ellipse(cx, top + hh - u * 0.02, rx * 0.4, u * 0.07, 0, 0, 7); g.fill();
+    if (part !== 'front') blit(portalSprite(o, u, sc, 'back'));
+    if (part !== 'back') blit(portalSprite(o, u, sc, 'front'));
   }
-  if (label) {
+  if (label && part !== 'front') {
     const text = o.k === 'S' ? SPD_LABELS[o.v] : o.k === 'v' && o.v === 2 ? 'SWAP' : o.k === 'g' ? ['WAVE', 'CUBE', 'SHIP', 'BALL'][o.v] : PORTALS[o.k][o.v ? 1 : 2];
     g.fillStyle = col; g.font = `700 ${Math.round(u * 0.22)}px "Space Mono", monospace`; g.textAlign = 'center'; g.fillText(text, cx, top - u * 0.3);
   }
@@ -2863,7 +2931,8 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
     }
     ctx.globalAlpha = 1;
   }
-  for (const o of world.portals) if (o.x * B > camX - 60 && o.x * B < camX + viewW + 60) drawPortal(ctx, o, B, ed);
+  const portalsSeen = world.portals.filter(o => o.x * B > camX - 3 * B && o.x * B < camX + viewW + 3 * B); // (their frames reach 2.4 blocks behind them)
+  for (const o of portalsSeen) drawPortal(ctx, o, B, ed, inGame ? 'back' : 'all'); // in play the near half of each ring goes over the player, below
   world.coins.forEach((o, i) => { // coins: gone once taken this attempt; ones you've already saved show as faded silver
     if (o.x * B < camX - 60 || o.x * B > camX + viewW + 60 || (inGame && p.coins?.includes(i))) return;
     drawCoin(ctx, o, B, t, (savedCoins[cur.id] || []).includes(i) && !ed);
@@ -2975,6 +3044,7 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
         ctx.fillText('Press to go', p.x, p.y < 120 ? p.y + 52 : p.y - 38);
       }
     }
+    for (const o of portalsSeen) if (o.k !== 'S') drawPortal(ctx, o, B, false, 'front'); // the ring's near half: you fly through it
     if (!layout) for (const b of booms) { // death shockwave: a white flash disc and a ring that races out and thins
       const k = b.t / BOOM_T, e = 1 - (1 - k) ** 3, r = b.r * (1 + 5 * e);
       ctx.globalAlpha = (1 - k) ** 2 * 0.6; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * (1 + 2.2 * e), 0, 7); ctx.fill();
