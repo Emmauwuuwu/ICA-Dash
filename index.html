@@ -1972,6 +1972,9 @@ function play(level, origin, songOk) {
   practice = false; // a level always starts in normal mode, as in GD (Replay puts practice back)
   spIdx = 0; attempt = 1; usedHacks = cheating(); checkpoints = []; spawnCache = null; held = false;
   reset(); mode = 'play'; inputs.length = 0; show(null); $('hud').hidden = false;
+  // Load the level's look before it starts: paint the first screen and up to a screen ahead now (up to 0.4 s), so the
+  // opening seconds don't have tiles to paint. The clock restarts after, so the player doesn't jump ahead by that time.
+  draw(performance.now() / 1000, 0, 400); simT = lastDraw = performance.now();
   updateHackTag();
   if (level === LEVELS[0] && !(bests[level.id] > 0)) { // a brand-new player's first go: say how to play
     const names = keys.climb.filter(Boolean).map(keyName);
@@ -2576,43 +2579,49 @@ function visibleObjs(wd, a, b) { const set = new Set(); for (let c = Math.floor(
 // edits, selection) throws its tiles away; its soft key (the hue) repaints them a couple per frame, so a colour change
 // never stalls a frame.
 const TILE = 256; // small, so one repaint is a small piece of work
-let frameNo = 0, tileDeadline = 0, worldIds = 0;
+let frameNo = 0, tileDeadline = 0, tileAheadLeft = 0, worldIds = 0; // tileAheadLeft: tiles a frame may paint ahead (the time limit only sees the CPU; the GPU does the pixels later)
 const selIds = new WeakMap(); let selN = 0;
 const selId = s => { let i = selIds.get(s); if (!i) selIds.set(s, i = ++selN); return i; }; // which selection Set (they're replaced, not edited, apart from adds and deletes that change its size)
 const tileLayer = () => ({ key: null, tiles: new Map(), pool: [] });
 const LAYERS = { walls: tileLayer(), spikes: tileLayer(), sel: tileLayer() };
+// An empty tile (nothing of this layer in it) keeps no canvas, so its memory goes to painting further ahead.
 function paintTile(L, id, tx, ty, kd, soft, paint, t) {
   const c = t?.c || L.pool.pop() || Object.assign(document.createElement('canvas'), { width: TILE, height: TILE }), g = c.getContext('2d');
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, TILE, TILE); g.globalAlpha = 1;
   g.setTransform(kd, 0, 0, kd, -tx * TILE, -ty * TILE);
   const empty = !paint(g, tx * TILE / kd, (tx + 1) * TILE / kd, ty * TILE / kd, (ty + 1) * TILE / kd); // paint returns whether it drew
-  t = { c, soft, used: frameNo, empty, box: [tx * TILE / kd, (tx + 1) * TILE / kd, ty * TILE / kd, (ty + 1) * TILE / kd] }; L.tiles.set(id, t); return t;
+  if (empty) L.pool.push(c);
+  t = { c: empty ? null : c, soft, empty, box: [tx * TILE / kd, (tx + 1) * TILE / kd, ty * TILE / kd, (ty + 1) * TILE / kd] }; L.tiles.set(id, t); return t;
 }
 // Draws a layer's tiles for a view whose level-to-device transform is (kd, tX, tY); tX, tY are whole device pixels.
+// Then, in whatever time this frame has left (tileDeadline), it paints ahead: up to a screen further along the level
+// (and a row above and below, as the camera follows a cube), nearest first, so a tile is ready long before it scrolls on.
 // spawn: true on the first frame of an attempt; those tiles are kept (pinned) so the next respawn, which jumps the camera
-// back there, doesn't have to paint a whole screen of tiles in one frame.
+// back there, doesn't have to paint a screen of tiles in one frame.
 function drawTiles(L, key, soft, kd, tX, tY, paint, spawn) {
-  if (L.key !== key) { for (const t of L.tiles.values()) L.pool.push(t.c); L.tiles.clear(); L.key = key; L.spawns = []; }
+  if (L.key !== key) { for (const t of L.tiles.values()) if (t.c) L.pool.push(t.c); L.tiles.clear(); L.key = key; L.spawns = []; }
   const ax = Math.floor(-tX / TILE), bx = Math.floor((W * dpr - tX) / TILE), ay = Math.floor(-tY / TILE), by = Math.floor((H * dpr - tY) / TILE);
-  let painted = false;
+  const ahead = bx - ax + 1; // one screen
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (spawn) { const ids = []; for (let ty = ay; ty <= by; ty++) for (let tx = ax; tx <= bx; tx++) ids.push(tx + ',' + ty); L.spawns = [ids, ...L.spawns.filter(s => s.join() !== ids.join())].slice(0, 2); } // the last two spawn views
+  if (spawn) { const ids = []; for (let ty = ay; ty <= by; ty++) for (let tx = ax; tx <= bx + 2; tx++) ids.push(tx + ',' + ty); L.spawns = [ids, ...L.spawns.filter(s => s.join() !== ids.join())].slice(0, 2); } // the last two spawn views
   for (let ty = ay; ty <= by; ty++) for (let tx = ax; tx <= bx; tx++) {
     const id = tx + ',' + ty; let t = L.tiles.get(id);
-    if (!t || (t.soft !== soft && performance.now() < tileDeadline)) { t = paintTile(L, id, tx, ty, kd, soft, paint, t); painted = true; }
-    t.used = frameNo;
+    if (!t || (t.soft !== soft && performance.now() < tileDeadline && tileAheadLeft-- > 0)) t = paintTile(L, id, tx, ty, kd, soft, paint, t);
     if (!t.empty) ctx.drawImage(t.c, tx * TILE + tX, ty * TILE + tY);
   }
-  // Get ahead while this frame has time left: one missing tile from the ring around the view, the side the level
-  // scrolls towards first, then above and below (the camera follows a cube up and down).
-  if (!painted && performance.now() < tileDeadline) {
-    const ring = [];
-    for (let ty = ay - 1; ty <= by + 1; ty++) ring.push([bx + 1, ty]);
-    for (let tx = ax; tx <= bx; tx++) ring.push([tx, ay - 1], [tx, by + 1]);
-    for (const [tx, ty] of ring) { const id = tx + ',' + ty; if (!L.tiles.has(id)) { paintTile(L, id, tx, ty, kd, soft, paint); break; } }
+  ahead: for (let tx = ax; tx <= bx + ahead; tx++) for (let ty = ay - 1; ty <= by + 1; ty++) {
+    if (performance.now() >= tileDeadline || tileAheadLeft <= 0) break ahead;
+    const id = tx + ',' + ty, t = L.tiles.get(id);
+    if (!t || t.soft !== soft) { paintTile(L, id, tx, ty, kd, soft, paint, t); tileAheadLeft--; }
   }
-  const pinned = new Set(L.spawns.flat());
-  if (L.tiles.size > (bx - ax + 3) * (by - ay + 3) + pinned.size) for (const [id, t] of L.tiles) if (frameNo - t.used > 20 && !pinned.has(id)) { L.pool.push(t.c); L.tiles.delete(id); }
+  // keep the view, the screen ahead, a column behind, a row above and below, and the spawn views; drop the rest
+  if (L.tiles.size > (2 * ahead + 1) * (by - ay + 3)) {
+    const pinned = new Set(L.spawns.flat());
+    for (const [id, t] of L.tiles) {
+      const [x, y] = id.split(',').map(Number);
+      if ((x < ax - 1 || x > bx + ahead || y < ay - 1 || y > by + 1) && !pinned.has(id)) { if (t.c) L.pool.push(t.c); L.tiles.delete(id); }
+    }
+  }
   while (L.pool.length > 8) L.pool.pop().width = 0; // let the browser free spare tiles
   ctx.setTransform(kd, 0, 0, kd, tX, tY);
 }
@@ -2703,7 +2712,7 @@ function drawBg(hue) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(BG.c, Math.round(off * dpr), 0);
 }
 
-function draw(t, dt) {
+function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahead (more while a level loads)
   const ed = mode === 'edit', z = ed ? edZoom : 1, k = S * z, viewW = W / k, viewH = H / k;
   const inGame = mode === 'play' || mode === 'dead' || mode === 'win' || mode === 'pause';
   const alive = mode === 'play' || (mode === 'pause' && pausedFrom === 'play'); // not mid-death
@@ -2724,7 +2733,7 @@ function draw(t, dt) {
   hue += (((target - hue) % 360 + 540) % 360 - 180) * Math.min(1, dt * 3);
   if (spawnFrame) hue = target; // an attempt starts in its own colour (no fade, so no tile repaints on respawn)
 
-  frameNo++; tileDeadline = performance.now() + 2; // ms this frame may spend repainting for a hue change or painting ahead (the rest waits)
+  frameNo++; tileAheadLeft = budget > 2 ? Infinity : 3; tileDeadline = performance.now() + budget; // time this frame may spend repainting for a hue change or painting ahead (the rest waits)
   const layout = hacks.layout && !ed; // layout mode: flat background, plain walls, no effects
   // background: hue-shifting gradient + slow parallax squares (cached, see drawBg)
   if (layout) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#141726'; ctx.fillRect(0, 0, W, H); } else drawBg(hue);
@@ -3175,7 +3184,7 @@ function tileEdits() {
   if (!boxes.length) return;
   for (const L of [LAYERS.walls, LAYERS.spikes]) for (const [id, t] of L.tiles) {
     const [x0, x1, y0, y1] = t.box;
-    if (boxes.some(b => b[1] * B < x1 && b[3] * B > x0 && b[2] * B < y1 && b[4] * B > y0)) { L.pool.push(t.c); L.tiles.delete(id); }
+    if (boxes.some(b => b[1] * B < x1 && b[3] * B > x0 && b[2] * B < y1 && b[4] * B > y0)) { if (t.c) L.pool.push(t.c); L.tiles.delete(id); }
   }
 }
 function commit(before) { undoS.push(before); if (undoS.length > 200) undoS.shift(); redoS = []; }
