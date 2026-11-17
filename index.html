@@ -1176,6 +1176,7 @@ const spikeBox = o => {
 // Spikes, saws, orbs, pads, coins, portals, checkpoints and text take them, and their hitboxes turn and size with them
 // (tested as turned boxes, like GD's rotated hitboxes). Blocks and slopes size by their width and height and turn in quarters.
 const XF_T = 'kjpqcsdahrt'; // (blocks and slopes take a turn; they size by width and height)
+const SC_T = 'kjpqcsdh'; // what the Size box sets: spikes, pads, portals, orbs, coins, saws, dash orbs, checkpoints (text has its own size)
 const xfd = o => !!(o.ra || (o.sc && o.sc !== 1));
 function xCentre(o) { return 'kjLP'.includes(o.t) ? [o.x + 0.5, o.y + 0.5] : o.t === 'p' ? [o.x, o.y + o.h / 2] : o.t === 'r' || o.t === 't' ? [o.x + o.w / 2, o.y + o.h / 2] : [o.x, o.y]; }
 function xPt(o, x, y) { // a point of the unturned object (blocks), where it is once turned and sized
@@ -3817,7 +3818,12 @@ function propFields(kind = 'group') {
   const field = (prop, label, val, step = 'any') => `<label class="prop"><span>${label}</span><input class="field" type="number" step="${step}" data-prop="${prop}" value="${val}"></label>`;
   const trig = objs.length === 1 && objs[0].t === 'x' ? objs[0] : null, plain = objs.filter(o => o.t !== 'x');
   let html = '';
-  if (kind === 'group') { if (!plain.length) return '<p class="note">Triggers act on a group; set it in Edit Special.</p>'; const gs = new Set(plain.map(o => o.g || '')); return field('g', 'Group ID (blank = none)', gs.size === 1 ? [...gs][0] : '', 1); }
+  if (kind === 'group') {
+    if (!plain.length) return '<p class="note">Triggers act on a group; set it in Edit Special.</p>';
+    const gs = new Set(plain.map(o => o.g || '')), sized = plain.filter(o => SC_T.includes(o.t)), scs = new Set(sized.map(o => o.sc || 1));
+    return field('g', 'Group ID (blank = none)', gs.size === 1 ? [...gs][0] : '', 1)
+      + (sized.length ? field('sc', 'Size (0.25–4, 1 = normal)', scs.size === 1 ? [...scs][0] : '', 0.05) : ''); // blank: they differ
+  }
   const sp = objs.length === 1 && objs[0].t === 'P' ? objs[0] : null;
   if (sp) { // GD's Start Pos settings (the ones this game has)
     const pick = (prop, label, opts, val) => `<label class="prop"><span>${label}</span><select class="field" data-prop="${prop}">${opts.map((t, i) => `<option value="${i}"${i === val ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
@@ -3845,6 +3851,11 @@ $('edPropBody').addEventListener('change', e => {
     if (prop === 'txt') { const t = cleanText(raw); if (!t) return renderPane(); o.txt = t; }
     else if (Number.isFinite(v)) o.s = Math.min(4, Math.max(0.25, v)); else return renderPane();
   } else if (prop === 'g') { const g = Math.round(v); for (const o of objs) if (o.t !== 'x') { if (raw && g >= 1 && g <= 999) o.g = g; else delete o.g; } }
+  else if (prop === 'sc') { // Edit Group's Size box: the same size as the Size − / + buttons give (blocks and slopes size by width and height)
+    if (!raw || !Number.isFinite(v) || v <= 0) return renderPane();
+    const sc = +Math.max(0.25, Math.min(4, v)).toFixed(3);
+    for (const o of objs) if (SC_T.includes(o.t)) { if (Math.abs(sc - 1) < 0.01) delete o.sc; else o.sc = sc; }
+  }
   else {
     const o = objs[0]; if (!o || o.t !== 'x' || !Number.isFinite(v)) return renderPane();
     if (prop === 'tg') o.g = Math.min(999, Math.max(1, Math.round(v))); else if (prop === 'dur') o.dur = Math.min(60, Math.max(0, v));
