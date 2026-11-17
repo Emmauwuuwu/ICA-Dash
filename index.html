@@ -2225,6 +2225,7 @@ const noclipNow = () => rp ? rp.run.noclip : hacks.noclip;
 // Watch the run you just finished, from the completion screen; Esc (or the pause button) ends it, the restart key starts it over
 function watchRun() {
   if (!lastRun) return;
+  if (cur.id !== 'test') world = worldFor(cur.code); // its own level (the level screen and the home demo swap the one behind the menus)
   practice = false; checkpoints = []; held = false; inputs.length = 0;
   reset(); startPlayback(lastRun, 'watch'); mode = 'play'; show(null); $('hud').hidden = false;
   draw(performance.now() / 1000, 0, 400); simT = lastDraw = performance.now(); // paint ahead first, as play() does
@@ -3090,7 +3091,9 @@ function drawTiles(L, key, soft, kd, tX, tY, paint, spawn) {
       if ((x < ax - 1 || x > bx + ahead || y < ay - 1 || y > by + 1) && !pinned.has(id)) { if (t.c) L.pool.push(t.c); L.tiles.delete(id); }
     }
   }
-  while (L.pool.length > 8) L.pool.pop().width = 0; // let the browser free spare tiles
+  // Spare tiles are kept for reuse (scrolling frees a batch of them at once and paints new ones moments later): making and
+  // freeing canvases means graphics memory allocations, which hitch on a slow GPU. Only past 64 are they let go.
+  while (L.pool.length > 64) L.pool.pop().width = 0;
   ctx.setTransform(kd, 0, 0, kd, tX, tY);
 }
 // The fixed (not moving, not fading) solids or spikes near a box in the level, for painting a tile.
@@ -3168,7 +3171,9 @@ function drawBg(hue) {
   if (lowDetail) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = `hsl(${Math.round(hue)},65%,17%)`; ctx.fillRect(0, 0, W, H); return; } // low detail: one flat colour
   const sz = 150 * S, hq = Math.round(hue), wd = Math.ceil((W + sz) * dpr) + 2, hd = Math.ceil(H * dpr), key = hq + ',' + wd + ',' + hd + ',' + dpr;
   if (BG.key !== key) {
-    BG.key = key; const c = BG.c ??= document.createElement('canvas'); c.width = wd; c.height = hd;
+    BG.key = key; const c = BG.c ??= document.createElement('canvas');
+    // a colour change repaints it in place; only a new size reallocates it (that's a graphics memory allocation each time)
+    if (c.width !== wd || c.height !== hd) { c.width = wd; c.height = hd; }
     const g = c.getContext('2d', { alpha: false }); g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, `hsl(${hq},65%,27%)`); bg.addColorStop(1, `hsl(${hq},70%,10%)`);
     g.fillStyle = bg; g.fillRect(0, 0, wd / dpr, H);
@@ -3245,7 +3250,8 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
   // Fixed walls and spikes come from the tile cache. In play, objects in a fade group can change, so while fully shown
   // they're drawn live (merged among themselves, the same way).
   // (in the editor the tiles last the whole session: edits drop just the tiles they touch, see tileEdits)
-  const hq = Math.round(hue), tileKey = [ed ? 'ed' + edEpoch : world.id ??= ++worldIds, kd, layout, ed, inGame, lowDetail].join(), isFade = o => inGame && o.g && world.fadeG.has(o.g);
+  // the walls' colour, in 3° steps: a colour fade repaints the tiles a third as often (the steps don't show on dark walls)
+  const hq = Math.round(hue / 3) * 3, tileKey = [ed ? 'ed' + edEpoch : world.id ??= ++worldIds, kd, layout, ed, inGame, lowDetail].join(), isFade = o => inGame && o.g && world.fadeG.has(o.g);
   drawTiles(LAYERS.walls, tileKey, layout ? 0 : hq, kd, tX, tY, (g, a, b, c, d) => {
     const grid = ed && (paintEdGrid(g, z, a, b, c, d), true);
     return paintWalls(g, tileObjs(world, a, b, c, d, false, inGame), hq, layout, ed, z, a, b, c, d) || grid;
