@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="description" content="ICA Dash: a one-button wave game with fifteen levels, a level editor, icons and achievements.">
 <style>:root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
-<script>window.supaReady = new Promise(r => window.supaDone = r);</script>
+<script>window.supaReady = new Promise(r => window.supaDone = r);
+// the colour theme (Settings > Look) is set before anything is drawn, so the page never flashes the wrong colours
+try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem('zd-theme')) || 'ica'; } catch (e) { document.documentElement.dataset.theme = 'ica'; }</script>
 <!-- async: the online library downloads alongside the page instead of holding it up; netInit() waits for supaReady -->
 <script async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.min.js" integrity="sha384-EyR2P0dlmjnEGcm9xcjdAn0VedZpRHEwDLP9oSS6wYMvzHBHkUrvgonveazJ/sSx" crossorigin="anonymous" onload="supaDone()" onerror="supaDone()"></script>
 </head>
@@ -32,6 +34,29 @@
   --body: "Archivo", "Segoe UI", system-ui, sans-serif;
   --cut: 12px;
   color-scheme: dark;
+  /* theme roles on top of the palette above (Classic): text on an accent fill, plain buttons, the logo's two colours, and the
+     see-through shades laid over the game behind the menus */
+  --on-sun: var(--ink);
+  --btn: var(--cobalt); --btn-hi: var(--cobalt-hi); --btn-fg: var(--paper);
+  --logo-a: var(--paper); --logo-b: var(--sun);
+  --veil: 12, 14, 28; /* r, g, b of the shade over the game */
+  --glass: rgba(12, 14, 28, .82);
+}
+/* Settings > Look. ICA: ICA's red with white on dark (the default); ICA light: red on white, like ICA's own signs. */
+:root[data-theme="ica"] {
+  --ink: #131015; --ink-2: #221d24; --paper: #ffffff; --muted: #a8a0aa; --hair: rgba(255, 255, 255, .22);
+  --sun: #e3000b; --sun-hi: #ff2b33; --on-sun: #ffffff; --rose: #ff6b78;
+  --btn: #36303a; --btn-hi: #4a424f; --btn-fg: #ffffff;
+  --logo-a: #e3000b; --logo-b: #ffffff;
+  --veil: 19, 16, 21; --glass: rgba(19, 16, 21, .84);
+}
+:root[data-theme="ica-light"] {
+  --ink: #ffffff; --ink-2: #f4eeee; --paper: #1d1a1b; --muted: #6d6567; --hair: rgba(29, 26, 27, .2);
+  --sun: #e3000b; --sun-hi: #c10009; --on-sun: #ffffff; --rose: #c10009;
+  --btn: #fde3e4; --btn-hi: #fbcfd1; --btn-fg: #b30008;
+  --logo-a: #e3000b; --logo-b: #1d1a1b;
+  --veil: 255, 255, 255; --glass: rgba(255, 255, 255, .9);
+  color-scheme: light;
 }
 html, body { height: 100%; margin: 0; overflow: hidden; background: var(--ink); color: var(--paper); font-family: var(--body); }
 body { user-select: none; -webkit-user-select: none; }
@@ -43,15 +68,15 @@ h1, h2, h3 { margin: 0; font-weight: 900; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* buttons: flat, cut corners, focus drawn inside (outlines get clipped) */
-button { font-family: var(--mono); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--paper);
-  background: var(--cobalt); border: 0; padding: 12px 18px; cursor: pointer; transition: background .12s, color .12s;
+button { font-family: var(--mono); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--btn-fg);
+  background: var(--btn); border: 0; padding: 12px 18px; cursor: pointer; transition: background .12s, color .12s;
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
-button:hover { background: var(--cobalt-hi); }
+button:hover { background: var(--btn-hi); }
 button:active { transform: translate(1px, 1px); }
 button:focus-visible { outline: none; box-shadow: inset 0 0 0 3px var(--sun); }
-button.primary { background: var(--sun); color: var(--ink); }
+button.primary { background: var(--sun); color: var(--on-sun); }
 button.primary:hover { background: var(--sun-hi); }
-button.primary:focus-visible { box-shadow: inset 0 0 0 3px var(--ink); }
+button.primary:focus-visible { box-shadow: inset 0 0 0 3px var(--on-sun); }
 button.ghost { background: transparent; box-shadow: inset 0 0 0 2px var(--hair); }
 button.ghost:hover { box-shadow: inset 0 0 0 2px var(--paper); background: transparent; }
 button.ghost:focus-visible { box-shadow: inset 0 0 0 3px var(--sun); }
@@ -63,7 +88,7 @@ button.danger { background: transparent; color: var(--rose); box-shadow: inset 0
 .screen { position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: 20px; box-sizing: border-box; overflow: auto;
   padding-block: calc(28px + env(safe-area-inset-top, 0px)) calc(28px + env(safe-area-inset-bottom, 0px));
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  background: linear-gradient(90deg, rgba(12, 14, 28, .9) 0%, rgba(12, 14, 28, .72) 45%, rgba(12, 14, 28, .25) 100%); }
+  background: linear-gradient(90deg, rgba(var(--veil), .9) 0%, rgba(var(--veil), .72) 45%, rgba(var(--veil), .25) 100%); }
 .wrap { width: min(1080px, 100%); margin-inline: auto; display: flex; flex-direction: column; gap: 18px; }
 
 /* panel: ink slab, hazard-stripe band on top */
@@ -78,35 +103,44 @@ button.danger { background: transparent; color: var(--rose); box-shadow: inset 0
 .warn { color: var(--rose); font-family: var(--mono); font-size: 13px; margin: 0; }
 .backbtn { align-self: flex-start; }
 
-/* home: logo + menu stacked on the left */
-#home .wrap { align-items: flex-start; }
-.logo { font-family: var(--display); font-weight: 900; text-transform: uppercase; line-height: .82; font-size: clamp(88px, 17vw, 190px); letter-spacing: -.01em; }
+/* home: logo + menu stacked on the left. Logo, rows and gaps shrink with the screen's height (dvh, with a vh fallback),
+   so the whole menu fits a 1366x768 laptop's browser window without scrolling. */
+#home .wrap { align-items: flex-start; gap: clamp(8px, 2vh, 18px); gap: clamp(8px, 2dvh, 18px); margin-inline: 0; } /* hugs the left edge */
+.logo { font-family: var(--display); font-weight: 900; text-transform: uppercase; line-height: .82; letter-spacing: -.01em;
+  font-size: clamp(56px, min(21vw, 14vh), 168px); font-size: clamp(56px, min(21vw, 14dvh), 168px); }
 .logo span { display: block; }
-.logo .dash { color: var(--sun); }
-.zig { width: min(420px, 80%); height: 34px; display: block; margin-top: 6px; }
-.menu { display: flex; flex-direction: column; gap: 6px; width: min(460px, 100%); margin-top: 10px; }
-.menu button { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; text-align: left; padding: 10px 18px 10px 20px;
-  background: transparent; box-shadow: inset 3px 0 0 var(--hair); clip-path: none; }
+/* the ICA mark (traced from ICA's logo), sized to be as wide as DASH below it */
+.logo .mark { display: block; height: .97em; width: auto; margin-bottom: .1em; fill: var(--logo-a); }
+.logo .dash { color: var(--logo-b); }
+.zig { width: auto; max-width: 80%; display: block; margin-top: 4px; height: clamp(20px, 4vh, 34px); height: clamp(20px, 4dvh, 34px); color: var(--sun); }
+.menu { display: flex; flex-direction: column; gap: 6px; width: min(460px, 100%); margin-top: clamp(0px, 1vh, 10px); }
+/* rows: the top-right corner cut at 45°, like the level board's rows */
+.menu button { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; text-align: left;
+  padding: clamp(6px, 1vh, 10px) 18px clamp(6px, 1vh, 10px) 20px; padding-block: clamp(6px, 1dvh, 10px);
+  background: transparent; color: var(--paper); box-shadow: inset 3px 0 0 var(--hair); clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
 .menu button:hover, .menu button:focus-visible { background: var(--paper); color: var(--ink); box-shadow: inset 6px 0 0 var(--sun); }
-.menu button.primary { background: var(--sun); color: var(--ink); box-shadow: none; }
-.menu b { font-family: var(--display); font-weight: 900; font-size: 40px; line-height: 1; letter-spacing: .02em; text-transform: uppercase; }
-.menu small { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; opacity: .75; text-align: right; display: flex; align-items: center; gap: 8px; }
+.menu button.primary { background: var(--sun); color: var(--on-sun); box-shadow: none; }
+.menu button.primary:hover, .menu button.primary:focus-visible { background: var(--sun-hi); box-shadow: inset 6px 0 0 var(--on-sun); }
+.menu b { font-family: var(--display); font-weight: 900; line-height: 1; letter-spacing: .02em; text-transform: uppercase;
+  font-size: clamp(28px, 5vh, 40px); font-size: clamp(28px, 5dvh, 40px); }
+.menu small { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; opacity: .85; text-align: right; display: flex; align-items: center; gap: 8px; }
 .menu canvas { width: 28px; height: 28px; }
 .controls { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; color: var(--muted); margin: 6px 0 0; max-width: 60ch; }
+#home .controls { max-width: 110ch; } /* one line on a laptop, to save height */
 
 /* departures board */
 .board { display: flex; flex-direction: column; gap: 6px; }
 .board > button, .board .row { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; text-align: left;
   text-transform: none; letter-spacing: 0; padding: 14px 18px; background: var(--ink-2); clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
-.board > button:hover, .board > button:focus-visible { background: var(--sun); color: var(--ink); box-shadow: none; }
+.board > button:hover, .board > button:focus-visible { background: var(--sun); color: var(--on-sun); box-shadow: none; }
 .board .no { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--muted); grid-row: span 2; }
-.board > button:hover .no, .board > button:focus-visible .no { color: var(--ink); }
+.board > button:hover .no, .board > button:focus-visible .no { color: var(--on-sun); }
 .board .name { font-family: var(--display); font-weight: 900; font-size: 36px; line-height: 1; text-transform: uppercase; overflow-wrap: anywhere; }
 .board .facts { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; text-transform: uppercase; }
 .board .facts i { display: inline-block; width: 10px; height: 10px; background: var(--c); margin-right: 6px; vertical-align: -1px; }
 .board .best { grid-row: span 2; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; font-family: var(--mono); font-size: 12px; min-width: 110px; }
 .board .best strong { font-size: 26px; }
-.meter { width: 110px; height: 6px; background: rgba(233, 237, 247, .15); }
+.meter { width: 110px; height: 6px; background: var(--hair); }
 .meter i { display: block; height: 100%; background: currentColor; }
 .board .row { grid-template-columns: minmax(0, 1fr) auto; }
 .board .row .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
@@ -116,11 +150,13 @@ button.danger { background: transparent; color: var(--rose); box-shadow: inset 0
 /* HUD */
 #hud { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
   display: grid; grid-template-columns: 1fr minmax(0, 520px) 1fr; align-items: center; gap: 14px; pointer-events: none; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+/* the HUD sits right on the game (dark in every level), so it keeps light text in every theme */
+#hud { --paper: #fff; --hair: rgba(255, 255, 255, .22); --veil: 12, 14, 28; --btn-fg: #fff; color: var(--paper); }
 #exitBtn { pointer-events: auto; justify-self: start; padding: 10px 14px; }
 .prog { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 15px; }
-.track { flex: 1; height: 10px; background: rgba(12, 14, 28, .6); box-shadow: inset 0 0 0 1px var(--hair); position: relative; }
+.track { flex: 1; height: 10px; background: rgba(var(--veil), .6); box-shadow: inset 0 0 0 1px var(--hair); position: relative; }
 .track i { display: block; height: 100%; background: var(--sun); }
-.track::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(12, 14, 28, .8) calc(10% - 2px) 10%); }
+.track::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(var(--veil), .8) calc(10% - 2px) 10%); }
 #pcBtns { pointer-events: auto; position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 10px; }
 #pcBtns[hidden], #spSwitch[hidden] { display: none; }
 #spSwitch { pointer-events: auto; position: fixed; left: 50%; bottom: calc(68px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 8px; align-items: center; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
@@ -136,14 +172,14 @@ button.danger { background: transparent; color: var(--rose); box-shadow: inset 0
 .tog { flex: none; width: 70px; height: 30px; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: .1em;
   box-shadow: inset 0 0 0 2px var(--hair); color: var(--muted); clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
 .tog::after { content: "OFF"; }
-input:checked + .tog { background: var(--sun); color: var(--ink); box-shadow: none; }
+input:checked + .tog { background: var(--sun); color: var(--on-sun); box-shadow: none; }
 input:checked + .tog::after { content: "ON"; }
 input:focus-visible + .tog { box-shadow: inset 0 0 0 3px var(--sun); }
 input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
 .binds { display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; align-items: center; }
 .binds span { font-weight: 700; }
 .binds button { min-width: 150px; }
-.binds button.listening { background: var(--sun); color: var(--ink); }
+.binds button.listening { background: var(--sun); color: var(--on-sun); }
 .panel h3 { font-family: var(--mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--sun); margin-top: 8px; font-weight: 700; }
 
 /* icon garage */
@@ -159,7 +195,7 @@ input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
 .shapes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .shapes button { background: var(--ink-2); padding: 8px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; }
 .shapes canvas { width: 64%; height: auto; aspect-ratio: 1; display: block; }
-.shapes [aria-pressed=true] { background: var(--sun); color: var(--ink); }
+.shapes [aria-pressed=true] { background: var(--sun); color: var(--on-sun); }
 .custom { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; }
 .commGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin: 6px 0 12px; }
 .commTile { background: var(--ink-2); padding: 8px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; min-width: 0; }
@@ -196,19 +232,19 @@ input[type=range] { accent-color: var(--sun); width: min(200px, 45vw); }
 .edtop { display: flex; gap: 8px; align-items: center; justify-content: space-between; width: 100%; }
 .edgroup { display: flex; gap: 6px; }
 .edcount { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 12px; text-shadow: 0 1px 2px #000; color: #fff; opacity: .85; }
-.eico { clip-path: none; width: 46px; height: 46px; padding: 0; display: grid; place-items: center; font-size: 20px; font-weight: 800; background: rgba(12,14,28,.82);
+.eico { clip-path: none; width: 46px; height: 46px; padding: 0; display: grid; place-items: center; font-size: 20px; font-weight: 800; background: var(--glass);
   border: 2px solid var(--hair); border-radius: 10px; }
 .eico:disabled { opacity: .35; cursor: not-allowed; }
-.eico.play { background: var(--sun); color: var(--ink); border-color: var(--sun); }
+.eico.play { background: var(--sun); color: var(--on-sun); border-color: var(--sun); }
 .edleft, .edright { display: flex; flex-direction: column; gap: 6px; }
-.edright button { clip-path: none; min-width: 92px; padding: 8px 10px; background: rgba(12,14,28,.82); border: 2px solid var(--hair); border-radius: 10px; font-size: 12px; }
+.edright button { clip-path: none; min-width: 92px; padding: 8px 10px; background: var(--glass); border: 2px solid var(--hair); border-radius: 10px; font-size: 12px; }
 .edright button:disabled { opacity: .35; cursor: not-allowed; }
 .edbottom { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 .edbar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 10px; padding: 10px; }
 .edbar::before { flex: 0 0 calc(100% + 44px); }
 .edtabs { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
 .edtabs button, .edside button { clip-path: none; background: var(--ink-2); padding: 9px 12px; text-align: center; min-width: 70px; border-radius: 8px; }
-.edtabs [aria-pressed=true], .edside [aria-pressed=true], .edcats [aria-selected=true], .edpane [aria-pressed=true] { background: var(--sun); color: var(--ink); }
+.edtabs [aria-pressed=true], .edside [aria-pressed=true], .edcats [aria-selected=true], .edpane [aria-pressed=true] { background: var(--sun); color: var(--on-sun); }
 .edmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .edcats { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
 .edcats button { clip-path: none; flex: 1 1 0; min-width: 0; height: 38px; padding: 0 10px; background: var(--ink-2); border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; }
@@ -265,7 +301,7 @@ textarea:focus-visible { outline: 2px solid var(--sun); }
 #hackMenu { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
 .hwin { position: absolute; width: 230px; background: var(--ink); pointer-events: auto; font-family: var(--mono); font-size: 13px;
   box-shadow: 0 0 0 1px var(--hair), 6px 6px 0 rgba(0, 0, 0, .5); }
-.hbar { display: flex; justify-content: space-between; gap: 8px; background: var(--sun); color: var(--ink); font-weight: 700; font-size: 12px;
+.hbar { display: flex; justify-content: space-between; gap: 8px; background: var(--sun); color: var(--on-sun); font-weight: 700; font-size: 12px;
   text-transform: uppercase; letter-spacing: .12em; padding: 7px 10px; cursor: grab; touch-action: none; }
 .hrow { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-top: 1px solid var(--hair); cursor: pointer; margin: 0; }
 .hrow:hover { background: var(--ink-2); }
@@ -284,12 +320,36 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
 .hwin.folded .hbar::after { content: "+"; }
 #fps { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 21;
   font-family: var(--mono); font-weight: 700; font-size: 13px; color: var(--sun); text-shadow: 0 1px 2px #000; pointer-events: none; }
-#toast { position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 22; background: var(--sun); color: var(--ink);
+/* tutorial: the question box and the tour note share the panel look (ink slab, hazard stripe on top). Neither sets display
+   unless it's open, so a closed dialog / popover stays hidden. */
+.tutdlg { box-sizing: border-box; width: min(380px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; border: 0; margin: auto;
+  padding: 0 20px 18px; background: var(--ink); color: var(--paper); font-family: var(--body); flex-direction: column; gap: 10px;
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px); }
+.tutdlg[open] { display: flex; }
+.tutdlg:popover-open { display: flex; }
+.tutdlg::before { content: ""; display: block; height: 8px; margin: 0 -20px 6px; flex: none;
+  background: repeating-linear-gradient(-45deg, var(--sun) 0 10px, var(--ink) 10px 20px); }
+.tutdlg h2 { font-family: var(--display); font-size: 34px; line-height: .95; text-transform: uppercase; letter-spacing: .01em; }
+.tutdlg p { margin: 0; font-size: 15px; line-height: 1.45; }
+.tutdlg .btnrow { margin-top: 6px; }
+.tutdlg .btnrow button { padding: 10px 14px; }
+#tutAsk { width: min(440px, calc(100vw - 32px)); }
+#tutAsk:modal { overscroll-behavior: contain; }
+#tutAsk::backdrop { background: rgba(0, 0, 0, .55); overflow: hidden; overscroll-behavior: contain; }
+/* the tour note is placed by script next to what it explains (it overrides the popover's centred spot) */
+#tourTip { position: fixed; inset: auto; margin: 0; }
+#tourTip .skip { margin-left: auto; }
+/* the spotlight: a ring around the part being explained, with everything else dimmed (clicks go through to the game) */
+#tourSpot { position: fixed; z-index: 40; pointer-events: none; box-shadow: 0 0 0 3px var(--sun), 0 0 0 200vmax rgba(0, 0, 0, .55);
+  transition: top .25s, left .25s, width .25s, height .25s; }
+#tourSpot.none { box-shadow: 0 0 0 200vmax rgba(0, 0, 0, .55); }
+@media (prefers-reduced-motion: reduce) { #tourSpot { transition: none; } }
+#toast { position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 22; background: var(--sun); color: var(--on-sun);
   font-family: var(--mono); font-weight: 700; font-size: 13px; letter-spacing: .06em; padding: 12px 18px; max-width: calc(100% - 32px); box-sizing: border-box;
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
 
 #done .panel, #pause .panel { margin-inline: auto; }
-#pause { background: rgba(12, 14, 28, .6); }
+#pause { background: rgba(var(--veil), .6); }
 .stat { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; font-family: var(--mono); font-size: 14px; }
 .stat dt { color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-size: 12px; align-self: center; }
 .stat dd { margin: 0; font-weight: 700; }
@@ -298,7 +358,8 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
 .field:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
 .field:disabled { opacity: .5; }
 .setrow .field { flex: 0 1 230px; min-width: 0; }
-.btnrow [data-sort][aria-pressed=true] { background: var(--sun); color: var(--ink); box-shadow: none; }
+#themePick { flex: none; flex-wrap: nowrap; gap: 6px; } #themePick button { padding: 10px 12px; }
+#themePick [aria-pressed=true], .btnrow [data-sort][aria-pressed=true] { background: var(--sun); color: var(--on-sun); box-shadow: none; }
 </style>
 
 <canvas id="c" aria-label="ICA Dash game"></canvas>
@@ -351,17 +412,31 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
 <div id="fps" hidden></div>
 <div id="toast" hidden></div>
 
+<!-- tutorial: a yes / no question (modal), and the tour: a spotlight on one part of the screen with a note beside it -->
+<dialog class="tutdlg" id="tutAsk" aria-labelledby="tutAskTitle" aria-describedby="tutAskText">
+  <h2 id="tutAskTitle"></h2>
+  <p id="tutAskText"></p>
+  <form method="dialog" class="btnrow" id="tutAskBtns"></form>
+</dialog>
+<div id="tourSpot" hidden></div>
+<dialog class="tutdlg" id="tourTip" popover="manual" aria-labelledby="tourTitle" aria-describedby="tourText">
+  <span class="label" id="tourStep"></span>
+  <h2 id="tourTitle"></h2>
+  <p id="tourText"></p>
+  <div class="btnrow" id="tourBtns"></div>
+</dialog>
+
 <section class="screen" id="home">
   <div class="wrap">
-    <h1 class="logo"><span>ICA</span><span class="dash">Dash</span></h1>
-    <svg class="zig" viewBox="0 0 420 34" aria-hidden="true"><polyline points="0,30 26,4 52,30 78,4 104,30 130,4 156,30 182,4 208,30 234,4 260,30 286,4 312,30 338,4 364,30 390,4 416,30" fill="none" stroke="#ffcc1a" stroke-width="5" stroke-linejoin="miter"/></svg>
+    <h1 class="logo"><svg class="mark" viewBox="81 144 306 158" role="img" aria-label="ICA"><defs><mask id="icaCut"><rect x="81" y="130" width="310" height="180" fill="#fff"/><path d="M265 130L309 130L245.7 245L201.7 245Z" fill="#000"/></mask></defs><rect x="81" y="149" width="38" height="151"/><path mask="url(#icaCut)" fill-rule="evenodd" d="M133 223.5a79 79 0 1 0 158 0a79 79 0 1 0-158 0ZM173 223.5a39 39 0 1 0 78 0a39 39 0 1 0-78 0Z"/><path d="M301 144.5L386.5 300L343.5 300L334.2 283L291.6 283L307 255L318.8 255L301 223.6L279.8 263L229.2 275Z"/></svg><span class="dash">Dash</span></h1>
+    <svg class="zig" viewBox="0 0 420 34" aria-hidden="true"><polyline points="0,30 26,4 52,30 78,4 104,30 130,4 156,30 182,4 208,30 234,4 260,30 286,4 312,30 338,4 364,30 390,4 416,30" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="miter"/></svg>
     <nav class="menu">
       <button class="primary" data-go="levels"><b>Play</b><small id="mPlay"></small></button>
       <button data-go="create"><b>Create</b><small id="mCreate"></small></button>
       <button data-go="online"><b>Online</b><small id="mOnline"></small></button>
       <button data-go="icons"><b>Icons</b><small><span id="mIcon"></span><canvas id="homeIcon" width="56" height="56"></canvas></small></button>
       <button data-go="achievements"><b>Achievements</b><small id="mAch"></small></button>
-      <button data-go="settings"><b>Settings</b><small>Keybinds</small></button>
+      <button data-go="settings"><b>Settings</b><small>Keys &amp; sound</small></button>
     </nav>
     <p class="controls" id="homeHint"></p>
   </div>
@@ -596,6 +671,11 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
         <label>Music <input type="range" id="volMusic" min="0" max="1" step="0.05"></label>
         <label>Sound effects <input type="range" id="volSfx" min="0" max="1" step="0.05"></label>
       </div>
+      <h3>Look</h3>
+      <div class="setrow" style="cursor:default"><span><b>Colours</b><small>ICA red on dark, ICA red on white, or the original yellow</small></span>
+        <div class="btnrow" id="themePick"><button class="ghost" data-theme="ica">ICA</button><button class="ghost" data-theme="ica-light">ICA light</button><button class="ghost" data-theme="classic">Classic</button></div></div>
+      <h3>Tutorial</h3>
+      <div class="btnrow"><button class="ghost" id="tutReplay">Replay the tour</button><button class="ghost" id="tutEditor">Learn the editor</button></div>
       <h3>Graphics</h3>
       <label class="setrow"><span><b>Low detail</b><small>For slow computers: lower resolution, no glow, plain background</small></span><input type="checkbox" class="sr" id="gfxLow"><span class="tog"></span></label>
       <label class="setrow"><span><b>Low latency</b><small>Shows each frame sooner, so clicks feel quicker. Turn it off if the game stutters or the screen tears</small></span><input type="checkbox" class="sr" id="gfxLat"><span class="tog"></span></label>
@@ -1976,9 +2056,62 @@ const FX = {
     }
   },
 };
+// Home screen demo: on a wide enough screen your icon flies the level behind the menu by itself (like GD's title screen),
+// steered by the autoplay's path search: it plans two seconds ahead but only flies the first one before planning again, so it
+// never runs into the dead end a plan's last moments can leave it in. It has its own state and trail, so it never touches the real
+// player, bests or hacks. Reaching the end moves on to the next level; if it ever crashes or finds no way on, it tries the
+// next level, and after 3 failures in a row the level behind the menu just scrolls past as before.
+// It flies the hardest main levels (Harder, Insane and Extreme), one after another.
+const DEMO_LEVELS = LEVELS.filter(l => ['Harder', 'Insane', 'Extreme'].includes(l.diff));
+let demo = null, demoFails = 0, demoLv = 0;
+const DFX = { // the same trail breaks as FX makes for the real player
+  corner() { const s = demo.s; if (hasBody(s)) return; demo.tr.push([s.x, s.y]); if (s.dual) demo.tr2.push([s.x, s.y2]); },
+  trail(k, x, y) { (k === 1 ? demo.tr : demo.tr2).push([x, y]); },
+  portal(o) {
+    const s = demo.s, both = (...q) => { demo.tr.push(...q.map(v => v && [s.x, v[0]])); if (s.dual) demo.tr2.push(...q.map(v => v && [s.x, v[1]])); };
+    if (o.k === 'T' && !o.v && !s.cube && !s.ball) { const d = teleportShift(world, o); if (d) both([s.y, s.y2], null, [s.y + d, s.y2 - d]); }
+    else if (o.k === 'm') { if (!!o.v !== s.mini && !s.cube && !s.ball) both([s.y, s.y2]); }
+    else if (o.k === 'w') { if (o.v && !s.dual) demo.tr2 = s.cube || s.ball ? [] : [[s.x, mirrorY(s, s.y)]]; }
+    else if (o.k === 'g' && o.v !== (s.cube ? 1 : s.ship ? 2 : s.ball ? 3 : 0)) { if (o.v) both([s.y, s.y2], null); else both([s.y, s.y2]); }
+  },
+};
+function demoStart() {
+  const l = DEMO_LEVELS[demoLv % DEMO_LEVELS.length]; world = worldFor(l.code); baseHue = l.hue; // the backdrop colour fades over to it
+  const s = freshState(); s.y2 = VH - s.y;
+  demo = { s, plan: [], sub: 0, hold: false, tr: [[s.x, s.y]], tr2: [], ang: Math.PI / 4, rot: 0 };
+}
+function demoStep(dt) {
+  let idx = Math.floor(demo.sub / K_DEC + 1e-9);
+  if (idx >= demo.plan.length) {
+    demo.plan = (findPath(world, stateOf(demo.s), 120, 20000, demo.hold) || []).slice(0, 60); demo.sub = 0; idx = 0;
+    if (!demo.plan.length) { demo = null; demoFails++; demoLv++; return; }
+  }
+  demo.hold = demo.plan[idx]; demo.sub += dt / STEP;
+  for (const t of [demo.tr, demo.tr2]) while (t.length > 1 && (!t[1] || t[1][0] < demo.s.x - 2500)) t.shift(); // drop trail far behind
+  const res = tick1(world, demo.s, demo.hold, dt, DFX, false);
+  if (res === 'win') { demoLv++; demoStart(); } // on to the next hard level
+  else if (res === 'dead') { demo = null; demoFails++; demoLv++; }
+}
+function drawDemo(g, dt) {
+  const s = demo.s, sc = s.mini ? CUBE_MINI : 1, tc = trailColour(), pulse = hacks.trail * (s.mini ? 0.6 : 1) * 2; // steady width: no music here
+  strokeTrail(g, demo.tr, hasBody(s) ? null : [s.x, s.y], pulse, tc);
+  if (s.dual) strokeTrail(g, demo.tr2, hasBody(s) ? null : [s.x, s.y2], pulse, tc);
+  if (s.ship) {
+    const sa = Math.atan2(s.vy || 0, SPEEDS[s.speedI] * B);
+    drawShip(g, s.x, s.y, sa, sc, icon, s.flip); if (s.dual) drawShip(g, s.x, s.y2, -sa, sc, icon, !s.flip);
+  } else if (s.cube || s.ball) { // a ball keeps rolling; a cube spins in the air and squares up on the ground
+    if (s.ball || !s.gnd) demo.rot += (s.flip ? -1 : 1) * (s.ball ? 10 : 7) * dt; else demo.rot = Math.round(demo.rot / (Math.PI / 2)) * (Math.PI / 2);
+    const f = s.ball ? drawBall : drawCube; f(g, s.x, s.y, demo.rot, sc, icon); if (s.dual) f(g, s.x, s.y2, -demo.rot, sc, icon);
+  } else { // the wave eases toward the way it's going, as the real one does
+    const full = s.mini ? Math.atan(2) : Math.PI / 4, tgt = s.slid ? 0 : s.dash != null ? -Math.atan(s.dash) : s.dir * full, k = (s.mini ? 0.4 : 0.25) * (s.slid ? 0.25 : 1);
+    demo.ang = s.dash != null ? tgt : tgt + (demo.ang - tgt) * Math.exp(dt * 240 * Math.log(1 - k * 0.225));
+    const ws = WAVE_S * (s.mini ? 0.6 : 1); drawIcon(g, s.x, s.y, demo.ang, ws, icon); if (s.dual) drawIcon(g, s.x, s.y2, -demo.ang, ws, icon);
+  }
+}
+const freshState = () => ({ x: 0, y: VH / 2, bt: 0, bb: VH, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
+    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, ball: false, bair: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 });
 function reset() {
-  p = { x: 0, y: VH / 2, bt: 0, bb: VH, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
-    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, ball: false, bair: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 };
+  p = freshState();
   trail = []; trail2 = []; parts = []; booms = []; camSnap = true;
   const cp =practice && checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
   const sx = hacks.start > 0 ? world.end * hacks.start : 0;
@@ -2344,7 +2477,7 @@ function step(dt) {
   } else if (mode === 'dead') {
     deadT -= dt;
     if (deadT <= 0) { if (cur.id === 'test' && from === 'editor' && !practice) return endTest(); attempt++; reset(); mode = 'play'; }
-  }
+  } else if (mode === 'menu' && demo) demoStep(dt);
   for (const q of parts) {
     const k = q.dr ? Math.exp(-q.dr * dt) : 0.98; q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= k; q.vy *= k; q.life -= dt;
     if (q.vr) q.rot += q.vr * dt;
@@ -2918,6 +3051,18 @@ function drawBg(hue) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(BG.c, Math.round(off * dpr), 0);
 }
 
+const trailColour = () => COLORS[icon.c2 === 11 ? icon.c1 : icon.c2]; // see the trail notes in draw()
+// The wave's trail: a band in colour 2 darkened, then a light core, through the points in tr (null breaks it) and on to end.
+function strokeTrail(g, tr, end, pulse, tc) {
+  if (!tr.length || pulse <= 0) return; // trail size 0x: no trail (canvas ignores a 0 line width)
+  const mixc = (k, w) => '#' + [1, 3, 5].map(i => Math.round(parseInt(tc.slice(i, i + 2), 16) * k + 255 * w).toString(16).padStart(2, '0')).join('');
+  g.beginPath(); let gap = true;
+  for (const q of tr) { if (!q) { gap = true; continue; } if (gap) g.moveTo(q[0], q[1]); else g.lineTo(q[0], q[1]); gap = false; }
+  if (end && !gap) g.lineTo(end[0], end[1]);
+  g.lineJoin = 'miter'; g.miterLimit = 2; g.lineCap = 'butt';
+  g.strokeStyle = mixc(0.55, 0); g.lineWidth = 12 * pulse; g.stroke(); // band
+  g.strokeStyle = mixc(0.35, 0.65); g.lineWidth = 4 * pulse; g.stroke(); // core
+}
 function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahead (more while a level loads)
   const ed = mode === 'edit', z = ed ? edZoom : 1, k = S * z, viewW = W / k, viewH = H / k;
   const inGame = mode === 'play' || mode === 'dead' || mode === 'win' || mode === 'pause';
@@ -2940,6 +3085,7 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
     }
     camX = editCam; camY = edCamY;
   }
+  else if (demo) { camX = demo.s.x - viewW * 0.62; camY = 0; } // home: follow the demo icon, clear of the menu on the left
   else { camX += 150 * dt; if (camX > world.end) camX = -viewW * 0.3; camY = 0; }
   const target = inGame ? triggerHue(world, p, baseHue) + (speedI - 1) * 35 : baseHue; // colour triggers shift the hue
   hue += (((target - hue) % 360 + 540) % 360 - 180) * Math.min(1, dt * 3);
@@ -3060,6 +3206,7 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
       ctx.globalAlpha = 0.45; renderObj(ctx, item.make(snap(hoverCell[0]), snap(hoverCell[1])), B, t); ctx.globalAlpha = 1;
     }
   }
+  if (demo && mode === 'menu') drawDemo(ctx, dt);
   // trail + player
   if (inGame) {
     // GD's wave trail (HardStreak): a band 12 x pulseSize GD units wide with a core 4 x pulseSize wide, in the icon's colour 2;
@@ -3069,16 +3216,8 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
     const pulse = (hacks.noPulse ? 1 : (audioScale(dt) - 0.1) * 2.1 + 0.4) * hacks.trail * (p.mini ? 0.6 : 1) * 2; // GD units -> px
     // (GD: updatePlayerColors sets the wave trail to colour 2. Our default colour 2 is the dark outline navy, which would hide
     // the trail, so that one falls back to colour 1.)
-    const tc = COLORS[icon.c2 === 11 ? icon.c1 : icon.c2], mixc = (k, w) => '#' + [1, 3, 5].map(i => Math.round(parseInt(tc.slice(i, i + 2), 16) * k + 255 * w).toString(16).padStart(2, '0')).join('');
-    for (const [tr, py, on] of [[trail, p.y, true], [trail2, p.y2, p.dual]]) { // null breaks it (cube stretches)
-      if (!tr.length || pulse <= 0) continue; // trail size 0x: no trail (canvas ignores a 0 line width)
-      ctx.beginPath(); let gap = true;
-      for (const q of tr) { if (!q) { gap = true; continue; } if (gap) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); gap = false; }
-      if (alive && on && !hasBody(p) && !gap) ctx.lineTo(p.x, py);
-      ctx.lineJoin = 'miter'; ctx.miterLimit = 2; ctx.lineCap = 'butt';
-      ctx.strokeStyle = mixc(0.55, 0); ctx.lineWidth = 12 * pulse; ctx.stroke(); // band
-      ctx.strokeStyle = mixc(0.35, 0.65); ctx.lineWidth = 4 * pulse; ctx.stroke(); // core
-    }
+    const tc = trailColour();
+    for (const [tr, py, on] of [[trail, p.y, true], [trail2, p.y2, p.dual]]) strokeTrail(ctx, tr, alive && on && !hasBody(p) ? [p.x, py] : null, pulse, tc);
     if (seen && p.ship) { // GD's ship turns toward the way it's moving, easing 0.15 of the way per frame (updateShipRotation)
       const v = SPEEDS[p.speedI] * B, gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0, tgt = Math.atan2(p.vy || 0, v);
       p.sa += (tgt - p.sa) * Math.min(1, gdt * 0.15 * 54);
@@ -3211,10 +3350,13 @@ function drawFrame(now, dt) {
   const real = p; p = ahead;
   try { draw(now / 1000, dt); } finally { real.sa = p.sa; real.rot = p.rot; real.ang = p.ang; p = real; } // the icon's turn eases frame to frame: keep it
 }
+const homeEl = $('home');
 function frame() {
   const now = performance.now();
   if (now - simT > 100) simT = now - 100;
   if (!hacks.cbf) for (const q of inputs) q[0] = now; // without click-between-frames, a press only counts from the frame after it
+  // the home demo runs only on the home screen, on screens wide enough to show it beside the menu, and not with reduced motion
+  if (mode === 'menu' && !homeEl.hidden && W >= 900 && !calm && demoFails < 3) { if (!demo) demoStart(); } else demo = null;
   while (simT + STEP * 1000 <= now) {
     simT += STEP * 1000;
     while (inputs.length && inputs[0][0] <= simT) { const q = inputs.shift(); held = q[1]; if (q[2]) freshClick = true; }
@@ -3223,7 +3365,7 @@ function frame() {
   }
   const dt = Math.min(0.05, (now - lastDraw) / 1000); lastDraw = now;
   frameAvg += (Math.min(34, Math.max(4, dt * 1000)) - frameAvg) * 0.1; // the usual time between frames, in ms
-  drawFrame(now, dt);
+  if (W > 0 && H > 0) drawFrame(now, dt); // a window with no size yet (still being laid out) has nothing to draw: drawing would throw and stop the loop
   if (!$('icons').hidden) drawPreview(now / 1000, dt);
   if (hacks.fps) { fpsN++; if (now - fpsT > 500) { $('fps').textContent = Math.round(fpsN * 1000 / (now - fpsT)) + ' FPS'; fpsN = 0; fpsT = now; } }
   next();
@@ -3268,7 +3410,7 @@ function go(id) {
   if (id === 'icons') { renderIcons(); loadComm(); }
   if (id === 'settings') { listening = null; renderBinds(); $('hackNote').hidden = !unlocked; renderAccount(); $('gfxLow').checked = gfx.low; $('gfxLat').checked = gfx.lat; $('gfxAhead').checked = gfx.ahead; }
   if (id === 'online') renderOnline();
-  if (id === 'home') renderHome();
+  if (id === 'home') { demo = null; demoFails = 0; renderHome(); } // the demo starts its current level over (the level screen changed the backdrop)
   if (id === 'achievements') renderAch();
 }
 function renderAch() {
@@ -3288,7 +3430,8 @@ function renderHome() {
   $('mPlay').textContent = `${LEVELS.length} levels · ${done} cleared`;
   $('mCreate').textContent = customs.length ? `${customs.length} saved` : 'Build your own';
   $('mAch').textContent = `${ACH.filter(a => ach[a.id]).length} / ${ACH.length}`;
-  $('mOnline').textContent = NET.ready ? `${onlineItems().length} levels` : NET.reason ? 'Sign in to play' : 'Connecting…';
+  const nOn = NET.ready && onlineItems().length;
+  $('mOnline').textContent = NET.ready ? `${nOn} level${nOn === 1 ? '' : 's'}` : NET.reason ? 'Sign in to play' : 'Connecting…';
   $('mIcon').textContent = icon.useCustom && customImg.naturalWidth ? 'Custom' : SHAPES[icon.shape].name;
   const g = $('homeIcon').getContext('2d'); g.clearRect(0, 0, 56, 56); drawIcon(g, 26, 28, 0, 1.9, icon);
 }
@@ -3650,12 +3793,13 @@ function updateEdInfo() {
   const n = edObjs.length, txt = `${n} object${n === 1 ? '' : 's'} · ${Math.round(world.end / B)} blocks · ${Math.round(duration(world))} s`;
   $('edStats').textContent = '· ' + txt; $('edInfo').textContent = txt;
 }
-function openEditor(l) {
+function openEditor(l, noAsk = false) {
   editing = l; edObjs = levelObjects(l.code); sel = new Set(); undoS = []; redoS = []; edTool = 'build'; clearArmed = false;
   edZoom = 1; edCamY = VH - 0.68 * (H / S); editCam = -3 * B; // the ground just above the bottom bar, room above
   $('lvName').value = l.name; $('lvName').readOnly = !!l.main; $('edReset').hidden = !l.main; // main levels keep their names
   $('codeMsg').textContent = '';
   resumeEditor();
+  if (!noAsk) askEditorTour(); // until you've taken the editor tour (or said don't ask again), opening the editor offers it
 }
 function resumeEditor() {
   mode = 'edit'; $('hud').hidden = true; show('editor'); closePops();
@@ -3715,7 +3859,9 @@ function renderBinds() {
   const slot = (label, id) => `<span>${label}</span><button class="${listening === String(id) ? 'listening' : 'ghost'}" data-bind="${id}">${listening === String(id) ? 'Press a key…' : keyName(typeof id === 'string' ? keys[id] : keys.climb[id])}</button>`;
   $('binds').innerHTML = slot('Climb', 0) + slot('Climb · 2nd', 1) + slot('Climb · 3rd', 2) + slot('Pause', 'exit') + slot('Restart', 'restart');
   const names = keys.climb.filter(Boolean).map(keyName);
-  $('homeHint').textContent = `Hold ${names.length ? names.join(' / ') + ' / click / tap' : 'click / tap'} to climb · let go to dive · ${keyName(keys.exit)} pauses`
+  // a phone or tablet (touch only, no mouse): the hint talks about the screen, not keys
+  if (matchMedia('(hover: none) and (pointer: coarse)').matches) $('homeHint').textContent = 'Touch and hold to climb · let go to dive · tap II to pause';
+  else $('homeHint').textContent = `Hold ${names.length ? names.join(' / ') + ' / click / tap' : 'click / tap'} to climb · let go to dive · ${keyName(keys.exit)} pauses`
     + (keys.restart ? ` · ${keyName(keys.restart)} restarts` : '');
 }
 // ---------- secret hack menu ----------
@@ -4558,6 +4704,13 @@ $('gfxLow').addEventListener('change', e => {
   BG.key = ''; resize(); // new resolution; the tiles repaint on their own (their key includes it)
 });
 $('gfxLat').addEventListener('change', e => { gfx.lat = e.target.checked; store.set('zd-gfx', gfx); syncCanvas(); });
+// Settings > Look: the colour theme (applied in the page's <head> on load, so it's there before the first paint)
+function renderTheme() { for (const b of $('themePick').children) b.setAttribute('aria-pressed', b.dataset.theme === document.documentElement.dataset.theme); }
+$('themePick').addEventListener('click', e => {
+  const b = e.target.closest('[data-theme]'); if (!b) return;
+  document.documentElement.dataset.theme = b.dataset.theme; store.set('zd-theme', b.dataset.theme); renderTheme();
+});
+renderTheme();
 $('gfxAhead').addEventListener('change', e => { gfx.ahead = e.target.checked; store.set('zd-gfx', gfx); });
 addEventListener('pointerup', e => inputUp('p' + e.pointerId, e));
 addEventListener('pointercancel', e => inputUp('p' + e.pointerId, e));
@@ -4565,6 +4718,142 @@ addEventListener('blur', () => { downIds.clear(); if (inGame()) setHeld(false); 
 
 renderBinds(); renderHacks(); renderHome();
 netInit(); // connects the account and online levels once the platform answers; the game works offline without it
+// ---------- tutorial ----------
+// A first visit asks whether you'd like a short tour (playing, keybinds, an account, making a level). It ends by asking whether
+// you'd like to learn the editor; until you have (or say don't ask again), opening the editor asks too. Settings > Tutorial
+// replays either. Saved as zd-tut: { intro: 'done' | 'skipped', editor: 'done' | 'later' | 'never' }.
+let tut = store.get('zd-tut', {}), tour = null, tourHidden = false;
+const saveTut = () => store.set('zd-tut', tut);
+const shown = el => !!el && el.getClientRects().length > 0;
+
+// A yes / no question: resolves to the value of the button picked, or '' if it was closed with Esc.
+function ask(title, text, buttons) {
+  const d = $('tutAsk'); $('tutAskTitle').textContent = title; $('tutAskText').textContent = text;
+  $('tutAskBtns').innerHTML = buttons.map(([v, label, primary], i) => `<button value="${v}" class="${primary ? 'primary' : 'ghost'}"${i ? '' : ' autofocus'}>${esc(label)}</button>`).join('');
+  d.returnValue = ''; d.showModal();
+  return new Promise(r => d.addEventListener('close', () => { const v = d.returnValue; d.returnValue = ''; r(v); }, { once: true }));
+}
+$('tutAsk').addEventListener('keydown', e => e.stopPropagation()); // Enter / Esc here are for the question, not the game or editor behind
+
+const climbKeys = () => keys.climb.filter(Boolean).map(keyName).join(', ') || 'click';
+const TOURS = {
+  intro: [
+    { screen: 'home', title: 'Welcome to ICA Dash', text: 'It takes one button: hold to climb at 45°, let go to dive. Get through each level without touching a wall, a spike or a saw.' },
+    { screen: 'home', target: '#home .menu .primary', title: 'Play', text: () => '15 levels, from Easy to Extreme; beating one unlocks the next. ' + (matchMedia('(hover: none) and (pointer: coarse)').matches
+      ? 'Touch and hold the screen to climb; tap II to pause.' : `Hold ${climbKeys()}, the mouse or the screen to climb. ${keyName(keys.exit)} pauses.`) },
+    { screen: 'settings', target: '#binds', title: 'Keybinds', text: 'Change your keys here: click a slot, then press the key you want. You can have up to three climb keys.' },
+    { screen: 'settings', target: () => shown($('acctAuth')) ? $('acctAuth') : $('acctStatus'), title: 'Make an account',
+      text: "Playing never needs one. An account (a username and a password, here) lets you upload levels, like other people's, and keep your progress in the cloud." },
+    { screen: 'settings', target: '#themePick', title: 'Colours', text: 'Pick ICA, ICA light or the original Classic look.' },
+    { screen: 'create', target: '#newLevel', title: 'Make a level', text: 'New level opens the editor. Your levels are saved in this browser, and with an account you can upload them for everyone.' },
+    { screen: 'create', target: '#newLevel', title: 'Learn the editor?', text: 'Want a quick tour of the editor? It shows how to place, move, test and save your level.',
+      buttons: [['editor', 'Yes, show me', true], ['later', 'Not now']] },
+  ],
+  editor: [
+    { target: '.edtabs [data-tool=build]', title: 'Build', text: 'Pick an object below, then click the grid to place it. Drag the empty grid to look around. Shortcut: 1.' },
+    { target: '#edCats', title: 'Object tabs', text: 'Blocks, gameplay objects (portals, orbs and pads) and more. F1 and F2 switch tabs.' },
+    { target: '#edPane', title: 'Objects', text: 'Click one to build with it; the arrows turn the page. What you place stays selected: Q / E turn it and W A S D move it.' },
+    { target: '.edtabs [data-tool=edit]', title: 'Edit', text: 'Click an object to select it, Shift+click to add more. W A S D move, Q / E turn, Ctrl+C / Ctrl+V copy and paste. Shortcut: 2.' },
+    { target: '.edtabs [data-tool=delete]', title: 'Delete', text: 'Click objects to remove them. Shortcut: 3.' },
+    { target: '.edside', title: 'Swipe, free move and grid', text: 'Swipe (or hold Shift) paints, deletes or selects as you drag. Free move lets you drag selected objects. Grid sets the snap size.' },
+    { target: () => $('edUndo').parentElement, title: 'Undo and redo', text: 'Undo (Ctrl+Z), redo (Ctrl+Shift+Z) and delete what is selected.' },
+    { target: () => $('edZoomIn').parentElement, title: 'Zoom, test and music', text: '+ and − zoom (or Ctrl+mouse wheel). ▶ playtests your level from the start (Enter), and ♫ plays its song from where you are looking.' },
+    { target: '#edPause', title: 'Menu', text: 'Name your level, pick a song, save it and copy a share code. Esc opens it too.' },
+    { title: "You're ready", text: 'Place a few blocks, press ▶ to try them, then save from the menu. Settings > Tutorial shows this again.' },
+  ],
+};
+
+function startTour(name) { tour = { name, i: 0 }; tourHidden = false; showStep(); }
+function endTour() {
+  if (!tour) return;
+  if (tour.name === 'intro') tut.intro = 'done'; else tut.editor = 'done';
+  saveTut(); tour = null;
+  $('tourSpot').hidden = true; if ($('tourTip').matches(':popover-open')) $('tourTip').hidePopover();
+}
+function tourTarget() {
+  const st = TOURS[tour.name][tour.i], el = typeof st.target === 'function' ? st.target() : st.target ? document.querySelector(st.target) : null;
+  return shown(el) ? el : null;
+}
+function showStep() {
+  const steps = TOURS[tour.name], st = steps[tour.i], last = tour.i === steps.length - 1;
+  if (st.screen && $(st.screen).hidden) go(st.screen);
+  $('tourStep').textContent = `${tour.i + 1} / ${steps.length}`;
+  $('tourTitle').textContent = st.title;
+  $('tourText').textContent = typeof st.text === 'function' ? st.text() : st.text;
+  const btns = st.buttons || [...(tour.i ? [['back', 'Back']] : []), ['next', last ? 'Done' : 'Next', true], ...(last ? [] : [['skip', 'Skip tour']])];
+  $('tourBtns').innerHTML = btns.map(([act, label, primary]) => `<button type="button" data-act="${act}" class="${primary ? 'primary' : 'ghost'}${act === 'skip' ? ' skip' : ''}">${esc(label)}</button>`).join('');
+  const tip = $('tourTip'); if (!tip.matches(':popover-open')) tip.showPopover();
+  tourTarget()?.scrollIntoView({ block: 'center', behavior: 'instant' }); // settings scrolls: bring the part into view first
+  placeTour();
+  tip.querySelector('.primary')?.focus({ preventScroll: true }); // the note takes focus, so Enter goes on
+}
+// The ring goes round the part being explained; the note sits below it if there's room, else above, else beside it.
+function placeTour() {
+  const tip = $('tourTip'), spot = $('tourSpot'), el = tourTarget(), vw = innerWidth, vh = innerHeight, m = 12, gap = 14, pad = 6;
+  const tw = tip.offsetWidth, th = tip.offsetHeight, clampX = v => Math.min(Math.max(m, v), vw - tw - m), clampY = v => Math.min(Math.max(m, v), vh - th - m);
+  spot.hidden = false;
+  if (!el) { // nothing to point at: dim everything, note in the middle
+    spot.className = 'none'; Object.assign(spot.style, { left: vw / 2 + 'px', top: vh / 2 + 'px', width: '0px', height: '0px' });
+    tip.style.left = clampX((vw - tw) / 2) + 'px'; tip.style.top = clampY((vh - th) / 2) + 'px'; return;
+  }
+  const r = el.getBoundingClientRect(), t = r.top - pad, b = r.bottom + pad, l = r.left - pad, rt = r.right + pad;
+  spot.className = ''; Object.assign(spot.style, { left: l + 'px', top: t + 'px', width: rt - l + 'px', height: b - t + 'px' });
+  let x, y;
+  if (b + gap + th <= vh - m) { y = b + gap; x = clampX(l); }
+  else if (t - gap - th >= m) { y = t - gap - th; x = clampX(l); }
+  else if (rt + gap + tw <= vw - m) { x = rt + gap; y = clampY(t); }
+  else if (l - gap - tw >= m) { x = l - gap - tw; y = clampY(t); }
+  else { x = clampX((vw - tw) / 2); y = clampY(vh - th - m); }
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+$('tourBtns').addEventListener('click', e => {
+  const act = e.target.closest('[data-act]')?.dataset.act; if (!act || !tour) return;
+  const steps = TOURS[tour.name];
+  if (act === 'next') { if (tour.i === steps.length - 1) endTour(); else { tour.i++; showStep(); } }
+  else if (act === 'back') { tour.i--; showStep(); }
+  else if (act === 'skip') endTour();
+  else if (act === 'editor') { endTour(); editorTour(); }
+  else if (act === 'later') { endTour(); tut.editor = 'later'; saveTut(); go('home'); }
+});
+$('tourTip').addEventListener('keydown', e => { // keys pressed on the note work the tour, and don't reach the game or editor
+  e.stopPropagation();
+  if (e.key === 'Escape') endTour();
+  else if (e.key === 'ArrowRight') $('tourBtns').querySelector('[data-act=next]')?.click();
+  else if (e.key === 'ArrowLeft') $('tourBtns').querySelector('[data-act=back]')?.click();
+});
+// Keep the tour with the screen: it follows layout changes; playtesting from the editor hides it until you're back; leaving
+// the screen a step is about ends the tour.
+setInterval(() => {
+  if (!tour) return;
+  const st = TOURS[tour.name][tour.i], away = tour.name === 'editor' ? $('editor').hidden : !!st.screen && $(st.screen).hidden;
+  if (away && tour.name === 'editor' && inGame()) { if (!tourHidden) { tourHidden = true; $('tourSpot').hidden = true; $('tourTip').hidePopover(); } return; }
+  if (away) return endTour();
+  if (tourHidden) { tourHidden = false; $('tourTip').showPopover(); }
+  placeTour();
+}, 250);
+addEventListener('resize', () => { if (tour && !tourHidden) placeTour(); });
+
+// the editor tour, in a new empty level if the editor isn't open
+function editorTour() {
+  if (mode !== 'edit') openEditor({ id: 'c' + Date.now(), name: 'Untitled level', code: 'ICA2;' }, true);
+  startTour('editor');
+}
+async function askEditorTour() {
+  if (tour || tut.editor === 'done' || tut.editor === 'never') return;
+  const v = await ask('Learn the editor?', 'Want a quick tour of the editor now? It shows how to place, move, test and save your level.',
+    [['yes', 'Yes, show me', true], ['later', 'Not now'], ['never', "Don't ask again"]]);
+  if (v === 'yes') startTour('editor'); else { tut.editor = v === 'never' ? 'never' : 'later'; saveTut(); }
+}
+$('tutReplay').addEventListener('click', () => startTour('intro'));
+$('tutEditor').addEventListener('click', editorTour);
+// a first visit (no progress and no levels yet) offers the tour on the home screen
+if (!tut.intro && !Object.keys(bests).length && !customs.length) setTimeout(async () => {
+  if (homeEl.hidden || mode !== 'menu' || tour) return;
+  const v = await ask('Welcome to ICA Dash', 'New here? A one-minute tour shows how to play, change your keys, make an account and build a level.',
+    [['yes', 'Show me', true], ['no', 'No thanks']]);
+  if (v === 'yes') startTour('intro'); else { tut.intro = 'skipped'; saveTut(); }
+}, 700);
+
 document.fonts?.ready.then(renderHome);
 requestAnimationFrame(frame);
 </script>

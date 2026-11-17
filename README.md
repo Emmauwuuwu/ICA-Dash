@@ -29,6 +29,8 @@ Keybinds can be changed in Settings.
 - **Share codes**: copy a level's code from the editor and paste someone else's to play it
 - **Music and sound**: 20 original built-in tracks (made in the browser), sound effects, volume sliders, and Newgrounds songs by ID for your own levels. Newgrounds doesn't allow other sites to stream its songs, so, like GD, you download a song from Newgrounds once and load the file; it stays in your browser. When you open someone's level that uses a Newgrounds song you don't have, the game asks first: open it on Newgrounds, load the file, or play without it, and the online list shows each level's song. Levels can also use a **SoundCloud** track: paste its link in the editor's Song menu and it plays for everyone through SoundCloud's own player, with nothing to download (GitHub Pages version)
 - **Practice mode** from the pause menu, like Geometry Dash's: place checkpoints (Z / X or the on-screen buttons, plus optional auto checkpoints), respawn at the newest one and keep going, with its own practice best
+- **Tutorial**: a first visit offers a short tour (playing, keybinds, making an account, making a level) that ends by offering an editor tour; until you take it, opening the editor offers it again. Settings → Tutorial replays both
+- **Looks** (Settings → Look): ICA red on dark, ICA red on white, or the original yellow. The home screen shows your icon flying the hardest levels
 - **Hacks** in a hidden menu: show path, start position, hitboxes, speedhack, wave pulse and trail size and more
 
 Progress, icons and your levels are saved in your browser.
