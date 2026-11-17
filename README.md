@@ -31,7 +31,7 @@ Keybinds can be changed in Settings.
 - **Practice mode** from the pause menu, like Geometry Dash's: place checkpoints (Z / X or the on-screen buttons, plus optional auto checkpoints), respawn at the newest one and keep going, with its own practice best
 - **Tutorial**: a first visit offers a short tour (playing, keybinds, making an account, making a level) that ends by offering an editor tour; until you take it, opening the editor offers it again. Settings → Tutorial replays both
 - **Looks** (Settings → Look): ICA red on dark, ICA red on white, or the original yellow. The home screen shows your icon flying the hardest levels
-- **Replays**: after beating a level, *Watch your run* plays your run back exactly (Esc ends it, the restart key starts it over)
+- **Replays**: after beating a level, *Watch your run* plays your run back exactly (Esc ends it, the restart key starts it over). A practice win plays back as one run from the start, with the deaths cut out
 - **Hacks** in a hidden menu, including **macros** (record a level's winning run, then let the bot play it back): show path, start position, hitboxes, speedhack, wave pulse and trail size and more
 
 Progress, icons and your levels are saved in your browser.

@@ -409,7 +409,7 @@ input:focus-visible + .hchk { outline: 2px solid var(--sun); outline-offset: 2px
     <label class="hrow"><input type="radio" class="sr" name="hMacro" value="play"><span class="hchk hdot"></span>Play</label>
     <p class="hrow hfoot" id="hMacroInfo"></p>
     <button class="hrow hbtn" id="hMacroDel" hidden>Delete this level's macro</button>
-    <p class="hrow hfoot">Record: beating a level saves that run as its macro. Play: the bot plays the level's macro on every attempt (counts as a hack, so nothing is saved).</p>
+    <p class="hrow hfoot">Record: beating a level saves that run as its macro (in practice mode too: the deaths are cut, so it's one run from the start). Play: the bot plays the level's macro on every attempt (counts as a hack, so nothing is saved).</p>
   </div>
   <div class="hwin" data-win="perf">
     <div class="hbar"><span>Performance</span></div>
@@ -2144,7 +2144,7 @@ function reset() {
   trail = hasBody(p) ? [] : [[p.x, p.y]]; trail2 = p.dual && !hasBody(p) ? [[p.x, p.y2]] : [];
   plan = hacks.auto ? findPath(world, stateOf(p), Infinity, 300000, false) || [] : []; // autoplay: route to the end, worked out now
   songStop(); if (!p.wait) setTimeout(attemptMusic, 0); // each attempt starts the song again, from where it starts (a checkpoint: that spot)
-  startRecording();
+  startRecording(cp);
 }
 
 // ---------- replays and macros ----------
@@ -2154,8 +2154,12 @@ function reset() {
 // steps. A finished run can be watched from the completion screen; with Macro > Record a win is kept as that level's macro,
 // and Macro > Play has the bot play it (counted as a hack). The run also keeps the speedhack and noclip it was made with.
 let rec = null, rp = null, lastRun = null; // recording this attempt / playing one back { kind: 'watch' | 'macro', run, i, n } / the run just won
-function startRecording() {
-  rp = null; rec = null;
+function startRecording(cp) {
+  rp = null; delete p.mark; // (respawning copied the checkpoint, bookmark and all, onto the player)
+  // Practice: respawning at a checkpoint carries the same recording on from where it was when that checkpoint was made, and
+  // cuts what came after it (the attempt that died). So beating a level in practice leaves one run from the start to the end.
+  if (cp?.mark && cp.mark.rec === rec) { rec.log.length = cp.mark.len; rec.n = cp.mark.n; rec.held = cp.mark.held; return; }
+  rec = null;
   if (cur.id === 'test') return; // editor playtests aren't kept
   rec = { level: cur.id, start: JSON.stringify(p), log: [], n: 0, held: false, speed: hacks.speed, noclip: hacks.noclip };
   if (hacks.macro === 'play' && macros[cur.id] && !practice) startPlayback(macros[cur.id], 'macro'); // the bot takes this attempt
@@ -2176,6 +2180,8 @@ function inputStep(fresh) {
   if (rec) { if (held !== rec.held || fresh) { rec.log.push([rec.n, held ? 1 : 0, fresh ? 1 : 0]); rec.held = held; } rec.n++; }
   return fresh;
 }
+// A checkpoint keeps where this attempt's recording was when it was made (the physics state itself is all in stateOf).
+const markCp = st => { if (rec) st.mark = { rec, n: rec.n, len: rec.log.length, held: rec.held }; return st; };
 const simSpeed = () => rp ? rp.run.speed : hacks.speed;
 const noclipNow = () => rp ? rp.run.noclip : hacks.noclip;
 // Watch the run you just finished, from the completion screen; Esc (or the pause button) ends it, the restart key starts it over
@@ -2274,8 +2280,8 @@ function win() {
   mode = 'win'; saveBest(100); $('hud').hidden = true; show('done');
   // the run you just finished, to watch again (and, with Macro > Record, kept as this level's macro)
   lastRun = rec && !rec.bad ? { level: rec.level, start: rec.start, log: rec.log, n: rec.n, speed: rec.speed, noclip: rec.noclip } : rp?.run || null;
-  if (lastRun && hacks.macro === 'record' && !practice) { macros[cur.id] = lastRun; store.set('zd-macros', macros); toast(`Macro saved for ${cur.name}`); renderHacks(); }
-  $('doneWatch').hidden = !lastRun || practice; rp = null; rec = null;
+  if (lastRun && hacks.macro === 'record') { macros[cur.id] = lastRun; store.set('zd-macros', macros); toast(`Macro saved for ${cur.name}`); renderHacks(); }
+  $('doneWatch').hidden = !lastRun; rp = null; rec = null;
   // coins only count on a finished run without hacks; each one is kept once you've finished with it
   if (world.coins.length && !usedHacks && !practice && cur.id !== 'test' && p.coins?.length) {
     savedCoins[cur.id] = [...new Set([...(savedCoins[cur.id] || []), ...p.coins])].sort((a, b) => a - b); store.set('zd-coins', savedCoins);
@@ -2534,10 +2540,10 @@ function step(dt) {
     if (res === 'win') return rp?.kind === 'watch' ? endWatch() : win();
     if (res === 'dead') { if (noclipNow()) hitFlash = 0.3; else return rp?.kind === 'watch' ? endWatch() : die(); }
     // checkpoint objects: in practice mode, passing one saves a checkpoint right there
-    while ((p.ci || 0) < world.cps.length && world.cps[p.ci || 0].x * B <= p.x) { p.ci = (p.ci || 0) + 1; if (practice) { checkpoints.push(stateOf(p)); SFX.checkpoint(); toast(`Checkpoint ${checkpoints.length}`); } }
+    while ((p.ci || 0) < world.cps.length && world.cps[p.ci || 0].x * B <= p.x) { p.ci = (p.ci || 0) + 1; if (practice) { checkpoints.push(markCp(stateOf(p))); SFX.checkpoint(); toast(`Checkpoint ${checkpoints.length}`); } }
     // practice: drop a checkpoint every 1.5 s, but only where there's a way to keep going for at least half a second
     // (respawning there starts with a press, so holding has to last at least 0.2 s from that spot)
-    if (practice && autoCp && (p.cpT += dt) >= 1.5) { p.cpT = 0; const st = stateOf(p); if (survival(st, true) >= 48 && survival(st, false) >= 48 && findPath(world, st, 30, 3000, true) && findPath(world, st, 30, 3000, false)) checkpoints.push(st); }
+    if (practice && autoCp && (p.cpT += dt) >= 1.5) { p.cpT = 0; const st = stateOf(p); if (survival(st, true) >= 48 && survival(st, false) >= 48 && findPath(world, st, 30, 3000, true) && findPath(world, st, 30, 3000, false)) checkpoints.push(markCp(st)); }
   } else if (mode === 'dead') {
     deadT -= dt;
     if (deadT <= 0) { if (cur.id === 'test' && from === 'editor' && !practice) return endTest(); attempt++; reset(); mode = 'play'; }
@@ -4326,7 +4332,7 @@ $('pPractice').onclick = () => {
   else { practice = false; updateHackTag(); restartGame(); attempt = 1; }
 };
 $('pAuto').onchange = () => { autoCp = $('pAuto').checked; store.set('zd-autocp', autoCp); };
-function placeCp() { if (!practice || mode !== 'play' || p.wait) return; checkpoints.push(stateOf(p)); SFX.checkpoint(); toast(`Checkpoint ${checkpoints.length} placed`); }
+function placeCp() { if (!practice || mode !== 'play' || p.wait) return; checkpoints.push(markCp(stateOf(p))); SFX.checkpoint(); toast(`Checkpoint ${checkpoints.length} placed`); }
 function removeCp() { if (!practice || !checkpoints.length) return; checkpoints.pop(); toast(checkpoints.length ? `Back to checkpoint ${checkpoints.length}` : 'No checkpoints left'); }
 $('pcPlace').onclick = e => { placeCp(); e.currentTarget.blur(); };
 $('pcDel').onclick = e => { removeCp(); e.currentTarget.blur(); };
