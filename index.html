@@ -975,7 +975,7 @@ function decodeLevel(code) {
     else if (t === 'j' && okPos(a, b) && PAD[f[4]]) objs.push({ t, x: a, y: b, o: ((Math.round(c) || 0) % 4 + 4) % 4, c: f[4] });
     else if (t === 'p' && okPos(a, b) && c > 0 && c <= 40 && ['S', 'm', 'v', 'w', 'g', 'T'].includes(f[4])) {
       const v = Math.round(num(f[5])) || 0;
-      objs.push({ t, x: a, y: b, h: c, k: f[4], v: f[4] === 'S' ? Math.min(4, Math.max(0, v)) : (f[4] === 'v' || f[4] === 'g') && v === 2 ? 2 : f[4] === 'g' && v === 3 ? 3 : v ? 1 : 0 });
+      objs.push({ t, x: a, y: b, h: c, k: f[4], v: f[4] === 'S' ? Math.min(4, Math.max(0, v)) : (f[4] === 'v' || f[4] === 'g') && v === 2 ? 2 : f[4] === 'g' && (v === 3 || v === 4) ? v : v ? 1 : 0 });
     }
     if (objs.length > before && grp(gs)) objs[objs.length - 1].g = grp(gs);
     if (objs.length > before && xs && XF_T.includes(objs[objs.length - 1].t)) { // turned / sized: "@angle,size"
@@ -1268,6 +1268,29 @@ function orbAt(wd, s, r) {
 // copied, never changed in place, so look-ahead copies stay apart). The dash holds its angle until release.
 function orbTaken(wd, s, i) { s.spent = true; if (!wd.orbs[i].m) s.used = (s.used || []).concat(i); }
 function dashStart(wd, s, i) { const o = wd.orbs[i]; orbTaken(wd, s, i); s.dash = Math.tan(o.a * Math.PI / 180); if (o.f) s.flip = !s.flip; }
+// The UFO (GD 2.2 PlayerObject::updateJump, m_isBird): a new press sets its speed away from the ground to 7 GD units a frame
+// (mini: 8 x 0.85), unless it's already going faster that way; then gravity at half the ship's (see shipBody) brings it down.
+// Jumping while a slope carries it up adds half the slope's rising speed, up to 1.4 x the jump (GD: m_slopeVelocity x 0.5,
+// capped at the jump x 1.4).
+function ufoJump(s, k, gs) {
+  const VY = k === 1 ? 'vy' : 'vy2', jv = (s.mini ? 8 * 0.85 : 7) * GD, slopeUp = -gs * (s[k === 1 ? 'ss' : 'ss2'] || 0);
+  if (jv > -gs * (s[VY] || 0)) s[VY] = -gs * (slopeUp > 0 ? Math.min(jv + slopeUp * 0.5, jv * 1.4) : jv);
+  s[k === 1 ? 'gnd' : 'gnd2'] = false;
+}
+// UFO orbs (GD ringJump): the speed's jump (m_yStart) x 0.42 pink, x 1.02 red (mini 1.36), x 0.8 blue (set, then gravity
+// flips), x 1 yellow and green (green flips first); all x 0.8 when mini. Black: 14 x 0.8 toward the ground, unscaled.
+const UFO_RING = { y: 1, p: 0.42, r: 1.02, b: 0.8, g: 1 };
+function ufoRing(s, c) {
+  let gs = s.flip ? -1 : 1, sp;
+  if (c === 'k') sp = -14 * 0.8 * GD;
+  else {
+    if (c === 'g') { s.flip = !s.flip; gs = -gs; }
+    sp = JMP * JUMP_AT_SPEED[s.speedI] * (c === 'r' && s.mini ? 1.36 : UFO_RING[c] ?? 1) * (s.mini ? 0.8 : 1) * GD;
+  }
+  s.vy = -gs * sp; s.vy2 = gs * sp; s.gnd = s.gnd2 = false; s.dash = null;
+  s.acc = s.acc2 = true; // past its speed limits, as the ship is after an orb (see shipBody)
+  if (c === 'b') s.flip = !s.flip;
+}
 // Cube launches from orbs and pads: v (GD units per frame, away from the ground) scaled like the jump (size, game speed).
 // GD's step loss always works against the "away" direction, so it's subtracted whatever v's sign. The dual twin gets the mirror.
 function launch(s, v) {
@@ -1278,6 +1301,7 @@ function launch(s, v) {
 function ringUse(wd, s, i) { // a jump orb: uses up the press
   const o = wd.orbs[i], k = RING[o.c]; orbTaken(wd, s, i);
   if (s.ball) return ballRing(s, o.c); // the ball has its own orb launches (see ballRing)
+  if (s.ufo) return ufoRing(s, o.c); // and the UFO
   if (k.flip) s.flip = !s.flip;
   launch(s, s.ship ? SHIP_RING[o.c] : k.v);
 }
@@ -1572,7 +1596,7 @@ const inputs = []; // [timestamp, held] queued so each press lands on the exact 
 const K_DEC = 8; // sub-steps per input decision in the path search (1/60 s)
 let checkpoints = [], spawnCache = null, plan = [];
 const stateOf = q => ({ x: q.x, y: q.y, y2: q.y2, bt: q.bt, bb: q.bb, dir: q.dir, speedI: q.speedI, mini: q.mini, flip: q.flip, dual: q.dual, pi: q.pi, dash: q.dash, spent: q.spent,
-  used: q.used, lastPad: q.lastPad, cube: q.cube, ship: q.ship, ball: q.ball, bair: q.bair, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2, pt: q.pt, acc: q.acc, acc2: q.acc2, ph: q.ph, ss: q.ss, ss2: q.ss2,
+  used: q.used, lastPad: q.lastPad, cube: q.cube, ship: q.ship, ball: q.ball, ufo: q.ufo, bair: q.bair, vy: q.vy, vy2: q.vy2, gnd: q.gnd, gnd2: q.gnd2, sv: q.sv, sv2: q.sv2, lv: q.lv, lv2: q.lv2, pt: q.pt, acc: q.acc, acc2: q.acc2, ph: q.ph, ss: q.ss, ss2: q.ss2,
   t: q.t, tf: q.tf, coins: q.coins, ci: q.ci });
 // ---------- cube ----------
 // Geometry Dash's cube numbers, from its player code: per 1/60 s frame in GD units (30 per block), with GD's player step
@@ -1742,7 +1766,7 @@ function survives(wd, x, y, h) {
 const BALL_G = 0.958199 * 0.6 * GD * 60 * 0.9, BALL_LOSS = BALL_G / 240 / 2;
 const BALL_RING = { y: 1, p: 0.77, r: 1.34, g: 1, b: 0.8 }, BALL_PAD = { y: 1, p: 0.7, r: 1.25, b: 0.8 };
 const BALL_SPIN_T = [311.5801 / 251.16, 1, 311.5801 / 387.4201, 311.5801 / 468.0002, 311.5801 / 576.0002]; // runBallRotation's speed scaling
-const hasBody = s => s.cube || s.ship || s.ball; // a box that falls or flies (not the wave)
+const hasBody = s => s.cube || s.ship || s.ball || s.ufo; // a box that falls or flies (not the wave)
 const bodyG = s => s.ball ? BALL_G : cubeG(s);
 // Sets the ball's speed: gdv GD units a frame away from its ground as it is now (negative: toward it); flip: then its
 // gravity flips, which halves the speed (flipGravity). The dual twin gets the mirror. Not standing any more.
@@ -1786,7 +1810,8 @@ function shipBody(wd, s, k, gs, h, dt, v, hold) {
     // (a recorded GD ship yellow orb rise slows at 0.4 x 1.2, as a normal let-go rise does).
     const ACC = k === 1 ? 'acc' : 'acc2'; if (s[ACC] && up < capU && up > -capD) s[ACC] = false;
     const acc = s[ACC], m52 = falling ? 0.5 : 0.4;
-    if (acc && hold && up >= 0) vy += gs * SHIP_G * 0.8 * m52 / m * dt;
+    if (s.ufo) vy += gs * SHIP_G * 0.5 * (falling ? 0.8 : 1.2) / m * dt; // GD's UFO: gravity x 0.5, x 1.2 rising, x 0.8 falling (holding does nothing)
+    else if (acc && hold && up >= 0) vy += gs * SHIP_G * 0.8 * m52 / m * dt;
     else vy += (hold ? -gs * SHIP_G * m52 : gs * SHIP_G * 0.4 * (falling ? 0.8 : 1.2)) / m * dt;
     if (!acc) vy = gs > 0 ? Math.min(capD, Math.max(-capU, vy)) : Math.max(-capD, Math.min(capU, vy));
     ny = y + (v0 + vy) / 2 * dt;
@@ -1869,17 +1894,21 @@ function portalState(s, o) {
     if ((s.cube || s.ball) && s.dual !== was) setBand(s, (o.y + o.h / 2) * B); // a dual cube gets a 9-block band; leaving dual removes it
     if (o.v && !was) { s.y2 = mirrorY(s, s.y); s.vy2 = -(s.vy || 0); s.gnd2 = false; }
   }
-  else if (o.k === 'g') { // gamemode: v 0 wave, 1 cube, 2 ship, 3 ball
+  else if (o.k === 'g') { // gamemode: v 0 wave, 1 cube, 2 ship, 3 ball, 4 UFO
     if (o.v && !hasBody(s)) { // from the wave: keeps half of the wave's vertical speed (GD: m_yVelocity *= 0.5)
       // GD stores a wave's y velocity as its forward speed, mini or not; mini only doubles how far it moves each frame. So a
       // mini wave hands on the same speed as a normal one (doubling it here slammed a mini wave into the ground as a cube).
       const v = SPEEDS[s.speedI] * B, dy = s.dash != null ? -s.dash * v : s.dir * v;
-      s.vy = dy / 2; s.vy2 = -dy / 2; s.gnd = s.gnd2 = false;
+      const k = o.v === 4 ? 0.25 : 0.5; // into a UFO: GD halves it again (toggleBirdMode)
+      s.vy = dy * k; s.vy2 = -dy * k; s.gnd = s.gnd2 = false;
     } else if (o.v === 2 && (s.cube || s.ball)) { s.vy = (s.vy || 0) / 2; s.vy2 = (s.vy2 || 0) / 2; s.gnd = s.gnd2 = false; } // into a ship: half its speed
     else if (o.v === 3 && s.ship) { s.vy = (s.vy || 0) / 2; s.vy2 = (s.vy2 || 0) / 2; s.gnd = s.gnd2 = false; } // ship -> ball: half (GD halves leaving a ship)
-    const same = (o.v === 1) === !!s.cube && (o.v === 2) === !!s.ship && (o.v === 3) === !!s.ball;
+    // GD (toggleBirdMode, toggleFlyMode): switching the UFO on or off halves the speed, and so does the ship's; so cube or ball
+    // <-> UFO halves it, ship <-> UFO quarters it
+    else if (o.v !== 0 && (o.v === 4) !== !!s.ufo) { const k = s.ship || o.v === 2 ? 0.25 : 0.5; s.vy = (s.vy || 0) * k; s.vy2 = (s.vy2 || 0) * k; s.gnd = s.gnd2 = false; }
+    const same = (o.v === 1) === !!s.cube && (o.v === 2) === !!s.ship && (o.v === 3) === !!s.ball && (o.v === 4) === !!s.ufo;
     if (o.v === 3 && !s.ball) s.bair = !s.gnd; // a ball that isn't standing starts in its air spin
-    s.cube = o.v === 1; s.ship = o.v === 2; s.ball = o.v === 3;
+    s.cube = o.v === 1; s.ship = o.v === 2; s.ball = o.v === 3; s.ufo = o.v === 4;
     if (!same || !s.cube) setBand(s, (o.y + o.h / 2) * B); // a ship, ball or wave portal (even of the same form) lines the band up on itself
   }
 }
@@ -1937,9 +1966,10 @@ function tick1(wd, s, hold, dt, fx, fresh) {
     const gs = s.flip ? -1 : 1, h = cubeHalf(s);
     // an orb takes the press before a jump. The cube may hold into an orb (a buffered click); the ship has to click while
     // touching it, as in GD, since holding is how it flies
+    let usedOrb = false;
     if (hold && !s.spent && (s.cube || s.ball || press)) {
       const oi = orbAt(wd, s, h);
-      if (oi >= 0) { if (wd.orbs[oi].t === 'd') { dashStart(wd, s, oi); s.gnd = s.gnd2 = false; } else ringUse(wd, s, oi); fx?.orb(); }
+      if (oi >= 0) { if (wd.orbs[oi].t === 'd') { dashStart(wd, s, oi); s.gnd = s.gnd2 = false; } else ringUse(wd, s, oi); fx?.orb(); usedOrb = true; }
     }
     if (s.cube && hold && s.dash == null) { // holding on the ground jumps (a jump uses up the press, so it won't also take an orb)
       // Jumping while riding up a slope launches at 1.2x the slope's rising speed when that beats a normal jump: fitted from
@@ -1950,6 +1980,8 @@ function tick1(wd, s, hold, dt, fx, fresh) {
       if (s.gnd && jOK(s.y)) { s.vy = -gs * jumpOff(-gs * (s.sv || 0)); s.gnd = false; s.spent = true; s.lv = 0; }
       if (s.dual && s.gnd2 && jOK(s.y2)) { s.vy2 = gs * jumpOff(gs * (s.sv2 || 0)); s.gnd2 = false; s.spent = true; s.lv2 = 0; }
     }
+    // the UFO: every new press jumps, in the air too (an orb it's touching takes the press instead)
+    if (s.ufo && press && !usedOrb && s.dash == null) { ufoJump(s, 1, gs); if (s.dual) ufoJump(s, 2, -gs); }
     // the ball: a click on the ground (or one held from the air as it lands) flips its gravity; it uses the click up
     if (s.ball && hold && !s.spent && s.dash == null && (s.gnd || (s.dual && s.gnd2))) { ballFlip(s); fx?.corner(); }
     s.x += v * dt;
@@ -1957,7 +1989,7 @@ function tick1(wd, s, hold, dt, fx, fresh) {
     portals();
     if (!hasBody(s)) return; // switched to wave: it takes over next tick
     const h2 = cubeHalf(s), g2 = s.flip ? -1 : 1;
-    const ok = s.ship ? shipBody(wd, s, 1, g2, h2, dt, v, hold) && (!s.dual || shipBody(wd, s, 2, -g2, h2, dt, v, hold))
+    const ok = s.ship || s.ufo ? shipBody(wd, s, 1, g2, h2, dt, v, hold) && (!s.dual || shipBody(wd, s, 2, -g2, h2, dt, v, hold))
       : cubeBody(wd, s, 1, g2, h2, dt, v) && (!s.dual || cubeBody(wd, s, 2, -g2, h2, dt, v));
     if (!ok) return 'dead';
     if (s.ball && (s.gnd || s.gnd2)) s.bair = false; // landed: back to rolling
@@ -2010,7 +2042,7 @@ function findPath(wd, s0, decisions, budget, firstHold = held, untilX = Infinity
       const nn = { s: t, hold, depth: node.depth + 1, up: node };
       if (t.won || nn.depth >= decisions || t.x >= untilX) { const out = []; for (let q = nn; q.up; q = q.up) out.push(q.hold); return out.reverse(); }
       const key = (t.x / 3 | 0) + ',' + Math.round(t.y / 3) + ',' + (t.mini ? 1 : 0) + (t.flip ? 1 : 0) + (t.dash != null ? 1 : 0)
-        + (hasBody(t) ? ',' + Math.round(t.vy / 150) + (t.gnd ? 'g' : '') + (t.ship ? 's' : t.ball ? 'b' : '') : '');
+        + (hasBody(t) ? ',' + Math.round(t.vy / 150) + (t.gnd ? 'g' : '') + (t.ship ? 's' : t.ball ? 'b' : t.ufo ? 'u' : '') : '');
       if (seen.has(key)) continue; seen.add(key); stack.push(nn);
     }
   }
@@ -2067,7 +2099,7 @@ const FX = {
     if (o.k === 'S') { if (p.speedI !== o.v && !calm) flash = 0.45; }
     else if (o.k === 'm') { if (!!o.v !== p.mini && !p.cube && !p.ball) { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); } }
     else if (o.k === 'w') { if (o.v && !p.dual) trail2 = p.cube || p.ball ? [] : [[p.x, mirrorY(p, p.y)]]; } // second icon appears mirrored
-    else if (o.k === 'g' && o.v !== (p.cube ? 1 : p.ship ? 2 : p.ball ? 3 : 0)) { // only the wave leaves a trail
+    else if (o.k === 'g' && o.v !== (p.cube ? 1 : p.ship ? 2 : p.ball ? 3 : p.ufo ? 4 : 0)) { // only the wave leaves a trail
       if (o.v) { trail.push([p.x, p.y], null); if (p.dual) trail2.push([p.x, p.y2], null); p.rot = 0; p.sa = 0; } // into cube or ship: the trail stops here
       else { trail.push([p.x, p.y]); if (p.dual) trail2.push([p.x, p.y2]); p.from = p.ang = 0; p.turnT = 0; p.sa = 0; } // a trail starts (or carries on)
       if (!calm) flash = 0.3;
@@ -2090,7 +2122,7 @@ const DFX = { // the same trail breaks as FX makes for the real player
     if (o.k === 'T' && !o.v && !s.cube && !s.ball) { const d = teleportShift(world, o); if (d) both([s.y, s.y2], null, [s.y + d, s.y2 - d]); }
     else if (o.k === 'm') { if (!!o.v !== s.mini && !s.cube && !s.ball) both([s.y, s.y2]); }
     else if (o.k === 'w') { if (o.v && !s.dual) demo.tr2 = s.cube || s.ball ? [] : [[s.x, mirrorY(s, s.y)]]; }
-    else if (o.k === 'g' && o.v !== (s.cube ? 1 : s.ship ? 2 : s.ball ? 3 : 0)) { if (o.v) both([s.y, s.y2], null); else both([s.y, s.y2]); }
+    else if (o.k === 'g' && o.v !== (s.cube ? 1 : s.ship ? 2 : s.ball ? 3 : s.ufo ? 4 : 0)) { if (o.v) both([s.y, s.y2], null); else both([s.y, s.y2]); }
   },
 };
 function demoStart() {
@@ -2117,6 +2149,7 @@ function drawDemo(g, dt) {
   if (s.ship) {
     const sa = Math.atan2(s.vy || 0, SPEEDS[s.speedI] * B);
     drawShip(g, s.x, s.y, sa, sc, icon, s.flip); if (s.dual) drawShip(g, s.x, s.y2, -sa, sc, icon, !s.flip);
+  } else if (s.ufo) { drawUfo(g, s.x, s.y, sc, icon, s.flip); if (s.dual) drawUfo(g, s.x, s.y2, sc, icon, !s.flip);
   } else if (s.cube || s.ball) { // a ball keeps rolling; a cube spins in the air and squares up on the ground
     if (s.ball || !s.gnd) demo.rot += (s.flip ? -1 : 1) * (s.ball ? 10 : 7) * dt; else demo.rot = Math.round(demo.rot / (Math.PI / 2)) * (Math.PI / 2);
     const f = s.ball ? drawBall : drawCube; f(g, s.x, s.y, demo.rot, sc, icon); if (s.dual) f(g, s.x, s.y2, -demo.rot, sc, icon);
@@ -2127,7 +2160,7 @@ function drawDemo(g, dt) {
   }
 }
 const freshState = () => ({ x: 0, y: VH / 2, bt: 0, bb: VH, dir: 1, ang: Math.PI / 4, from: Math.PI / 4, turnT: 1, speedI: 1, mini: false, flip: false, dual: false, pi: 0, slid: false, slid2: false,
-    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, ball: false, bair: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 });
+    dash: null, spent: false, used: [], lastPad: -1, tk: 0, cube: false, ship: false, ball: false, ufo: false, bair: false, sa: 0, vy: 0, vy2: 0, gnd: false, gnd2: false, sv: 0, sv2: 0, lv: 0, lv2: 0, rot: 0, pu: null, t: 0, tf: [], coins: [], ci: 0 });
 function reset() {
   p = freshState();
   trail = []; trail2 = []; parts = []; booms = []; camSnap = true;
@@ -2203,7 +2236,7 @@ function endWatch() { // back to the completion screen, as it was
 // The state a start position sets: its place, speed, gamemode, size, gravity and dual; portals behind it are skipped.
 function startPosState(o) {
   const x = (o.x + 0.5) * B, y = (o.y + 0.5) * B, f = o.f || 0;
-  const s = { x, y, dir: 1, speedI: o.sp, mini: !!(f & 1), flip: !!(f & 2), dual: !!(f & 4), cube: o.m === 1, ship: o.m === 2, ball: o.m === 3,
+  const s = { x, y, dir: 1, speedI: o.sp, mini: !!(f & 1), flip: !!(f & 2), dual: !!(f & 4), cube: o.m === 1, ship: o.m === 2, ball: o.m === 3, ufo: o.m === 4,
     pi: world.portals.filter(q => q.x * B <= x).length, vy: 0, vy2: 0, gnd: false, gnd2: false, dash: null };
   setBand(s, y); s.y2 = mirrorY(s, y); return s; // its band lines up on it, like a portal's
 }
@@ -2651,6 +2684,23 @@ function drawShip(g, x, y, a, s, ic, flip) {
 // Cube icon (original design): your colours, a square with an inset square and a core. Or your own cube picture, fitted
 // inside the square (the wave's custom image is a wave icon, so the cube never uses that one).
 const CUBE_ADJ = { s: 1, x: 1, y: 1, ox: 0, oy: 0 }; // custom cube picture: size, width, height, move right, move down (in cube sizes)
+// The UFO, after GD's: your cube riding in a glass dome on a saucer in your colours, level as it flies (it doesn't turn).
+function drawUfo(g, x, y, s, ic, flip) {
+  const u = CUBE_H * s, c1 = COLORS[ic.c1], c2 = COLORS[ic.c2], ink = '#0c0e1c';
+  g.save(); g.translate(x, y); if (flip) g.scale(1, -1);
+  g.beginPath(); g.arc(0, u * 0.2, u * 0.74, Math.PI, 0); g.closePath(); g.fillStyle = "rgba(190,235,255,.28)"; g.fill(); // the dome's glass
+  drawCube(g, 0, -u * 0.12, 0, s * 0.56, ic); // the rider
+  g.beginPath(); g.arc(0, u * 0.2, u * 0.74, Math.PI, 0); g.strokeStyle = ink; g.lineWidth = u * 0.1; g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = u * 0.07; g.beginPath(); g.arc(0, u * 0.18, u * 0.6, Math.PI * 1.15, Math.PI * 1.45); g.stroke(); // shine
+  // the saucer: its top in colour 1, its underside in colour 2, one outline round both
+  const sy = u * 0.44, rx = u * 1.25, ry = u * 0.36;
+  g.beginPath(); g.ellipse(0, sy, rx, ry, 0, 0, 7); g.fillStyle = c1; g.fill();
+  g.save(); g.beginPath(); g.ellipse(0, sy, rx, ry, 0, 0, 7); g.clip();
+  g.beginPath(); g.ellipse(0, sy + ry * 0.55, rx * 0.98, ry * 0.75, 0, 0, 7); g.fillStyle = c2; g.fill(); g.restore();
+  g.beginPath(); g.ellipse(0, sy, rx, ry, 0, 0, 7); g.strokeStyle = ink; g.lineWidth = u * 0.1; g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = u * 0.06; g.beginPath(); g.ellipse(0, sy, rx * 0.8, ry * 0.55, 0, Math.PI * 1.1, Math.PI * 1.5); g.stroke(); // shine on the top
+  g.restore();
+}
 function drawCube(g, x, y, a, s, ic) {
   const h = CUBE_H * s;
   g.save(); g.translate(x, y); g.rotate(a);
@@ -2686,7 +2736,7 @@ function drawBall(g, x, y, a, s, ic) {
 // speed portals are rows of chevrons (one pointing back for 0.5x, then 1 to 4 forward). Colours follow GD's: cube green, ship
 // pink, wave cyan; gravity blue (normal) / yellow (flipped) / green (swap); mini pink / big green; dual orange / single blue;
 // teleport blue in / orange out; speed orange, blue, green, pink, red. The label shows only in the editor.
-const PORTAL_COL = { g: ['#3fd8ff', '#4dff4a', '#ff5ce6', '#ff5a3a'], v: ['#3f8cff', '#ffe23a', '#4dff9a'], m: ['#4dff4a', '#ff5ce6'], w: ['#3f8cff', '#ff9f2e'], T: ['#3f8cff', '#ff9f2e'],
+const PORTAL_COL = { g: ['#3fd8ff', '#4dff4a', '#ff5ce6', '#ff5a3a', '#ff9a1f'], v: ['#3f8cff', '#ffe23a', '#4dff9a'], m: ['#4dff4a', '#ff5ce6'], w: ['#3f8cff', '#ff9f2e'], T: ['#3f8cff', '#ff9f2e'],
   S: ['#ff9f2e', '#3fb6ff', '#4dff4a', '#ff5ce6', '#ff3b3b'] };
 // part: 'back' (behind the player), 'front' (the near half of the ring, drawn over the player so you fly through it) or 'all'.
 function drawPortal(g, o, u, label = true, part = 'all') { return withXf(g, o, u, () => drawPortal0(g, o, u, label, part)); }
@@ -2809,13 +2859,16 @@ const PTEX_SPR = {
   dualB: [434, 5, 142, 232, 37, 0], dualO: [610, 5, 141, 232, 36, 0], triB: [284, 255, 115, 227, 50, 0], triO: [413, 255, 115, 227, 50, 0] };
 // gamemode: wave blue, cube green, ship purple, ball red; gravity: upright cyan, flip orange, swap (the cyan ring tinted green);
 // size: big green, mini magenta; dual: single blue, dual orange; teleport: in blue, out orange. Speed portals stay drawn.
-const PTEX_OF = { g: ['cageB', 'cageG', 'cageP', 'cageR'], v: ['ovC', 'ovO', 'ovS'], m: ['notG', 'notM'], w: ['dualB', 'dualO'], T: ['triB', 'triO'] };
+const PTEX_OF = { g: ['cageB', 'cageG', 'cageP', 'cageR', 'cageO'], v: ['ovC', 'ovO', 'ovS'], m: ['notG', 'notM'], w: ['dualB', 'dualO'], T: ['triB', 'triO'] };
 (function loadPortalSheet() {
   const img = new Image();
   img.onload = () => {
     const K = PTEX.k, [x, y, w, h] = PTEX_SPR.ovC, s = document.createElement('canvas'); s.width = w * K; s.height = h * K; // swap: the cyan ring, green
     const sg = s.getContext('2d'); sg.filter = 'hue-rotate(-62deg) saturate(1.2)'; sg.drawImage(img, x * K, y * K, w * K, h * K, 0, 0, w * K, h * K);
-    PTEX.sheet = img; PTEX.swap = s; PTEX.ready = true;
+    // the UFO portal: the red ball cage turned orange (GD's UFO portal colour)
+    const [ux, uy, uw, uh] = PTEX_SPR.cageR, o = document.createElement('canvas'); o.width = uw * K; o.height = uh * K;
+    const og = o.getContext('2d'); og.filter = 'hue-rotate(28deg) saturate(1.15) brightness(1.08)'; og.drawImage(img, ux * K, uy * K, uw * K, uh * K, 0, 0, uw * K, uh * K);
+    PTEX.sheet = img; PTEX.swap = s; PTEX.ufo = o; PTEX.ready = true;
   };
   img.src = 'assets/portals.png';
 })();
@@ -2826,6 +2879,7 @@ function portalTex(o) {
   const id = PTEX_OF[o.k]?.[o.v]; if (!id) return null;
   const K = PTEX.k;
   if (id === 'ovS') { const [, , w, h, c, f] = PTEX_SPR.ovC; return [PTEX.swap, 0, 0, w * K, h * K, c * K, f * K]; }
+  if (id === 'cageO') { const [, , w, h, c, f] = PTEX_SPR.cageR; return [PTEX.ufo, 0, 0, w * K, h * K, c * K, f * K]; }
   return [PTEX.sheet, ...PTEX_SPR[id].map(v => v * K)];
 }
 // Draws a textured portal: its height fills the portal's height, its ring's middle on the portal's x. The back and front
@@ -2863,7 +2917,7 @@ function drawPortal0(g, o, u, label, part) {
     }
   }
   if (label && part !== 'front') {
-    const text = o.k === 'S' ? SPD_LABELS[o.v] : o.k === 'v' && o.v === 2 ? 'SWAP' : o.k === 'g' ? ['WAVE', 'CUBE', 'SHIP', 'BALL'][o.v] : PORTALS[o.k][o.v ? 1 : 2];
+    const text = o.k === 'S' ? SPD_LABELS[o.v] : o.k === 'v' && o.v === 2 ? 'SWAP' : o.k === 'g' ? ['WAVE', 'CUBE', 'SHIP', 'BALL', 'UFO'][o.v] : PORTALS[o.k][o.v ? 1 : 2];
     g.fillStyle = col; g.font = `700 ${Math.round(u * 0.22)}px "Space Mono", monospace`; g.textAlign = 'center'; g.fillText(text, cx, top - u * 0.3);
   }
   g.restore();
@@ -2954,7 +3008,7 @@ function drawStartPos(g, o, u) {
   g.strokeStyle = '#4dff5e'; g.lineWidth = Math.max(1.5, u / 18); g.setLineDash([u / 8, u / 12]); g.strokeRect(x + m, y + m, u - 2 * m, u - 2 * m); g.setLineDash([]);
   g.beginPath(); g.moveTo(x + u * 0.36, y + u * 0.22); g.lineTo(x + u * 0.7, y + u * 0.42); g.lineTo(x + u * 0.36, y + u * 0.62); g.closePath(); g.fillStyle = '#4dff5e'; g.fill();
   g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = `700 ${Math.round(u * 0.17)}px "Space Mono", monospace`;
-  g.fillText(SPD_LABELS[o.sp] + ' ' + ['WAVE', 'CUBE', 'SHIP'][o.m] + (o.f & 1 ? ' M' : '') + (o.f & 2 ? ' ↕' : '') + (o.f & 4 ? ' ×2' : ''), x + u / 2, y + u * 0.86);
+  g.fillText(SPD_LABELS[o.sp] + ' ' + ['WAVE', 'CUBE', 'SHIP', 'BALL', 'UFO'][o.m] + (o.f & 1 ? ' M' : '') + (o.f & 2 ? ' ↕' : '') + (o.f & 4 ? ' ×2' : ''), x + u / 2, y + u * 0.86);
   g.restore();
 }
 // Letter block: a white-edged tile with its letter (GD shows these only in the editor).
@@ -3300,6 +3354,9 @@ function draw(t, dt, budget = 2) { // budget: ms it may spend painting tiles ahe
       const s = p.mini ? CUBE_MINI : 1;
       drawShip(ctx, p.x, p.y, p.sa, s, icon, p.flip);
       if (p.dual) drawShip(ctx, p.x, p.y2, -p.sa, s, icon, !p.flip);
+    } else if (seen && p.ufo) { // GD's UFO stays level
+      const s = p.mini ? CUBE_MINI : 1;
+      drawUfo(ctx, p.x, p.y, s, icon, p.flip); if (p.dual) drawUfo(ctx, p.x, p.y2, s, icon, !p.flip);
     } else if (seen && p.cube) { // GD's cube: turns 180° per full jump in the air (backwards upside down), squares up on the ground
       // the spin runs on game time: it stops while paused or waiting at a spawn, and slows with the speedhack
       const air = 2 * (p.mini ? CUBE_JUMP_MINI : CUBE_JUMP) / CUBE_G, gdt = mode === 'play' && !p.wait ? dt * hacks.speed : 0;
@@ -3520,7 +3577,8 @@ function levelFacts(wd) { // speeds used and modes used, from the level's portal
   const modes = [...new Set(wd.portals.filter(o => o.k !== 'S' && o.k !== 'T' && o.v).map(o => o.k))];
   return `<span>${Math.round(wd.end / B)} blk</span><span>${Math.round(duration(wd))} s</span><span>${(speeds.length ? speeds : ['1x']).join(' → ')}</span>`
     + modes.map(m => `<span style="color:${PORTALS[m][0]}">${PORTALS[m][1]}</span>`).join('')
-    + (wd.portals.some(o => o.k === 'g' && o.v === 2) ? '<span style="color:#ff6bd6">SHIP</span>' : '');
+    + (wd.portals.some(o => o.k === 'g' && o.v === 2) ? '<span style="color:#ff6bd6">SHIP</span>' : '')
+    + (wd.portals.some(o => o.k === 'g' && o.v === 4) ? '<span style="color:#ff9a1f">UFO</span>' : '');
 }
 function renderBoard() {
   if (!levelOpen(lvIndex) && !editMain) lvIndex = 0;
@@ -3576,6 +3634,7 @@ const PALETTE = [
   { id: 'g1', label: 'Cube', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 1 }) },
   { id: 'g0', label: 'Wave', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 0 }) },
   { id: 'g2', label: 'Ship', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 2 }) },
+  { id: 'g4', label: 'UFO', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 4 }) },
   { id: 'g3', label: 'Ball', make: (x, y) => ({ t: 'p', x: x + 0.5, y: y - 1, h: 3, k: 'g', v: 3 }) },
   { id: 'start', label: 'Start pos', make: (x, y) => ({ t: 'P', x, y, sp: 1, m: 0, f: 0 }) },
   { id: 'text', label: 'Text', make: (x, y) => ({ t: 'a', x: x + 0.5, y: y + 0.5, s: 1, txt: 'Text' }) },
@@ -3596,7 +3655,7 @@ const HELP = {
 };
 // Build tabs, like GD's object tabs (anything not listed lands in the last one).
 const ED_CATS = [['Blocks', ['block', 'half', 'slope', 'steep', 'spike', 'spikeS', 'saw']],
-  ['Gameplay', ['start', 'g1', 'g0', 'g2', 'g3', 'spd0', 'spd1', 'spd2', 'spd3', 'spd4', 'v1', 'v0', 'v2', 'm1', 'm0', 'w1', 'w0', 'T0', 'T1',
+  ['Gameplay', ['start', 'g1', 'g0', 'g2', 'g3', 'g4', 'spd0', 'spd1', 'spd2', 'spd3', 'spd4', 'v1', 'v0', 'v2', 'm1', 'm0', 'w1', 'w0', 'T0', 'T1',
     'pady', 'padp', 'padr', 'padb', 'pads', 'ringy', 'ringp', 'ringr', 'ringb', 'ringg', 'ringk', 'dash0', 'dash1']],
   ['Special', ['coin', 'cp', 'trm', 'trr', 'trf', 'trc', 'LD', 'LJ', 'LS', 'LH', 'LF', 'text']]];
 for (const q of PALETTE) if (!ED_CATS.some(([, ids]) => ids.includes(q.id))) ED_CATS[ED_CATS.length - 1][1].push(q.id);
@@ -3828,7 +3887,7 @@ function propFields(kind = 'group') {
   if (sp) { // GD's Start Pos settings (the ones this game has)
     const pick = (prop, label, opts, val) => `<label class="prop"><span>${label}</span><select class="field" data-prop="${prop}">${opts.map((t, i) => `<option value="${i}"${i === val ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
     const tick = (prop, label, bit) => `<label class="hrow"><input type="checkbox" class="sr" data-prop="${prop}"${sp.f & bit ? ' checked' : ''}><span class="hchk"></span>${label}</label>`;
-    return pick('sp_speed', 'Speed', SPD_LABELS, sp.sp) + pick('sp_mode', 'Gamemode', ['Wave', 'Cube', 'Ship', 'Ball'], sp.m)
+    return pick('sp_speed', 'Speed', SPD_LABELS, sp.sp) + pick('sp_mode', 'Gamemode', ['Wave', 'Cube', 'Ship', 'Ball', 'UFO'], sp.m)
       + `<div style="width:100%">${tick('sp_mini', 'Mini', 1) + tick('sp_flip', 'Upside down', 2) + tick('sp_dual', 'Dual', 4) + tick('sp_off', 'Switched off', 8)}</div>`
       + '<p class="note" style="width:100%">Playtest (Enter) starts from the rightmost start position that\'s on. Normal play always starts at the beginning.</p>';
   }
@@ -3844,7 +3903,7 @@ $('edPropBody').addEventListener('change', e => {
   if (prop.startsWith('sp_')) {
     const o = objs[0]; if (!o || o.t !== 'P') return renderPane();
     if (prop === 'sp_speed') o.sp = Math.min(4, Math.max(0, Math.round(v) || 0));
-    else if (prop === 'sp_mode') o.m = Math.min(3, Math.max(0, Math.round(v) || 0));
+    else if (prop === 'sp_mode') o.m = Math.min(4, Math.max(0, Math.round(v) || 0));
     else { const bit = { sp_mini: 1, sp_flip: 2, sp_dual: 4, sp_off: 8 }[prop]; o.f = inp.checked ? o.f | bit : o.f & ~bit; }
   } else if (prop === 'txt' || prop === 'ts') {
     const o = objs[0]; if (!o || o.t !== 'a') return renderPane();

@@ -20,6 +20,7 @@ Keybinds can be changed in Settings.
 - **15 levels** from Easy to Extreme, each unlocked by beating the one before
 - **Portals** for speed (0.5x–4x), mini, upside down and dual
 - **Ship mode** using Geometry Dash's ship physics (hold to rise, let go to fall, sliding on floors and ceilings)
+- **UFO mode** using Geometry Dash's UFO physics (each click jumps, in the air too), with its own orb strengths and an orange UFO portal
 - **Cube mode** with Geometry Dash's jump and gravity (2.17-block jumps, hold to keep jumping), **spikes**, **jump pads** (yellow, pink, red, blue, spider) and **jump orbs** (yellow, pink, red, blue, green, black), (the ship uses them too; the wave uses blue and green orbs to flip gravity), and cube / wave portals to switch between them
 - **Letter blocks** like Geometry Dash's, invisible in play: **D** (the wave can touch blocks), **J** (no held jumps), **S** (ends a dash), **H** (the cube can hit its head) and **F** (hitting your head flips gravity), and **dash orbs** (green, and pink that flips gravity) that send you straight at their angle while you hold
 - **Achievements** that unlock 14 icon shapes and 12 colours, plus custom image icons (wave, cube and ship, with mirror and recolour for the ship)
