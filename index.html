@@ -1371,11 +1371,13 @@ const SPD_LABELS = ['0.5x', '1x', '2x', '3x', '4x'];
 const DEFAULT_KEYS = { climb: ['Space', 'ArrowUp', 'KeyW'], exit: 'Escape', restart: 'KeyR' };
 let bests = store.get('zd-best', {}), customs = store.get('zd-levels', []);
 let savedCoins = store.get('zd-coins', {}); // level id -> coin numbers collected on runs you finished without hacks
-let icon = { shape: 0, c1: 0, c2: 11, ...store.get('zd-icon', {}) };
+// A new player starts white (colour 9) and, on the online version, with a random community wave icon (pickStarterIcon)
+const freshIcon = !localStorage.getItem('zd-icon');
+let icon = { shape: 0, c1: 9, c2: 11, ...store.get('zd-icon', {}) };
 if (!SHAPES[icon.shape]) icon.shape = 0; if (!COLORS[icon.c1]) icon.c1 = 0; if (!COLORS[icon.c2]) icon.c2 = 11;
 // Every change to the icon goes through here: it's stamped with the time, so the cloud save can tell which device's icon
 // is newer (see mergeSave), then saved (which also queues the cloud save).
-function saveIcon() { icon.at = Date.now(); return store.set('zd-icon', icon); }
+function saveIcon() { icon.at = Date.now(); delete icon.starter; return store.set('zd-icon', icon); }
 
 // ---------- achievements: every shape and colour past the starters is a reward ----------
 // Keyed by level id, not position, so inserting levels never changes which icon a level you've already beaten gave you.
@@ -1410,7 +1412,7 @@ function grant(id, quiet) {
 for (const l of LEVELS) if (bests[l.id] === 100) grant('beat-' + l.id, true); // credit levels beaten before achievements existed
 if (store.get('zd-unlocked', false)) grant('secret', true);
 if (!shapeOpen(icon.shape)) icon.shape = 0;
-if (!colorOpen(icon.c1)) icon.c1 = 0;
+if (!colorOpen(icon.c1)) icon.c1 = 9;
 if (!colorOpen(icon.c2)) icon.c2 = 11;
 const customImg = new Image(); // player's uploaded icon, stored as a small PNG data URL
 customImg.onload = () => { renderHome(); if (!$('icons').hidden) renderIcons(); };
@@ -1867,8 +1869,10 @@ function portalState(s, o) {
     if (o.v && !was) { s.y2 = mirrorY(s, s.y); s.vy2 = -(s.vy || 0); s.gnd2 = false; }
   }
   else if (o.k === 'g') { // gamemode: v 0 wave, 1 cube, 2 ship, 3 ball
-    if (o.v && !hasBody(s)) { // from the wave: keeps half of the wave's vertical speed
-      const v = SPEEDS[s.speedI] * B, dy = s.dash != null ? -s.dash * v : s.dir * v * (s.mini ? 2 : 1);
+    if (o.v && !hasBody(s)) { // from the wave: keeps half of the wave's vertical speed (GD: m_yVelocity *= 0.5)
+      // GD stores a wave's y velocity as its forward speed, mini or not; mini only doubles how far it moves each frame. So a
+      // mini wave hands on the same speed as a normal one (doubling it here slammed a mini wave into the ground as a cube).
+      const v = SPEEDS[s.speedI] * B, dy = s.dash != null ? -s.dash * v : s.dir * v;
       s.vy = dy / 2; s.vy2 = -dy / 2; s.gnd = s.gnd2 = false;
     } else if (o.v === 2 && (s.cube || s.ball)) { s.vy = (s.vy || 0) / 2; s.vy2 = (s.vy2 || 0) / 2; s.gnd = s.gnd2 = false; } // into a ship: half its speed
     else if (o.v === 3 && s.ship) { s.vy = (s.vy || 0) / 2; s.vy2 = (s.vy2 || 0) / 2; s.gnd = s.gnd2 = false; } // ship -> ball: half (GD halves leaving a ship)
@@ -4427,7 +4431,8 @@ function mergeSave(s) {
   // The icon: the one changed most recently wins (icons carry the time they were last changed, `at`). A save from before
   // icons had times counts as older than any change made here, but still beats a device that only has the starting icon.
   const i = s.icon, iconAt = v => Number.isFinite(v?.at) ? v.at : 0;
-  const untouched = !localStorage.getItem('zd-icon') || (!iconAt(icon) && icon.shape === 0 && icon.c1 === 0 && icon.c2 === 11 && !icon.custom && !icon.cubeCustom && !icon.shipCustom);
+  const untouched = !localStorage.getItem('zd-icon') || (!iconAt(icon) && (icon.starter // the random starter icon: anything you picked before wins
+    || (icon.shape === 0 && (icon.c1 === 0 || icon.c1 === 9) && icon.c2 === 11 && !icon.custom && !icon.cubeCustom && !icon.shipCustom)));
   if (i && SHAPES[i.shape] && COLORS[i.c1] && COLORS[i.c2] && (untouched || iconAt(i) > iconAt(icon))) {
     const img = u => typeof u === 'string' && IMG_OK.test(u), adj = (a, def) => a && typeof a === 'object' ? Object.fromEntries(Object.keys(def).filter(k => Number.isFinite(a[k])).map(k => [k, a[k]])) : undefined;
     icon = { shape: i.shape, c1: i.c1, c2: i.c2, at: iconAt(i),
@@ -4559,6 +4564,22 @@ async function netInit() {
   setTimeout(() => { if (!NET.loaded.uploads) { NET.slow = true; renderNetAll(); } }, 10000);
   if (NET.uid) await cloudLoad();
   renderNetAll();
+  pickStarterIcon();
+}
+// A brand-new player (no icon saved on this device, and none coming from a cloud save) gets a random approved community wave
+// icon, once. It's saved without a time, so it counts as untouched: an icon from your cloud save still replaces it.
+let starterAsked = false;
+async function pickStarterIcon() {
+  if (!freshIcon || !NET.sb || starterAsked || icon.at || icon.custom) return;
+  starterAsked = true;
+  try {
+    const r = await NET.sb.from('community_icons').select('name,image').eq('kind', 'wave').eq('status', 'approved').limit(200);
+    const list = (r.data || []).filter(it => IMG_OK.test(it.image));
+    if (!list.length || icon.at || icon.custom) return; // none shared yet (or you picked one meanwhile): keep the white icon
+    const it = list[Math.floor(Math.random() * list.length)];
+    icon.custom = it.image; icon.useCustom = true; icon.starter = true; customImg.src = it.image;
+    store.set('zd-icon', icon);
+  } catch (e) { /* offline: keep the white icon */ }
 }
 function onlineItems() {
   const items = [], counts = new Map();
